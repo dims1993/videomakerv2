@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Video {
+  id                      String             @id @default(cuid())
+  channelKey              String             @default("wealth-insights")
+  topic                   String
+  topicCategory           String?
+  title                   String
+  ideaJson                String?
+  status                  String             @default("idea")
+  script                  String?
+  metadataJson            String?
+  voiceoverAudioPath      String?
+  voiceoverFileName       String?
+  voiceoverDurationSec    Float?
+  rawSubtitleText         String?
+  rawSubtitleFormat       String?
+  formattedSubtitleJson   Json?
+  formattedSubtitleText   String?
+  styledSubtitleJson      Json?
+  styledSubtitleAss       String?
+  captionStylePreset      String             @default("active_word_highlight")
+  voiceoverStatus         String             @default("pending")
+  subtitleStatus          String             @default("pending")
+  renderDraftStatus       String             @default("pending")
+  thumbnailStatus         String             @default("pending")
+  thumbnailConceptJson    Json?
+  thumbnailVariationsJson Json?
+  thumbnailPrompt         String?
+  thumbnailNegativePrompt String?
+  thumbnailImagePath      String?
+  thumbnailImageUrl       String?
+  thumbnailFileName       String?
+  thumbnailNotes          String?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  scenes                  Scene[]
+  imageBatches            ImageBatch[]
+  voiceoverSegments       VoiceoverSegment[]
+  subtitleSegments        SubtitleSegment[]
+  renderDrafts            RenderDraft[]
+  processRuns             ProcessRun[]
+}
+
+model TopicIdea {
+  id             String   @id @default(cuid())
+  channelKey     String
+  category       String?
+  title          String
+  topic          String
+  angle          String?
+  uniqueMechanism String?
+  trigger        String?
+  promise        String?
+  visualHook     String?
+  thumbnailIdea  String?
+  repetitionRisk String?
+  status         String   @default("idea")
+  source         String?
+  notes          String?
+  createdVideoId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([channelKey])
+  @@index([category])
+  @@index([status])
+}
+
+model Scene {
+  id             String   @id @default(cuid())
+  videoId        String
+  sortOrder      Int      @map("order")
+  scriptText     String
+  sceneType      String
+  visualPurpose  String?
+  visualIdea     String?
+  imagePrompt    String?
+  duration       Int?
+  imageUrl       String?
+  imageStatus    String   @default("pending")
+  imageLocalPath String?
+  imageError     String?
+  imageBatchId   String?
+  imageFileName  String?
+  voiceoverStatus String?  @default("none")
+  voiceoverLocalPath String?
+  voiceoverFileName String?
+  voiceoverDuration Float?
+  voiceoverError String?
+  voiceoverProvider String?
+  voiceoverSettingsJson Json?
+  pauseAfterMs Int?
+  status         String   @default("planned")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  video          Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([videoId, sortOrder])
+  @@index([videoId])
+  @@index([imageBatchId])
+}
+
+model ImageBatch {
+  id            String   @id @default(cuid())
+  videoId       String
+  name          String
+  status        String   @default("prepared")
+  parallelCount Int      @default(1)
+  outputFolder  String
+  payloadPath   String?
+  sceneIdsJson  String?
+  sceneOrdersJson String?
+  expectedCount Int?
+  logsJson      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  video         Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
+}
+
+model VoiceoverSegment {
+  id              String           @id @default(cuid())
+  videoId         String
+  index           Int
+  sceneStartOrder Int
+  sceneEndOrder   Int
+  text            String
+  pacedTextUsed   String?
+  provider        String           @default("elevenlabs")
+  voiceId         String?
+  modelId         String?
+  outputFormat    String?          @default("mp3_44100_128")
+  audioPath       String?
+  fileName        String?
+  durationSec     Float?
+  status          String           @default("pending")
+  error           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  video           Video            @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  subtitleSegment SubtitleSegment?
+
+  @@index([videoId])
+  @@index([videoId, index])
+  @@index([videoId, sceneStartOrder])
+}
+
+model SubtitleSegment {
+  id                 String           @id @default(cuid())
+  videoId            String
+  voiceoverSegmentId String           @unique
+  index              Int
+  sceneStartOrder    Int
+  sceneEndOrder      Int
+  provider           String           @default("elevenlabs_forced_alignment")
+  rawAlignmentJson   Json?
+  localCuesJson      Json?
+  globalCuesJson     Json?
+  localSrt           String?
+  globalSrt          String?
+  localVtt           String?
+  globalVtt          String?
+  status             String           @default("pending")
+  error              String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  video              Video            @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  voiceoverSegment   VoiceoverSegment @relation(fields: [voiceoverSegmentId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
+  @@index([voiceoverSegmentId])
+  @@index([videoId, index])
+}
+
+model RenderDraft {
+  id          String   @id @default(cuid())
+  videoId     String
+  outputPath  String?
+  fileName    String?
+  durationSec Float?
+  width       Int      @default(1920)
+  height      Int      @default(1080)
+  fps         Int      @default(30)
+  status      String   @default("pending")
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
+}
+
+model ProcessRun {
+  id              String    @id @default(cuid())
+  type            String    @default("generic")
+  videoId         String?
+  channelKey      String?
+  title           String
+  description     String?
+  status          String    @default("queued")
+  currentStep     String?
+  totalSteps      Int?
+  progressPercent Float?
+  logsJson        Json?
+  resultJson      Json?
+  errorMessage    String?
+  startedAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  finishedAt      DateTime?
+  video           Video?    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
+  @@index([status])
+  @@index([type])
+  @@index([updatedAt])
+}

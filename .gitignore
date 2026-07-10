@@ -1,0 +1,30 @@
+node_modules
+.next
+.next.stale-hydration
+dist
+coverage
+.DS_Store
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+credentials.json
+*-credentials.json
+client_secret*.json
+service-account*.json
+token.json
+*_token.json
+*.pem
+*.key
+*.p12
+
+# Local DB
+prisma/dev.db
+prisma/dev.db-journal
+prisma/*.db
+
+# Local generated assets (not source code)
+storage/
+exports/
+.test-artifacts/

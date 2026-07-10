@@ -1,0 +1,10 @@
+ALTER TABLE "Video" ADD COLUMN "voiceoverAudioPath" TEXT;
+ALTER TABLE "Video" ADD COLUMN "voiceoverFileName" TEXT;
+ALTER TABLE "Video" ADD COLUMN "voiceoverDurationSec" REAL;
+ALTER TABLE "Video" ADD COLUMN "rawSubtitleText" TEXT;
+ALTER TABLE "Video" ADD COLUMN "rawSubtitleFormat" TEXT;
+ALTER TABLE "Video" ADD COLUMN "formattedSubtitleJson" JSONB;
+ALTER TABLE "Video" ADD COLUMN "formattedSubtitleText" TEXT;
+ALTER TABLE "Video" ADD COLUMN "voiceoverStatus" TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE "Video" ADD COLUMN "subtitleStatus" TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE "Video" ADD COLUMN "renderDraftStatus" TEXT NOT NULL DEFAULT 'pending';
