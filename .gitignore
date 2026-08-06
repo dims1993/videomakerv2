@@ -28,3 +28,6 @@ prisma/*.db
 storage/
 exports/
 .test-artifacts/
+
+# Local documentation (keep local, do not track)
+docs/
