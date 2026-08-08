@@ -62,7 +62,7 @@ async function main() {
           {
             sortOrder: 1,
             scriptText: "Most video delays happen before editing starts.",
-            sceneType: "hook",
+            sceneType: "avatar",
             visualPurpose: "Make the viewer feel the friction of a scattered production process.",
             visualIdea: "Fast montage of notes, timelines, and unfinished assets.",
             imagePrompt: "Clean editorial desk with video planning notes and production timeline",
@@ -72,7 +72,7 @@ async function main() {
           {
             sortOrder: 2,
             scriptText: "A simple pipeline keeps every idea moving.",
-            sceneType: "explainer",
+            sceneType: "insert",
             visualPurpose: "Explain the core workflow as a clear sequence of production stages.",
             visualIdea: "Production stages laid out as a clear board.",
             imagePrompt: "Minimal Kanban board for YouTube video production pipeline",

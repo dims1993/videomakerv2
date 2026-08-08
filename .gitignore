@@ -4,6 +4,7 @@ node_modules
 dist
 coverage
 .DS_Store
+*.tsbuildinfo
 
 # Env / secrets
 .env
@@ -28,3 +29,6 @@ prisma/*.db
 storage/
 exports/
 .test-artifacts/
+
+# Local documentation (keep local, do not track)
+docs/
