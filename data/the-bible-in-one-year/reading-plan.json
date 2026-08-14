@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "name": "The Bible in One Year — default plan",
+  "description": "Starter reading plan. Expand with full WEBUS chapter blocks per day as production continues.",
+  "days": [
+    {
+      "dayNumber": 1,
+      "todayReadingDisplay": "Genesis 1–2",
+      "nextReadingDisplay": "Genesis 3–4",
+      "listeningFocus": "notice how God brings order, life, and rest into creation",
+      "chapters": [
+        { "bookName": "Genesis", "bookNameUppercase": "GENESIS", "chapterNumber": 1 },
+        { "bookName": "Genesis", "bookNameUppercase": "GENESIS", "chapterNumber": 2 }
+      ],
+      "reflectionMainThought": "God creates with purpose and invites humanity into relationship.",
+      "reflectionApplication": "Where do you need to trust that God is bringing order into something that feels unfinished?",
+      "prayerPoints": [
+        "thank God for creating life",
+        "ask for trust in His design",
+        "ask for rest in His presence"
+      ]
+    },
+    {
+      "dayNumber": 2,
+      "todayReadingDisplay": "Genesis 3–4",
+      "nextReadingDisplay": "Genesis 5–7",
+      "listeningFocus": "notice how sin breaks trust, yet God still pursues His people",
+      "chapters": [
+        { "bookName": "Genesis", "bookNameUppercase": "GENESIS", "chapterNumber": 3 },
+        { "bookName": "Genesis", "bookNameUppercase": "GENESIS", "chapterNumber": 4 }
+      ],
+      "reflectionMainThought": "Sin separates, but God still calls people back to Himself.",
+      "reflectionApplication": "Where might you need to return to God with honesty instead of hiding?",
+      "prayerPoints": [
+        "confess hidden resistance",
+        "ask for a softened heart",
+        "ask for mercy to walk with God again"
+      ]
+    },
+    {
+      "dayNumber": 3,
+      "todayReadingDisplay": "Genesis 5–7",
+      "nextReadingDisplay": "Genesis 8–11",
+      "listeningFocus": "notice God's patience and judgment working together",
+      "chapters": [
+        { "bookName": "Genesis", "bookNameUppercase": "GENESIS", "chapterNumber": 5 },
+        { "bookName": "Genesis", "bookNameUppercase": "GENESIS", "chapterNumber": 6 },
+        { "bookName": "Genesis", "bookNameUppercase": "GENESIS", "chapterNumber": 7 }
+      ],
+      "reflectionMainThought": "God is patient, yet He will not ignore evil forever.",
+      "reflectionApplication": "What small compromise might you be tolerating that needs honest attention?",
+      "prayerPoints": [
+        "ask for courage to turn from compromise",
+        "thank God for patience",
+        "ask for faith to follow His way"
+      ]
+    }
+  ]
+}

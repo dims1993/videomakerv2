@@ -1,6 +1,10 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  musicBedOverlapsFromSteps,
+  planMusicBedStitch,
+} from "@/lib/music-bed-stitch";
 import { assertFfmpegOk, runFfmpeg, validateAudioFile } from "@/lib/render/ffmpeg";
 import { ensureRenderDir } from "@/lib/render/storage";
 
@@ -10,10 +14,11 @@ type VoiceoverAudioSegment = {
   audioPath: string | null;
 };
 
-type SceneVoiceoverClip = {
+export type SceneVoiceoverClip = {
   sortOrder: number;
   audioPath: string | null;
   pauseAfterMs: number | null;
+  isMusicBed?: boolean;
 };
 
 function resolveStoragePath(relativePath: string) {
@@ -32,6 +37,10 @@ function concatFileLine(filePath: string) {
   return `file '${filePath.replace(/'/g, "'\\''")}'`;
 }
 
+function aformatFilter(inputLabel: string, outputLabel: string) {
+  return `${inputLabel}aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo${outputLabel}`;
+}
+
 export async function buildVoiceoverConcatFile(
   videoId: string,
   segments: VoiceoverAudioSegment[],
@@ -48,7 +57,6 @@ export async function buildVoiceoverConcatFile(
 
     return concatFileLine(resolveStoragePath(segment.audioPath));
   });
-
   await writeFile(concatPath, `${lines.join("\n")}\n`);
 
   return concatPath;
@@ -90,22 +98,25 @@ export async function renderCombinedVoiceoverAudio(
   const segmentAudioProbes = await validateVoiceoverSegmentAudioFiles(segments);
   const concatPath = await buildVoiceoverConcatFile(videoId, segments);
   const outputPath = path.join(directory, "draft_audio.wav");
-  const encodeResult = await runFfmpeg([
-    "-y",
-    "-f",
-    "concat",
-    "-safe",
-    "0",
-    "-i",
-    path.basename(concatPath),
-    "-ar",
-    "44100",
-    "-ac",
-    "2",
-    "-c:a",
-    "pcm_s16le",
-    path.basename(outputPath),
-  ], { cwd: directory });
+  const encodeResult = await runFfmpeg(
+    [
+      "-y",
+      "-f",
+      "concat",
+      "-safe",
+      "0",
+      "-i",
+      path.basename(concatPath),
+      "-ar",
+      "44100",
+      "-ac",
+      "2",
+      "-c:a",
+      "pcm_s16le",
+      path.basename(outputPath),
+    ],
+    { cwd: directory },
+  );
 
   assertFfmpegOk(encodeResult, "Voiceover audio render");
   const draftAudioProbe = await validateAudioFile(
@@ -122,6 +133,109 @@ export async function renderCombinedVoiceoverAudio(
   };
 }
 
+async function normalizeClipToPcmWav(options: {
+  inputPath: string;
+  outputPath: string;
+  fadeOutSec?: number;
+  durationSec?: number;
+}) {
+  const { inputPath, outputPath, fadeOutSec = 0, durationSec = 0 } = options;
+  const args = ["-y", "-i", inputPath, "-ar", "44100", "-ac", "2"];
+  if (fadeOutSec > 0 && durationSec > fadeOutSec) {
+    const start = Math.max(0, durationSec - fadeOutSec);
+    args.push(
+      "-af",
+      `afade=t=out:st=${start.toFixed(3)}:d=${fadeOutSec.toFixed(3)}`,
+    );
+  }
+  args.push("-c:a", "pcm_s16le", outputPath);
+  const result = await runFfmpeg(args);
+  assertFfmpegOk(result, "Scene voiceover clip normalize");
+}
+
+async function ensureSilenceWav(options: {
+  directory: string;
+  pauseSec: number;
+  cache: Map<string, string>;
+}) {
+  const ms = Math.max(1, Math.round(options.pauseSec * 1000));
+  const cached = options.cache.get(String(ms));
+  if (cached) {
+    return cached;
+  }
+  const outputPath = path.join(options.directory, `silence_${ms}ms.wav`);
+  const result = await runFfmpeg([
+    "-y",
+    "-f",
+    "lavfi",
+    "-t",
+    (ms / 1000).toFixed(3),
+    "-i",
+    "anullsrc=r=44100:cl=stereo",
+    "-c:a",
+    "pcm_s16le",
+    outputPath,
+  ]);
+  assertFfmpegOk(result, "Scene voiceover silence");
+  options.cache.set(String(ms), outputPath);
+  return outputPath;
+}
+
+async function renderOverlapPieceToWav(options: {
+  bedPath: string;
+  speechPath: string;
+  bedDurationSec: number;
+  introSec: number;
+  underlaySec: number;
+  outputPath: string;
+}) {
+  const {
+    bedPath,
+    speechPath,
+    bedDurationSec,
+    introSec,
+    underlaySec,
+    outputPath,
+  } = options;
+  const totalBedSec = introSec + underlaySec;
+  const bedSamples = Math.max(
+    1,
+    Math.round(Math.max(bedDurationSec, 0.05) * 44100),
+  );
+  const delayMs = Math.max(0, Math.round(introSec * 1000));
+  const filter = [
+    aformatFilter("[0:a]", "[bedfmt]"),
+    `[bedfmt]aloop=loop=-1:size=${bedSamples},atrim=0:${totalBedSec.toFixed(3)},asetpts=N/SR/TB,volume='if(lt(t\\,${introSec.toFixed(3)})\\,1\\,0.42)',afade=t=out:st=${introSec.toFixed(3)}:d=${underlaySec.toFixed(3)}:curve=exp[bed]`,
+    aformatFilter("[1:a]", "[speechpre]"),
+    `[speechpre]adelay=${delayMs}|${delayMs}[speech]`,
+    "[bed][speech]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[mix]",
+    "[mix]aformat=sample_fmts=s16:sample_rates=44100:channel_layouts=stereo[outa]",
+  ].join(";");
+
+  const result = await runFfmpeg([
+    "-y",
+    "-i",
+    bedPath,
+    "-i",
+    speechPath,
+    "-filter_complex",
+    filter,
+    "-map",
+    "[outa]",
+    "-c:a",
+    "pcm_s16le",
+    outputPath,
+  ]);
+  assertFfmpegOk(result, "Scene voiceover music-bed overlap");
+}
+
+/**
+ * Stitch scene clips with pauses / music-bed underlays.
+ *
+ * Builds one normalized WAV piece per plan step, then concatenates with the
+ * concat demuxer. Avoids a single mega filter_complex (hundreds of inputs),
+ * which fails on macOS with pthread_create / Resource temporarily unavailable.
+ */
 export async function stitchSceneVoiceoverAudio(
   videoId: string,
   clips: SceneVoiceoverClip[],
@@ -133,69 +247,147 @@ export async function stitchSceneVoiceoverAudio(
     throw new Error("No scene voiceover clips found.");
   }
 
-  const inputArgs: string[] = [];
-  const filterParts: string[] = [];
-  let inputIndex = 0;
+  const clipPaths: string[] = [];
+  const clipDurations: number[] = [];
 
   for (const clip of orderedClips) {
     if (!clip.audioPath) {
       throw new Error(`Cannot stitch: missing audio for scene ${clip.sortOrder}.`);
     }
-
     const filePath = resolveStoragePath(clip.audioPath);
-
-    await validateAudioFile(
+    const probe = await validateAudioFile(
       filePath,
       `Cannot stitch: scene ${clip.sortOrder} voiceover has no audio stream.`,
     );
-    inputArgs.push("-i", filePath);
-    filterParts.push(`[${inputIndex}:a]`);
-    inputIndex += 1;
-
-    const pauseSec = Math.max(0, (clip.pauseAfterMs ?? 0) / 1000);
-
-    if (pauseSec > 0 && clip !== orderedClips[orderedClips.length - 1]) {
-      inputArgs.push(
-        "-f",
-        "lavfi",
-        "-t",
-        pauseSec.toFixed(3),
-        "-i",
-        "anullsrc=r=44100:cl=stereo",
-      );
-      filterParts.push(`[${inputIndex}:a]`);
-      inputIndex += 1;
-    }
+    clipPaths.push(filePath);
+    clipDurations.push(probe.durationSec);
   }
 
-  const outputPath = path.resolve(process.cwd(), outputRelativePath);
-  const filter = `${filterParts.join("")}concat=n=${filterParts.length}:v=0:a=1,loudnorm=I=-16:LRA=11:TP=-1.5[outa]`;
-  const encodeResult = await runFfmpeg([
-    "-y",
-    ...inputArgs,
-    "-filter_complex",
-    filter,
-    "-map",
-    "[outa]",
-    "-ar",
-    "44100",
-    "-ac",
-    "2",
-    "-c:a",
-    "pcm_s16le",
-    outputPath,
-  ]);
-
-  assertFfmpegOk(encodeResult, "Scene voiceover stitch");
-  const masterProbe = await validateAudioFile(
-    outputPath,
-    "Scene voiceover master audio is missing or invalid.",
+  const steps = planMusicBedStitch(
+    orderedClips.map((clip, index) => ({
+      isMusicBed: Boolean(clip.isMusicBed),
+      pauseAfterMs: clip.pauseAfterMs,
+      durationSec: clipDurations[index] ?? 0,
+    })),
   );
+  const overlaps = musicBedOverlapsFromSteps(steps);
 
-  return {
-    outputPath,
-    durationSec: masterProbe.durationSec,
-    masterProbe,
-    audioConcatResult: encodeResult,
-  };
+  const workDir = path.join(
+    process.cwd(),
+    "storage",
+    "voiceovers",
+    videoId,
+    "stitch-work",
+  );
+  await rm(workDir, { recursive: true, force: true });
+  await mkdir(workDir, { recursive: true });
+
+  const silenceCache = new Map<string, string>();
+  const piecePaths: string[] = [];
+  let pieceIndex = 0;
+
+  try {
+    for (const step of steps) {
+      if (step.kind === "silence") {
+        piecePaths.push(
+          await ensureSilenceWav({
+            directory: workDir,
+            pauseSec: step.pauseSec,
+            cache: silenceCache,
+          }),
+        );
+        continue;
+      }
+
+      if (step.kind === "clip") {
+        const outPath = path.join(workDir, `piece_${pieceIndex++}.wav`);
+        await normalizeClipToPcmWav({
+          inputPath: clipPaths[step.clipIndex]!,
+          outputPath: outPath,
+          fadeOutSec: step.fadeOutSec,
+          durationSec: clipDurations[step.clipIndex] ?? 0,
+        });
+        piecePaths.push(outPath);
+        continue;
+      }
+
+      const outPath = path.join(workDir, `piece_${pieceIndex++}.wav`);
+      await renderOverlapPieceToWav({
+        bedPath: clipPaths[step.bedIndex]!,
+        speechPath: clipPaths[step.speechIndex]!,
+        bedDurationSec: clipDurations[step.bedIndex] ?? 0,
+        introSec: step.introSec,
+        underlaySec: step.underlaySec,
+        outputPath: outPath,
+      });
+      piecePaths.push(outPath);
+    }
+
+    if (piecePaths.length === 0) {
+      throw new Error("Cannot stitch: no audio segments produced.");
+    }
+
+    const concatListPath = path.join(workDir, "pieces.txt");
+    await writeFile(
+      concatListPath,
+      `${piecePaths.map((filePath) => concatFileLine(filePath)).join("\n")}\n`,
+    );
+
+    const outputPath = path.resolve(process.cwd(), outputRelativePath);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+
+    // Concat identical PCM pieces, then one loudnorm pass on the master.
+    const concatRawPath = path.join(workDir, "concat_raw.wav");
+    const concatResult = await runFfmpeg([
+      "-y",
+      "-f",
+      "concat",
+      "-safe",
+      "0",
+      "-i",
+      concatListPath,
+      "-c",
+      "copy",
+      concatRawPath,
+    ]);
+    assertFfmpegOk(concatResult, "Scene voiceover stitch concat");
+
+    const encodeResult = await runFfmpeg([
+      "-y",
+      "-i",
+      concatRawPath,
+      "-af",
+      "loudnorm=I=-16:LRA=11:TP=-1.5",
+      "-ar",
+      "44100",
+      "-ac",
+      "2",
+      "-c:a",
+      "pcm_s16le",
+      outputPath,
+    ]);
+    assertFfmpegOk(encodeResult, "Scene voiceover stitch");
+
+    const masterProbe = await validateAudioFile(
+      outputPath,
+      "Scene voiceover master audio is missing or invalid.",
+    );
+
+    return {
+      outputPath,
+      durationSec: masterProbe.durationSec,
+      masterProbe,
+      audioConcatResult: encodeResult,
+      musicBedOverlaps: overlaps.length,
+      overlaps: overlaps.map((overlap) => ({
+        bedSortOrder: orderedClips[overlap.bedIndex]!.sortOrder,
+        speechSortOrder: orderedClips[overlap.speechIndex]!.sortOrder,
+        introSec: overlap.introSec,
+        underlaySec: overlap.underlaySec,
+        overlapSec: overlap.underlaySec,
+      })),
+    };
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+  }
 }

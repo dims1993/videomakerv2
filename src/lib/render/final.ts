@@ -11,6 +11,7 @@ import {
   validateVideoFile,
   runFfmpeg,
 } from "@/lib/render/ffmpeg";
+import { renderFinalVideoFileName } from "@/lib/render/output-name";
 import { ensureRenderDir } from "@/lib/render/storage";
 
 export class FinalRenderValidationError extends Error {
@@ -39,6 +40,7 @@ export async function writeRenderSubtitles(videoId: string, assText: string) {
 
 export async function renderFinalDraftVideo({
   videoId,
+  videoTitle,
   sceneVideoPath,
   audioPath,
   subtitlePath,
@@ -48,6 +50,7 @@ export async function renderFinalDraftVideo({
   burnCaptions,
 }: {
   videoId: string;
+  videoTitle?: string | null;
   sceneVideoPath: string;
   audioPath: string;
   subtitlePath: string | null;
@@ -61,7 +64,8 @@ export async function renderFinalDraftVideo({
   void fps;
 
   const directory = await ensureRenderDir(videoId);
-  const outputPath = path.join(directory, "draft.mp4");
+  const fileName = renderFinalVideoFileName(videoTitle);
+  const outputPath = path.join(directory, fileName);
   const audioProbeBeforeFinalRender = await validateAudioFile(
     audioPath,
     "Cannot render: combined voiceover audio is missing or invalid.",
@@ -75,14 +79,15 @@ export async function renderFinalDraftVideo({
   if (
     audioProbeBeforeFinalRender.durationSec > 0 &&
     sceneVideoProbeBeforeFinalRender.durationSec > 0 &&
-    sceneVideoProbeBeforeFinalRender.durationSec + 1 < audioProbeBeforeFinalRender.durationSec
+    sceneVideoProbeBeforeFinalRender.durationSec + 1 <
+      audioProbeBeforeFinalRender.durationSec
   ) {
-    warnings.push(
-      `scene_video.mp4 is ${sceneVideoProbeBeforeFinalRender.durationSec.toFixed(
+    throw new Error(
+      `Cannot render: scene_video.mp4 is ${sceneVideoProbeBeforeFinalRender.durationSec.toFixed(
         2,
-      )}s, shorter than draft_audio.wav at ${audioProbeBeforeFinalRender.durationSec.toFixed(
+      )}s, shorter than voiceover audio at ${audioProbeBeforeFinalRender.durationSec.toFixed(
         2,
-      )}s.`,
+      )}s. Fix missing/empty scene images and re-render (the previous draft was cut short by -shortest).`,
     );
   }
 
@@ -126,12 +131,12 @@ export async function renderFinalDraftVideo({
     "-movflags",
     "+faststart",
     "-shortest",
-    "draft.mp4",
+    fileName,
   );
 
   const result = await runFfmpeg(args, { cwd: directory });
 
-  assertFfmpegOk(result, "Final draft render");
+  assertFfmpegOk(result, "Final video render");
 
   const finalVideoProbe = await probeMedia(outputPath);
 
@@ -142,7 +147,7 @@ export async function renderFinalDraftVideo({
     finalVideoProbe.durationSec <= 0
   ) {
     throw new FinalRenderValidationError(
-      "Render failed: final draft.mp4 is missing a valid video stream.",
+      `Render failed: final ${fileName} is missing a valid video stream.`,
       result,
       finalVideoProbe,
     );
@@ -150,7 +155,7 @@ export async function renderFinalDraftVideo({
 
   if (!hasStreamType(finalVideoProbe, "audio")) {
     throw new FinalRenderValidationError(
-      "Render failed: final draft.mp4 contains no audio stream.",
+      `Render failed: final ${fileName} contains no audio stream.`,
       result,
       finalVideoProbe,
     );
@@ -158,6 +163,7 @@ export async function renderFinalDraftVideo({
 
   return {
     outputPath,
+    fileName,
     durationSec: finalVideoProbe.durationSec,
     finalFfmpegArgs: result.args,
     finalFfmpegCwd: result.cwd,

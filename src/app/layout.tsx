@@ -23,7 +23,18 @@ export default function RootLayout({
             <Link href="/" className="text-sm font-semibold">
               Video Pipeline
             </Link>
-            <div className="text-xs text-muted-foreground">Local production workspace</div>
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <Link href="/pipeline-queue" className="hover:text-foreground">
+                Pipeline queue
+              </Link>
+              <Link href="/channels/new" className="hover:text-foreground">
+                New channel
+              </Link>
+              <Link href="/reference-library" className="hover:text-foreground">
+                Reference Library
+              </Link>
+              <span>Local production workspace</span>
+            </div>
           </div>
         </div>
         <main className="container py-8">{children}</main>

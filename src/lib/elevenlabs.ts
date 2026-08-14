@@ -6,6 +6,7 @@ export type GenerateElevenLabsSpeechOptions = {
   stability?: number | null;
   similarityBoost?: number | null;
   speed?: number | null;
+  signal?: AbortSignal;
 };
 
 export class ElevenLabsError extends Error {
@@ -49,6 +50,7 @@ export async function generateElevenLabsSpeech({
   stability,
   similarityBoost,
   speed,
+  signal,
 }: GenerateElevenLabsSpeechOptions): Promise<Buffer> {
   const apiKey = envValue("ELEVENLABS_API_KEY");
   const resolvedVoiceId = voiceId?.trim() || getDefaultElevenLabsVoiceId();
@@ -93,9 +95,16 @@ export async function generateElevenLabsSpeech({
             ...(sanitizedSpeed === undefined ? {} : { speed: sanitizedSpeed }),
           },
         }),
+        signal,
       },
     );
-  } catch {
+  } catch (error) {
+    if (
+      signal?.aborted ||
+      (error instanceof Error && error.name === "AbortError")
+    ) {
+      throw new ElevenLabsError("ElevenLabs request aborted.");
+    }
     throw new ElevenLabsError("Could not reach ElevenLabs.");
   }
 

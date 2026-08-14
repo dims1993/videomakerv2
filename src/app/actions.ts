@@ -1,6 +1,6 @@
 "use server";
 
-import { access, mkdir, readFile, rm, rmdir, unlink, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Prisma } from "@prisma/client";
@@ -9,37 +9,123 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import type { ImportScenesState } from "@/lib/action-types";
-import { getChannelProfile, getDefaultChannelKey } from "@/lib/channels";
+import { getChannelProfile, getDefaultChannelKey } from "@/lib/channels-server";
 import { importDownloadedImagesFromFolder } from "@/lib/download-matcher";
+import {
+  CHATTERBOX_PROVIDER,
+  generateChatterboxSpeech,
+} from "@/lib/chatterbox";
 import {
   alignElevenLabsAudioWithText,
   generateElevenLabsSpeech,
 } from "@/lib/elevenlabs";
+import {
+  GOOGLE_TTS_PROVIDER,
+  generateGoogleTtsSpeech,
+  languageCodeFromVoiceName,
+} from "@/lib/google-tts";
+import {
+  buildExpressiveVoiceoverText,
+  mapPodcastActingCuesToScenes,
+  resolveVoiceoverModelForActingCues,
+} from "@/lib/podcast-acting-cues";
+import {
+  findNamedVoice,
+  readElevenLabsPreferences,
+  resolveChatterboxVoiceMode,
+  resolveElevenLabsPreferenceSettings,
+  resolveNamedVoiceProvider,
+  saveElevenLabsPreferences,
+  saveNamedElevenLabsVoices,
+  settingsFromVoiceoverJson,
+  type ElevenLabsPreferenceSettings,
+  type NamedElevenLabsVoice,
+} from "@/lib/elevenlabs-preferences";
 import {
   generateThumbnailWithGoogleFlow,
   runGoogleFlowBatch,
 } from "@/lib/google-flow";
 import { getAudioDurationSec } from "@/lib/audio";
 import {
+  attachMusicBedFileToScenePaths,
+  attachImportedMusicBedFileToScenePaths,
+  MusicBedAttachError,
+} from "@/lib/music-bed-attach";
+import {
+  getMusicBedPreset,
+  isMusicBedScene,
+  suggestMusicBedPresetId,
+  MUSIC_BED_MIN_INTRO_SEC,
+  MUSIC_BED_PROVIDER,
+} from "@/lib/music-beds";
+import {
+  buildOverlapAwareSceneDurations,
+  effectiveScenePauseAfterMs,
+  musicBedOverlapsFromSteps,
+  planMusicBedStitch,
+  sceneVisualDurationSec,
+} from "@/lib/music-bed-stitch";
+import {
   appendImageBatchLog,
+  applyScenePromptOverridesFromForm,
   clearGeneratedImagesForVideo,
   generatedImagesDir,
   ImageBatchWorkflowError,
   parsePositiveInt,
   parseSelectedSceneIds,
   prepareImageBatchPayload,
+  removePreviousGeneratedImage,
+  requestImageBatchCancel,
 } from "@/lib/image-batches";
+import {
+  assignPodcastImageLibraryToVideo,
+  importPodcastImageLibraryFromVideo,
+  syncPodcastImageLibraryManifest,
+  summarizePodcastImageLibrary,
+} from "@/lib/podcast-image-library";
+import { attachPodcastFolderStillToVideo } from "@/lib/podcast-folder-still";
+import { insertPodcastPartCoversFromScript, stripLeakedPartHeadingsFromScenes } from "@/lib/podcast-part-cover-insert";
+import { isPartCoverVisualIdea } from "@/lib/podcast-part-covers";
+import {
+  attachPodcastSectionClipsFromVisualIdeas,
+} from "@/lib/podcast-video-library";
+import { PODCAST_ENGLISH_LESSONS_CHANNEL_KEY } from "@/lib/podcast-image-library-shared";
+import { THE_GODS_WORD_CHANNEL_KEY } from "@/lib/the-gods-word-script-prompt";
+import {
+  displayImageOutputFolder,
+  resolveImageOutputFolderAbsolute,
+} from "@/lib/image-output-folder";
+import {
+  parseAlignmentProvider,
+  resolvePipelineSettings,
+  resolveVideoImageOutputFolderAbsolute,
+  saveVideoImageOutputFolder,
+  saveVideoPipelineSettings,
+  type AlignmentProvider,
+} from "@/lib/pipeline-settings";
 import { prisma } from "@/lib/prisma";
 import {
+  alignWhisperXAudioWithText,
+  normalizeWhisperXAlignment,
+  WHISPERX_SUBTITLE_PROVIDER,
+} from "@/lib/whisperx";
+import {
   buildScenePatchApplyItems,
+  buildScenePatchPrependItems,
   buildScenePatchPreview,
 } from "@/lib/scene-patch";
+import {
+  sortExistingScenesForUpwardShift,
+  sortScenesByOptionalOrder,
+  type PrependSceneDraft,
+} from "@/lib/scene-prepend";
 import {
   buildHookReplacementPreview,
   parseHookReplacementPatch,
   normalizeNarrationText,
 } from "@/lib/hook-replacement-patch";
 import {
+  cancelProcess,
   failProcess,
   finishProcess,
   startProcess,
@@ -57,26 +143,52 @@ import {
   renderCombinedVoiceoverAudio,
   stitchSceneVoiceoverAudio,
 } from "@/lib/render/audio";
+import {
+  extractFittedClipAudio,
+  ensureExclusiveSceneVoiceoverAudio,
+  prepareExclusiveClipAudioForScene,
+  replaceMasterAudioSegment,
+  resolveSceneClipPath,
+  sceneUsesExclusiveClipAudio,
+  storeUploadedSceneClip,
+  removePreviousSceneClip,
+  isSupportedSceneClipExtension,
+} from "@/lib/scene-clips";
 import { renderImageSequenceVideo } from "@/lib/render/images";
+import { shouldAttachVoiceSoundBars } from "@/lib/render/voice-sound-bars";
+import { parseVoiceSoundBarsStyle } from "@/lib/render/voice-sound-bars-shared";
 import {
   FinalRenderValidationError,
   renderFinalDraftVideo,
   writeRenderSubtitles,
 } from "@/lib/render/final";
+import { renderFinalVideoFileName } from "@/lib/render/output-name";
 import {
   ensureRenderDir,
   renderRelativePath,
 } from "@/lib/render/storage";
 import { buildSceneTimelineFromSegments } from "@/lib/render/timing";
-import { getComputedVideoStatus } from "@/lib/status";
+import {
+  getComputedVideoStatus,
+  isSceneRejected,
+  sceneIncludedInPipelineWhere,
+} from "@/lib/status";
 import {
   exportCuesToSrt,
   exportCuesToVtt,
   formatSubtitleCuesForReadableCaptions,
+  isSilentSubtitleVoiceoverText,
   parseSubtitleText,
   type FormattedSubtitleCue,
   type SubtitleInputFormat,
 } from "@/lib/subtitles";
+import {
+  shouldRestorePreservedSubtitleCues,
+  spokenTextForSubtitlePreserve,
+  restoredSubtitleSegmentStatus,
+  subtitleSegmentPreserveKey,
+  type PreservedSubtitleSegmentSnapshot,
+} from "@/lib/subtitle-segment-preserve";
 import {
   ACTIVE_WORD_ASS_EVENT_OVERLAP_SEC,
   ACTIVE_WORD_ASS_TIMING_MODEL,
@@ -85,8 +197,10 @@ import {
   exportActiveWordCaptionsToAss,
   exportCombinedCues,
   cleanSubtitleDisplayText,
+  fitAlignedWordsToAudioDuration,
   normalizeElevenLabsAlignment,
   offsetCues,
+  prepareAlignedWordsForCaptionStyle,
 } from "@/lib/subtitle-alignment";
 import { getCaptionStylePreset } from "@/lib/caption-styles";
 import {
@@ -107,6 +221,11 @@ import {
   voiceoverSegmentRelativePath,
   type VoiceoverSegmentDraft,
 } from "@/lib/voiceover-segments";
+import { stripStructuralMarkers } from "@/lib/visual-plan-script";
+import {
+  foldPauseCardScenesIntoPauseAfterMs,
+  normalizePauseAfterMs,
+} from "@/lib/podcast-pause-cues";
 import {
   ensureSceneVoiceoversDir,
   getPauseAfterScene,
@@ -116,6 +235,29 @@ import {
   sceneVoiceoverRelativePath,
 } from "@/lib/voiceover-scenes";
 import {
+  prepareVoiceoverSpeechText,
+  remapSpeechWordsToDisplay,
+} from "@/lib/speech-text";
+import { groupScenesByScriptSection, applyManualSectionRanges } from "@/lib/script-sections";
+import {
+  extractVoiceoverSectionRanges,
+  normalizeVoiceoverSectionVoices,
+  resolveSceneVoiceoverSettings,
+} from "@/lib/voiceover-section-voices";
+import {
+  buildBibleOneYearDayConfigFromPlan,
+  extractBibleOneYearDayConfig,
+  getBibleOneYearJourneyState,
+  getBibleOneYearPlanDay,
+  isBibleOneYearCategory,
+  normalizeBibleOneYearDayConfig,
+} from "@/lib/the-bible-in-one-year";
+import {
+  collectCoveredBibleOneYearDays,
+  normalizeBibleOneYearSectionRange,
+  suggestNextBibleOneYearSection,
+} from "@/lib/the-bible-in-one-year-topic-batch";
+import {
   buildThumbnailConcepts,
   buildThumbnailPrompt,
   normalizeOverlayText,
@@ -124,6 +266,40 @@ import {
   THUMBNAIL_NEGATIVE_PROMPT,
   type ThumbnailConcept,
 } from "@/lib/thumbnail";
+import {
+  parseTopicBatchJson,
+  persistTopicBatchIdeas,
+} from "@/lib/topic-batch-import";
+import { runTopicBatchViaBrowser, TopicBatchRunError } from "@/lib/topic-batch-run";
+import { runScriptWriterViaBrowser } from "@/lib/script-writer-run";
+import {
+  ScriptWriterCanceledError,
+  requestScriptWriterCancel,
+} from "@/lib/script-writer-cancel";
+import { runVisualPlanViaBrowser } from "@/lib/visual-plan-run";
+import {
+  clearVisualPlanHybridCheckpoint,
+  getVisualPlanHybridCheckpointSummary,
+} from "@/lib/visual-plan-checkpoint";
+import {
+  buildPodcastVisualPlanSkeleton,
+  skeletonScenesToImportJson,
+} from "@/lib/visual-plan-skeleton";
+import {
+  VisualPlanCanceledError,
+  requestVisualPlanCancel,
+} from "@/lib/visual-plan-cancel";
+import {
+  SceneVoiceoverCanceledError,
+  clearSceneVoiceoverCancel,
+  isSceneVoiceoverCancelRequested,
+} from "@/lib/scene-voiceover-cancel";
+import {
+  sceneVoiceoverAudioHasUsableStream,
+  sceneVoiceoverFileExists,
+} from "@/lib/scene-voiceover-audio";
+import type { RecentTopicContext } from "@/lib/topic-batch-prompt";
+import { readTopicBatchDraft } from "@/lib/topic-batch-extract";
 
 const emptyToNull = (value: FormDataEntryValue | null) => {
   const text = value?.toString().trim();
@@ -170,7 +346,10 @@ function isRedirectError(error: unknown) {
   );
 }
 
-async function cleanupRenderDraftFiles(renderDirectory: string) {
+async function cleanupRenderDraftFiles(
+  renderDirectory: string,
+  extraFileNames: string[] = [],
+) {
   const staleFileNames = [
     "draft.mp4",
     "scene_video.mp4",
@@ -179,10 +358,11 @@ async function cleanupRenderDraftFiles(renderDirectory: string) {
     "draft_subtitles.ass",
     "render_manifest.json",
     "render.log",
+    ...extraFileNames,
   ];
 
   await Promise.all(
-    staleFileNames.map(async (fileName) => {
+    [...new Set(staleFileNames)].map(async (fileName) => {
       try {
         await unlink(path.join(renderDirectory, fileName));
       } catch (error) {
@@ -260,6 +440,7 @@ async function persistComputedVideoStatus(videoId: string) {
       scenes: {
         select: {
           imagePrompt: true,
+          status: true,
         },
       },
     },
@@ -281,23 +462,6 @@ async function persistComputedVideoStatus(videoId: string) {
   return computedStatus;
 }
 
-const topicBatchItemSchema = z.object({
-  category: z.string().min(1),
-  title: z.string().min(1),
-  topic: z.string().min(1),
-  angle: z.string().optional().nullable(),
-  uniqueMechanism: z.string().optional().nullable(),
-  trigger: z.string().optional().nullable(),
-  promise: z.string().optional().nullable(),
-  visualHook: z.string().optional().nullable(),
-  thumbnailIdea: z.string().optional().nullable(),
-  repetitionRisk: z.string().optional().nullable(),
-});
-
-const topicBatchSchema = z.object({
-  topics: z.array(topicBatchItemSchema).min(1),
-});
-
 function topicIdeaToIdeaJson(topicIdea: {
   id: string;
   category: string | null;
@@ -305,12 +469,32 @@ function topicIdeaToIdeaJson(topicIdea: {
   topic: string;
   angle: string | null;
   uniqueMechanism: string | null;
+  scriptureAnchor?: string | null;
+  centralQuestion?: string | null;
+  commonMisunderstanding?: string | null;
+  spiritualTurn?: string | null;
   trigger: string | null;
   promise: string | null;
   visualHook: string | null;
   thumbnailIdea: string | null;
   repetitionRisk: string | null;
+  notes?: string | null;
 }) {
+  let bibleOneYear: unknown = null;
+  if (topicIdea.notes?.trim()) {
+    try {
+      const parsed = JSON.parse(topicIdea.notes) as {
+        kind?: unknown;
+        bibleOneYear?: unknown;
+      };
+      if (parsed.kind === "the_bible_in_one_year_day") {
+        bibleOneYear = parsed.bibleOneYear ?? null;
+      }
+    } catch {
+      bibleOneYear = null;
+    }
+  }
+
   return {
     source: "topic_queue",
     topicIdeaId: topicIdea.id,
@@ -319,11 +503,16 @@ function topicIdeaToIdeaJson(topicIdea: {
     topicCategory: topicIdea.category,
     coreAngle: topicIdea.angle,
     uniqueMechanism: topicIdea.uniqueMechanism,
+    scriptureAnchor: topicIdea.scriptureAnchor ?? null,
+    centralQuestion: topicIdea.centralQuestion ?? null,
+    commonMisunderstanding: topicIdea.commonMisunderstanding ?? null,
+    spiritualTurn: topicIdea.spiritualTurn ?? null,
     emotionalHook: topicIdea.trigger,
     mainPromise: topicIdea.promise,
     visualAnchor: topicIdea.visualHook,
     thumbnailIdea: topicIdea.thumbnailIdea,
     repetitionRisk: topicIdea.repetitionRisk,
+    ...(bibleOneYear ? { bibleOneYear } : {}),
   };
 }
 
@@ -372,6 +561,9 @@ export async function createVideo(formData: FormData) {
   });
   await mkdir(generatedImagesDir(video.id, video.title), { recursive: true });
   revalidatePath("/");
+  if (getChannelProfile(channelKey).pipelineMode === "audio_only") {
+    redirect(`/videos/${video.id}?tab=script`);
+  }
   redirect(`/videos/${video.id}`);
 }
 
@@ -394,8 +586,9 @@ export async function updateVideoIdea(videoId: string, formData: FormData) {
   });
   await persistComputedVideoStatus(videoId);
 
-  revalidatePath("/");
+  // Keep refresh scoped to this video page — home list is not needed for idea edits.
   revalidatePath(`/videos/${videoId}`);
+  redirectToIdea(videoId, { saved: "1" });
 }
 
 export async function mockGenerateIdea(videoId: string, formData: FormData) {
@@ -483,7 +676,14 @@ export async function mockGenerateIdea(videoId: string, formData: FormData) {
   revalidatePath(`/videos/${videoId}`);
 }
 
-export async function importWealthTopicBatch(formData: FormData) {
+export async function importTopicBatch(formData: FormData) {
+  const channelKey = normalizeChannelKey(formData.get("channelKey"));
+  const channel = getChannelProfile(channelKey);
+
+  if (!channel.topicSystem?.enabled) {
+    throw new Error(`Topic batch import is not enabled for ${channel.name}.`);
+  }
+
   const rawJson = requiredText(formData, "topicBatchJson");
   const selectedCategory = emptyToNull(formData.get("selectedCategory"));
 
@@ -491,48 +691,12 @@ export async function importWealthTopicBatch(formData: FormData) {
     throw new Error("Topic batch JSON is required.");
   }
 
-  const parsed = topicBatchSchema.parse(JSON.parse(rawJson));
-  const normalizedTopics = parsed.topics.map((topic) => ({
-    category: topic.category.trim(),
-    title: topic.title.trim(),
-    topic: topic.topic.trim(),
-    angle: topic.angle?.trim() || null,
-    uniqueMechanism: topic.uniqueMechanism?.trim() || null,
-    trigger: topic.trigger?.trim() || null,
-    promise: topic.promise?.trim() || null,
-    visualHook: topic.visualHook?.trim() || null,
-    thumbnailIdea: topic.thumbnailIdea?.trim() || null,
-    repetitionRisk: topic.repetitionRisk?.trim() || null,
-  }));
-  const titles = normalizedTopics.map((topic) => topic.title);
-  const duplicateTitles = await prisma.topicIdea.findMany({
-    where: {
-      channelKey: "wealth-insights",
-      title: { in: titles },
-    },
-    select: { title: true },
+  const normalizedTopics = parseTopicBatchJson(rawJson);
+  const { importedCount, skippedCount } = await persistTopicBatchIdeas({
+    channelKey,
+    topics: normalizedTopics,
+    source: "manual_chatgpt_batch",
   });
-  const existingTitles = new Set(duplicateTitles.map((topic) => topic.title));
-  const seenTitles = new Set<string>();
-  const topicsToCreate = normalizedTopics.filter((topic) => {
-    if (existingTitles.has(topic.title) || seenTitles.has(topic.title)) {
-      return false;
-    }
-
-    seenTitles.add(topic.title);
-    return true;
-  });
-
-  if (topicsToCreate.length > 0) {
-    await prisma.topicIdea.createMany({
-      data: topicsToCreate.map((topic) => ({
-        ...topic,
-        channelKey: "wealth-insights",
-        status: "idea",
-        source: "manual_chatgpt_batch",
-      })),
-    });
-  }
 
   const mismatchCount = selectedCategory
     ? normalizedTopics.filter((topic) => topic.category !== selectedCategory).length
@@ -544,11 +708,202 @@ export async function importWealthTopicBatch(formData: FormData) {
 
   revalidatePath("/videos/new");
   redirectToNewVideo({
+    channelKey,
     topicCategory: selectedCategory,
-    topicQueueNotice: `Imported ${topicsToCreate.length} topics, skipped ${
-      normalizedTopics.length - topicsToCreate.length
-    } duplicates.${mismatchNotice}`,
+    topicQueueNotice: `Imported ${importedCount} topics, skipped ${skippedCount} duplicates.${mismatchNotice}`,
   });
+}
+
+async function loadRecentTopicContexts(channelKey: string): Promise<RecentTopicContext[]> {
+  const recentTopicIdeas = await prisma.topicIdea.findMany({
+    where: {
+      channelKey,
+      status: { in: ["selected", "used", "scripted", "produced"] },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 15,
+    select: {
+      category: true,
+      title: true,
+      angle: true,
+      uniqueMechanism: true,
+      scriptureAnchor: true,
+      centralQuestion: true,
+      commonMisunderstanding: true,
+      spiritualTurn: true,
+      visualHook: true,
+      thumbnailIdea: true,
+    },
+  });
+
+  const recentVideos = await prisma.video.findMany({
+    where: {
+      channelKey,
+      topicCategory: { not: null },
+      ideaJson: { not: null },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 10,
+    select: {
+      id: true,
+      title: true,
+      topicCategory: true,
+      ideaJson: true,
+    },
+  });
+
+  const linkedVideoIds = new Set(
+    (
+      await prisma.topicIdea.findMany({
+        where: {
+          channelKey,
+          createdVideoId: { not: null },
+        },
+        select: { createdVideoId: true },
+      })
+    )
+      .map((topic) => topic.createdVideoId)
+      .filter((id): id is string => Boolean(id)),
+  );
+
+  const fromVideos: RecentTopicContext[] = recentVideos
+    .filter((video) => !linkedVideoIds.has(video.id))
+    .map((video) => {
+      try {
+        const parsed = video.ideaJson ? (JSON.parse(video.ideaJson) as Record<string, unknown>) : null;
+        return {
+          category: video.topicCategory,
+          title: video.title,
+          angle:
+            typeof parsed?.coreAngle === "string"
+              ? parsed.coreAngle
+              : typeof parsed?.angle === "string"
+                ? parsed.angle
+                : null,
+          uniqueMechanism:
+            typeof parsed?.uniqueMechanism === "string" ? parsed.uniqueMechanism : null,
+          scriptureAnchor:
+            typeof parsed?.scriptureAnchor === "string" ? parsed.scriptureAnchor : null,
+          centralQuestion:
+            typeof parsed?.centralQuestion === "string" ? parsed.centralQuestion : null,
+          commonMisunderstanding:
+            typeof parsed?.commonMisunderstanding === "string"
+              ? parsed.commonMisunderstanding
+              : null,
+          spiritualTurn:
+            typeof parsed?.spiritualTurn === "string" ? parsed.spiritualTurn : null,
+          visualHook:
+            typeof parsed?.visualAnchor === "string"
+              ? parsed.visualAnchor
+              : typeof parsed?.visualHook === "string"
+                ? parsed.visualHook
+                : null,
+          thumbnailIdea:
+            typeof parsed?.thumbnailIdea === "string" ? parsed.thumbnailIdea : null,
+        };
+      } catch {
+        return {
+          category: video.topicCategory,
+          title: video.title,
+          angle: null,
+          uniqueMechanism: null,
+          scriptureAnchor: null,
+          centralQuestion: null,
+          commonMisunderstanding: null,
+          spiritualTurn: null,
+          visualHook: null,
+          thumbnailIdea: null,
+        };
+      }
+    });
+
+  return [...recentTopicIdeas, ...fromVideos].slice(0, 15);
+}
+
+export async function runTopicBatch(formData: FormData) {
+  const channelKey = normalizeChannelKey(formData.get("channelKey"));
+  const channel = getChannelProfile(channelKey);
+  const selectedCategory = emptyToNull(formData.get("selectedCategory"));
+  const countRaw = emptyToNull(formData.get("topicBatchCount")) ?? "14";
+  const count = Number(countRaw);
+  const startDayRaw = emptyToNull(formData.get("bibleOneYearStartDay"));
+  const endDayRaw = emptyToNull(formData.get("bibleOneYearEndDay"));
+
+  if (!channel.topicSystem?.enabled) {
+    throw new Error(`Topic batch generation is not enabled for ${channel.name}.`);
+  }
+
+  try {
+    const recentTopics = await loadRecentTopicContexts(channelKey);
+    const coveredBibleTitles = await prisma.topicIdea.findMany({
+      where: {
+        channelKey,
+        category: "the_bible_in_one_year",
+      },
+      select: { title: true },
+      take: 400,
+      orderBy: { createdAt: "asc" },
+    });
+    const coveredBibleOneYearDays = collectCoveredBibleOneYearDays(
+      recentTopics,
+      coveredBibleTitles.map((item) => item.title),
+    );
+    const bibleOneYearSection =
+      selectedCategory === "the_bible_in_one_year" && startDayRaw && endDayRaw
+        ? normalizeBibleOneYearSectionRange(Number(startDayRaw), Number(endDayRaw))
+        : selectedCategory === "the_bible_in_one_year"
+          ? suggestNextBibleOneYearSection(coveredBibleOneYearDays)
+          : null;
+
+    const result = await runTopicBatchViaBrowser({
+      channelKey,
+      count,
+      selectedCategoryId: selectedCategory,
+      recentTopics,
+      bibleOneYearSection,
+      coveredBibleOneYearDays,
+    });
+
+    revalidatePath("/videos/new");
+    redirectToNewVideo({
+      channelKey,
+      topicCategory: selectedCategory,
+      topicBatchDraft: "1",
+      topicQueueNotice: bibleOneYearSection
+        ? `Run Batch via ${result.providerKey}: imported ${result.importedCount} Bible-in-One-Year days (${bibleOneYearSection.startDay}–${bibleOneYearSection.endDay}), skipped ${result.skippedCount} duplicates (${result.totalCount} returned).`
+        : `Run Batch via ${result.providerKey}: imported ${result.importedCount} topics, skipped ${result.skippedCount} duplicates (${result.totalCount} returned).`,
+    });
+  } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
+
+    const message =
+      error instanceof Error ? error.message : "Topic batch run failed.";
+    const draft =
+      error instanceof TopicBatchRunError && error.rawText
+        ? error.rawText
+        : (await readTopicBatchDraft(channelKey))?.rawText;
+
+    revalidatePath("/videos/new");
+    redirectToNewVideo({
+      channelKey,
+      topicCategory: selectedCategory,
+      ...(draft ? { topicBatchDraft: "1" } : {}),
+      topicQueueNotice: draft
+        ? `Run Batch failed: ${message} Raw ChatGPT response was loaded into Import Topic Batch — fix JSON if needed, then Import Topics.`
+        : `Run Batch failed: ${message}`,
+    });
+  }
+}
+
+/** @deprecated Prefer importTopicBatch */
+export async function importWealthTopicBatch(formData: FormData) {
+  if (!formData.get("channelKey")) {
+    formData.set("channelKey", "wealth-insights");
+  }
+
+  return importTopicBatch(formData);
 }
 
 export async function selectTopicIdea(videoId: string, topicIdeaId: string) {
@@ -630,13 +985,20 @@ export async function useTopicIdeaInCurrentVideo(videoId: string, topicIdeaId: s
 }
 
 export async function archiveTopicIdeaFromCreate(topicIdeaId: string) {
+  const topicIdea = await prisma.topicIdea.findUnique({
+    where: { id: topicIdeaId },
+    select: { channelKey: true },
+  });
+
   await prisma.topicIdea.update({
     where: { id: topicIdeaId },
     data: { status: "archived" },
   });
 
   revalidatePath("/videos/new");
-  redirectToNewVideo();
+  redirectToNewVideo({
+    channelKey: topicIdea?.channelKey,
+  });
 }
 
 export async function createVideoFromTopicIdea(topicIdeaId: string) {
@@ -644,15 +1006,21 @@ export async function createVideoFromTopicIdea(topicIdeaId: string) {
     where: { id: topicIdeaId },
   });
 
-  if (!topicIdea || topicIdea.channelKey !== "wealth-insights") {
+  if (!topicIdea) {
     throw new Error("Topic idea not found.");
+  }
+
+  const channel = getChannelProfile(topicIdea.channelKey);
+
+  if (!channel.topicSystem?.enabled) {
+    throw new Error(`Topic queue is not enabled for ${channel.name}.`);
   }
 
   const ideaJson = JSON.stringify(topicIdeaToIdeaJson(topicIdea), null, 2);
   const newVideo = await prisma.$transaction(async (tx) => {
     const created = await tx.video.create({
       data: {
-        channelKey: "wealth-insights",
+        channelKey: channel.key,
         topic: topicIdea.topic,
         topicCategory: topicIdea.category,
         title: topicIdea.title,
@@ -679,6 +1047,11 @@ export async function createVideoFromTopicIdea(topicIdeaId: string) {
 
   await mkdir(generatedImagesDir(newVideo.id, newVideo.title), { recursive: true });
   revalidatePath("/");
+  if (channel.pipelineMode === "audio_only") {
+    redirect(
+      `/videos/${newVideo.id}?tab=script&selectedTopicIdeaId=${encodeURIComponent(topicIdeaId)}`,
+    );
+  }
   redirectToIdea(newVideo.id, { selectedTopicIdeaId: topicIdeaId });
 }
 
@@ -691,8 +1064,411 @@ export async function updateVideoScript(videoId: string, formData: FormData) {
   });
   await persistComputedVideoStatus(videoId);
 
-  revalidatePath("/");
   revalidatePath(`/videos/${videoId}`);
+  redirect(`/videos/${videoId}?tab=script&saved=1`);
+}
+
+export async function runScriptWriterBatch(videoId: string, formData?: FormData) {
+  const includeReferenceTranscripts =
+    formData?.get("includeReferenceTranscripts")?.toString() === "1" ||
+    formData?.get("includeReferenceTranscripts")?.toString() === "on";
+  const resetCheckpoint =
+    formData?.get("resetCheckpoint")?.toString() === "1" ||
+    formData?.get("resetCheckpoint")?.toString() === "on";
+  const referenceDocumentIds = formData
+    ? formData
+        .getAll("referenceDocumentIds")
+        .map((value) => value.toString().trim())
+        .filter(Boolean)
+    : [];
+
+  try {
+    const result = await runScriptWriterViaBrowser({
+      videoId,
+      includeReferenceTranscripts,
+      referenceDocumentIds,
+      resetCheckpoint,
+    });
+    const referenceNote = result.includedReferences
+      ? ` References included (${result.referenceCount || "all active"}).`
+      : " No reference transcripts included.";
+    const resumeNote = result.resumed ? " Resumed from checkpoint." : "";
+    const critiqueNote =
+      result.briefReason?.trim()
+        ? ` Critique: ${result.briefReason.trim()}`
+        : "";
+    const scoreLabel =
+      typeof result.score === "number" ? result.score.toFixed(1) : "n/a";
+    const versionNote = result.passed
+      ? ` Saved ${result.version} (score ${scoreLabel} > ${result.passScore.toFixed(1)}).`
+      : ` Saved ${result.version} after ${result.draftNumber} draft(s); last score ${scoreLabel} still ≤ ${result.passScore.toFixed(1)} (max ${result.maxDrafts}).`;
+    revalidatePath(`/videos/${videoId}`);
+    redirect(
+      `/videos/${videoId}?tab=script&saved=1&scriptNotice=${encodeURIComponent(
+        `Run Batch via ${result.providerKey}: script saved (${result.scriptLength} chars).${versionNote}${critiqueNote}${resumeNote}${referenceNote}`,
+      )}`,
+    );
+  } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
+
+    if (error instanceof ScriptWriterCanceledError) {
+      revalidatePath(`/videos/${videoId}`);
+      redirect(
+        `/videos/${videoId}?tab=script&scriptNotice=${encodeURIComponent(
+          "Run Batch canceled. If a draft was saved, Run Batch again to resume from the checkpoint.",
+        )}&scriptNoticeType=error`,
+      );
+    }
+
+    const message =
+      error instanceof Error ? error.message : "Script Writer Batch failed.";
+    revalidatePath(`/videos/${videoId}`);
+    redirect(
+      `/videos/${videoId}?tab=script&scriptNotice=${encodeURIComponent(
+        `Run Batch failed: ${message}`,
+      )}&scriptNoticeType=error`,
+    );
+  }
+}
+
+export async function cancelScriptWriterBatch(videoId: string) {
+  requestScriptWriterCancel(videoId);
+  return { ok: true as const };
+}
+
+export async function runVisualPlanBatch(videoId: string, formData: FormData) {
+  const prompt = String(formData.get("prompt") || "").trim();
+  const importModeRaw = formData.get("importMode")?.toString();
+  const importMode =
+    importModeRaw === "append" || importModeRaw === "prepend"
+      ? importModeRaw
+      : "replace";
+  const resetCheckpoint =
+    formData.get("resetHybridCheckpoint")?.toString() === "1";
+
+  try {
+    const result = await runVisualPlanViaBrowser({
+      videoId,
+      prompt,
+      resetCheckpoint,
+    });
+
+    const scenes = parseScenesImport(result.scenesJson);
+    if (importMode === "append" || importMode === "prepend") {
+      await createScenesFromImport(videoId, scenes, importMode);
+    } else {
+      await replaceImportedScenes(videoId, scenes);
+    }
+    await persistComputedVideoStatus(videoId);
+
+    const hybridNote =
+      "mode" in result && result.mode === "hybrid"
+        ? `, hybrid chunks${
+            "resumedFilledCount" in result &&
+            typeof result.resumedFilledCount === "number" &&
+            result.resumedFilledCount > 0
+              ? `, resumed ${result.resumedFilledCount} filled`
+              : ""
+          }${
+            "skippedChunks" in result &&
+            typeof result.skippedChunks === "number" &&
+            result.skippedChunks > 0
+              ? `, skipped ${result.skippedChunks} done chunks`
+              : ""
+          }`
+        : "";
+
+    revalidatePath("/");
+    revalidatePath(`/videos/${videoId}`);
+    redirect(
+      `/videos/${videoId}?tab=visual-plan&assetNoticeType=success&assetNotice=${encodeURIComponent(
+        `Run Batch via ${result.providerKey}: imported ${scenes.length} scenes (${importMode}${hybridNote}).`,
+      )}`,
+    );
+  } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
+
+    if (error instanceof VisualPlanCanceledError) {
+      const checkpoint = await getVisualPlanHybridCheckpointSummary({
+        videoId,
+        script:
+          (
+            await prisma.video.findUnique({
+              where: { id: videoId },
+              select: { script: true },
+            })
+          )?.script ?? "",
+      });
+      const unitLabel =
+        checkpoint?.unit === "sections" ? "sections" : "scenes";
+      const resumeNote = checkpoint
+        ? ` Progress saved: ${checkpoint.filled}/${checkpoint.total} ${unitLabel} — Run Batch again to resume.`
+        : "";
+      revalidatePath(`/videos/${videoId}`);
+      redirect(
+        `/videos/${videoId}?tab=visual-plan&assetNoticeType=error&assetNotice=${encodeURIComponent(
+          `Visual Plan Run Batch canceled.${resumeNote}`,
+        )}`,
+      );
+    }
+
+    const message =
+      error instanceof Error ? error.message : "Visual Plan Batch failed.";
+    const rawText =
+      error &&
+      typeof error === "object" &&
+      "rawText" in error &&
+      typeof (error as { rawText?: unknown }).rawText === "string"
+        ? (error as { rawText: string }).rawText
+        : null;
+    const debugPath =
+      error &&
+      typeof error === "object" &&
+      "debugPath" in error &&
+      typeof (error as { debugPath?: unknown }).debugPath === "string"
+        ? (error as { debugPath: string }).debugPath
+        : null;
+
+    const debugNote = debugPath
+      ? ` Debug saved: ${debugPath}.`
+      : rawText
+        ? " Raw response was not imported — paste it manually if needed."
+        : "";
+
+    const videoScript =
+      (
+        await prisma.video.findUnique({
+          where: { id: videoId },
+          select: { script: true },
+        })
+      )?.script ?? "";
+    const checkpoint = await getVisualPlanHybridCheckpointSummary({
+      videoId,
+      script: videoScript,
+    });
+    const unitLabel =
+      checkpoint?.unit === "sections" ? "sections" : "scenes";
+    const resumeNote = checkpoint
+      ? checkpoint.filled > 0
+        ? ` Progress saved: ${checkpoint.filled}/${checkpoint.total} ${unitLabel} — Run Batch again to resume.`
+        : ` Checkpoint present (0/${checkpoint.total} ${unitLabel} done) — Run Batch again to retry.`
+      : " No hybrid progress was saved yet.";
+
+    revalidatePath(`/videos/${videoId}`);
+    redirect(
+      `/videos/${videoId}?tab=visual-plan&assetNoticeType=error&assetNotice=${encodeURIComponent(
+        `Run Batch failed: ${message}.${debugNote}${resumeNote}`,
+      )}`,
+    );
+  }
+}
+
+export async function clearVisualPlanHybridProgress(videoId: string) {
+  await clearVisualPlanHybridCheckpoint(videoId);
+  revalidatePath(`/videos/${videoId}`);
+  redirect(
+    `/videos/${videoId}?tab=visual-plan&assetNoticeType=success&assetNotice=${encodeURIComponent(
+      "Cleared hybrid visual-plan progress. The next Run Batch starts from the beginning.",
+    )}`,
+  );
+}
+
+/**
+ * Podcast library-first path: build scenes locally from script labels
+ * (no ChatGPT), replace the visual plan, attach images from the chosen
+ * folder when possible, then fill remaining Emma/Leo/music stills from the
+ * image library.
+ */
+export async function buildPodcastScenesFromScript(
+  videoId: string,
+  imageOutputFolder?: string | null,
+) {
+  let savedFolder: string | null = null;
+  if (imageOutputFolder != null && String(imageOutputFolder).trim()) {
+    savedFolder = await saveVideoImageOutputFolder(
+      videoId,
+      String(imageOutputFolder),
+    );
+    const videoMeta = await prisma.video.findUnique({
+      where: { id: videoId },
+      select: { title: true },
+    });
+    await mkdir(
+      resolveImageOutputFolderAbsolute(savedFolder, videoId, videoMeta?.title),
+      { recursive: true },
+    );
+  }
+
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: {
+      channelKey: true,
+      script: true,
+      title: true,
+      topicCategory: true,
+      ideaJson: true,
+    },
+  });
+
+  if (!video) {
+    throw new Error("Video not found.");
+  }
+
+  if (video.channelKey !== PODCAST_ENGLISH_LESSONS_CHANNEL_KEY) {
+    redirectToVisualPlan(
+      videoId,
+      "error",
+      "Build scenes from script is only for Podcast English Lessons.",
+    );
+  }
+
+  const script = video.script?.trim() ?? "";
+  if (!script) {
+    redirectToVisualPlan(
+      videoId,
+      "error",
+      "Add a podcast script with [INTRO]/[EMMA]/[LEO]/[PART …] labels first.",
+    );
+  }
+
+  const processId = await startProcess({
+    type: "visual_plan_generation",
+    videoId,
+    title: "Building podcast scenes from script",
+    description:
+      "Local skeleton → import scenes → folder attach → library fill.",
+    totalSteps: 5,
+    currentStep: "Parsing script skeleton",
+  });
+
+  try {
+    const episodeContext = [
+      video.title,
+      video.topicCategory,
+      script.slice(0, 4000),
+      video.ideaJson?.slice(0, 2000) ?? "",
+    ].join("\n");
+    const skeleton = buildPodcastVisualPlanSkeleton(script, {
+      title: video.title,
+      topicCategory: video.topicCategory,
+      episodeContext,
+    });
+    if (skeleton.scenes.length === 0) {
+      throw new Error(
+        "No scenes could be built from the script. Check [EMMA]/[LEO]/[INTRO]/[LESSON]/[PART N - TITLE]/[CLOSING]/[FINAL] labels.",
+      );
+    }
+
+    await updateProcess(processId, {
+      currentStep: "Importing skeleton scenes",
+      stepIndex: 2,
+      totalSteps: 5,
+      logMessage: `${skeleton.scenes.length} scenes (${skeleton.spokenTurnCount} spoken, ${skeleton.musicBedCount} music beds).`,
+    });
+
+    const scenes = parseScenesImport(skeletonScenesToImportJson(skeleton.scenes));
+    await replaceImportedScenes(videoId, scenes);
+    await clearVisualPlanHybridCheckpoint(videoId).catch(() => undefined);
+
+    const settings = await resolvePipelineSettings(videoId);
+    const folderForAttach =
+      savedFolder ?? settings.assets.imageOutputFolder;
+    const sourceFolderAbs = resolveImageOutputFolderAbsolute(
+      folderForAttach,
+      videoId,
+      video.title,
+    );
+
+    await updateProcess(processId, {
+      currentStep: "Attaching episode still from folder",
+      stepIndex: 3,
+      totalSteps: 5,
+      logMessage: `Source folder: ${sourceFolderAbs}`,
+    });
+
+    let folderNote = "No folder still found — will use Emma/Leo library.";
+    let folderAssigned = 0;
+    try {
+      const folderResult = await attachPodcastFolderStillToVideo(videoId, {
+        folderPath: folderForAttach,
+        overwrite: true,
+      });
+      folderAssigned = folderResult.assigned;
+      if (folderAssigned > 0) {
+        folderNote = `Episode still "${folderResult.sourceFileName}" attached to ${folderAssigned} scene(s); skipped Flow covers ${folderResult.skippedFlowOnly}, section clips ${folderResult.skippedSectionClip}.`;
+      } else {
+        folderNote = `Folder had no usable stills at ${folderResult.sourceFolder} — will use Emma/Leo library.`;
+      }
+    } catch (error) {
+      folderNote = `Folder still skipped: ${
+        error instanceof Error ? error.message : "folder unavailable"
+      } (${folderForAttach ?? sourceFolderAbs}) — will use Emma/Leo library.`;
+    }
+
+    await updateProcess(processId, {
+      currentStep:
+        folderAssigned > 0
+          ? "Skipping library (folder still applied)"
+          : "Filling from image library",
+      stepIndex: 4,
+      totalSteps: 5,
+      logMessage: folderNote,
+    });
+
+    let libraryNote =
+      folderAssigned > 0
+        ? "Library skipped (folder still covers spoken/music scenes)."
+        : "Library fill skipped (empty pool or unavailable).";
+    if (folderAssigned === 0) {
+      try {
+        const library = await assignPodcastImageLibraryToVideo(videoId, {
+          overwrite: true,
+          minGap: 3,
+        });
+        libraryNote = [
+          `Library assigned ${library.assigned} scene(s)`,
+          `skipped Flow-only ${library.skippedFlowOnly}`,
+          `pool Emma ${library.libraryCounts.emma} / Leo ${library.libraryCounts.leo} / Music ${library.libraryCounts.music}`,
+        ].join("; ");
+      } catch (error) {
+        libraryNote = `Library fill skipped: ${
+          error instanceof Error ? error.message : "unavailable"
+        }`;
+      }
+    }
+
+    await persistComputedVideoStatus(videoId);
+    await finishProcess(processId, {
+      logMessage: `Imported ${scenes.length} scenes. ${folderNote}. ${libraryNote}`,
+    });
+
+    revalidatePath("/");
+    revalidatePath(`/videos/${videoId}`);
+    redirectToVisualPlan(
+      videoId,
+      "success",
+      `Built ${scenes.length} scenes from script. ${folderNote}. ${libraryNote}. PART covers still need Flow when ready; music beds attach on Voiceover.`,
+    );
+  } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Build podcast scenes from script failed.";
+    await failProcess(processId, { errorMessage: message });
+    redirectToVisualPlan(videoId, "error", message);
+  }
+}
+
+export async function cancelVisualPlanBatch(videoId: string) {
+  requestVisualPlanCancel(videoId);
+  return { ok: true as const };
 }
 
 export async function updateVideoStatus(videoId: string, formData: FormData) {
@@ -831,8 +1607,8 @@ export async function updateVideoMetadata(videoId: string, formData: FormData) {
   });
   await persistComputedVideoStatus(videoId);
 
-  revalidatePath("/");
   revalidatePath(`/videos/${videoId}`);
+  redirect(`/videos/${videoId}?tab=metadata&saved=1`);
 }
 
 export async function mockGenerateMetadata(videoId: string) {
@@ -1590,7 +2366,9 @@ async function reindexScenesForVideo(videoId: string) {
 }
 
 async function invalidateSceneStructureArtifacts(videoId: string) {
-  await syncSceneVoiceoversToSubtitleSegments(videoId);
+  await syncSceneVoiceoversToSubtitleSegments(videoId, {
+    preserveSubtitles: false,
+  });
   await prisma.video.update({
     where: { id: videoId },
     data: {
@@ -1655,8 +2433,10 @@ export async function addScene(videoId: string, formData: FormData) {
 }
 
 const importedSceneSchema = z.object({
-  order: z.coerce.number().int().positive().optional(),
-  scriptText: z.string().min(1),
+  // Allow negative orders so prepend patches/imports can sort (-16 … -1) before 1+.
+  order: z.coerce.number().int().optional(),
+  // Empty allowed for visual-only covers after structural markers are stripped.
+  scriptText: z.string(),
   sceneType: z.string().optional().nullable(),
   visualPurpose: z.string().optional().nullable(),
   visualIdea: z.string().optional().nullable(),
@@ -1664,6 +2444,9 @@ const importedSceneSchema = z.object({
   duration: z.coerce.number().positive().optional().nullable(),
   imageUrl: z.string().optional().nullable(),
   status: z.string().optional().nullable(),
+  /** Silence after this scene when stitching (milliseconds). */
+  pauseAfterMs: z.coerce.number().nonnegative().optional().nullable(),
+  pause_after_ms: z.coerce.number().nonnegative().optional().nullable(),
 });
 
 const importedScenesSchema = z.array(importedSceneSchema).min(1);
@@ -1679,6 +2462,7 @@ type NormalizedImportedScene = {
   duration: number;
   imageUrl: string | null;
   status: string;
+  pauseAfterMs: number | null;
 };
 
 const importSceneChunkSize = 50;
@@ -1762,18 +2546,19 @@ function normalizeRawImportedSceneShape(rawScene: unknown) {
   }
 
   const record = rawScene as Record<string, unknown>;
+  const rawScript =
+    rawRecordText(
+      record,
+      "scriptText",
+      "voiceover_context",
+      "voiceoverContext",
+      "narration",
+      "voiceover",
+    ) ?? (typeof record.scriptText === "string" ? record.scriptText : "");
 
   return {
     ...record,
-    scriptText:
-      rawRecordText(
-        record,
-        "scriptText",
-        "voiceover_context",
-        "voiceoverContext",
-        "narration",
-        "voiceover",
-      ) ?? record.scriptText,
+    scriptText: stripStructuralMarkers(rawScript),
     sceneType:
       rawRecordText(record, "sceneType", "scene_type") ?? record.sceneType,
     visualPurpose:
@@ -1791,6 +2576,9 @@ function normalizeRawImportedSceneShape(rawScene: unknown) {
     duration:
       rawRecordNumber(record, "duration", "estimated_seconds", "estimatedSeconds") ??
       record.duration,
+    pauseAfterMs:
+      rawRecordNumber(record, "pauseAfterMs", "pause_after_ms", "pauseAfter") ??
+      record.pauseAfterMs,
   };
 }
 
@@ -1802,9 +2590,24 @@ function normalizeImportedScenes(rawScenes: unknown[]) {
     throw new Error(zodImportErrorMessage(parsedScenes.error));
   }
 
-  return parsedScenes.data.map((scene, index) =>
+  const orderedScenes = sortScenesByOptionalOrder(parsedScenes.data);
+
+  const normalized = orderedScenes.map((scene, index) =>
     normalizeImportedScene(scene, index),
   );
+
+  const folded = foldPauseCardScenesIntoPauseAfterMs(
+    normalized.map((scene) => ({
+      ...scene,
+      visualIdea: scene.visualIdea ?? "",
+    })),
+  );
+
+  return folded.scenes.map((scene, index) => ({
+    ...scene,
+    sortOrder: index + 1,
+    visualIdea: scene.visualIdea || null,
+  }));
 }
 
 function normalizeImportedScene(
@@ -1826,6 +2629,9 @@ function normalizeImportedScene(
     duration,
     imageUrl: scene.imageUrl?.trim() || null,
     status: scene.status?.trim() || "planned",
+    pauseAfterMs: normalizePauseAfterMs(
+      scene.pauseAfterMs ?? scene.pause_after_ms,
+    ),
   };
 }
 
@@ -1846,6 +2652,7 @@ function sceneCreateData(videoId: string, scenes: NormalizedImportedScene[]) {
     duration: scene.duration,
     imageUrl: scene.imageUrl,
     status: scene.status,
+    pauseAfterMs: scene.pauseAfterMs,
   }));
 }
 
@@ -1885,6 +2692,32 @@ async function replaceImportedScenes(
     }),
     ...sceneCreateManyOperations(videoId, scenes),
   ]);
+  await maybeAttachPodcastSectionClips(videoId);
+}
+
+async function maybeAttachPodcastSectionClips(videoId: string) {
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { channelKey: true },
+  });
+  if (video?.channelKey === PODCAST_ENGLISH_LESSONS_CHANNEL_KEY) {
+    return attachPodcastSectionClipsFromVisualIdeas(videoId);
+  }
+  if (video?.channelKey === THE_GODS_WORD_CHANNEL_KEY) {
+    const { ensureAndAttachGodsWordFinalSectionClip } = await import(
+      "@/lib/gods-word-video-library"
+    );
+    try {
+      return await ensureAndAttachGodsWordFinalSectionClip(videoId);
+    } catch (error) {
+      console.warn(
+        "[import] Gods Word FINAL clip attach skipped:",
+        error instanceof Error ? error.message : error,
+      );
+      return null;
+    }
+  }
+  return null;
 }
 
 export async function importScenes(
@@ -1901,8 +2734,11 @@ export async function importScenes(
     currentStep: "Reading pasted JSON",
   });
   const rawScenesJson = requiredText(formData, "scenesJson");
+  const importModeRaw = formData.get("importMode")?.toString();
   const importMode =
-    formData.get("importMode")?.toString() === "append" ? "append" : "replace";
+    importModeRaw === "append" || importModeRaw === "prepend"
+      ? importModeRaw
+      : "replace";
 
   try {
     await updateProcess(processId, {
@@ -1917,8 +2753,8 @@ export async function importScenes(
       totalSteps: 5,
       logMessage: `Validated ${scenes.length} scenes.`,
     });
-    if (importMode === "append") {
-      await createScenesFromImport(videoId, scenes, "append");
+    if (importMode === "append" || importMode === "prepend") {
+      await createScenesFromImport(videoId, scenes, importMode);
     } else {
       await replaceImportedScenes(videoId, scenes);
     }
@@ -1933,7 +2769,9 @@ export async function importScenes(
       logMessage:
         importMode === "append"
           ? `Appended ${scenes.length} scenes.`
-          : `Imported ${scenes.length} scenes.`,
+          : importMode === "prepend"
+            ? `Prepended ${scenes.length} scenes.`
+            : `Imported ${scenes.length} scenes.`,
     });
 
     revalidatePath("/");
@@ -1944,7 +2782,9 @@ export async function importScenes(
       message:
         importMode === "append"
           ? `Appended ${scenes.length} scenes to the existing visual plan.`
-          : `Imported ${scenes.length} scenes and replaced the existing visual plan.`,
+          : importMode === "prepend"
+            ? `Prepended ${scenes.length} scenes. Existing scenes were shifted and kept their images.`
+            : `Imported ${scenes.length} scenes and replaced the existing visual plan.`,
     };
   } catch (error) {
     await failProcess(processId, {
@@ -1974,11 +2814,77 @@ export async function importMockScenes(videoId: string, formData: FormData) {
   revalidatePath(`/videos/${videoId}`);
 }
 
+async function prependScenesToVideo(
+  videoId: string,
+  scenes: PrependSceneDraft[],
+) {
+  if (scenes.length === 0) {
+    return;
+  }
+
+  const existingScenes = await prisma.scene.findMany({
+    where: { videoId },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true, sortOrder: true },
+  });
+  const insertCount = scenes.length;
+  const shiftTargets = sortExistingScenesForUpwardShift(existingScenes);
+
+  await prisma.$transaction(async (tx) => {
+    for (const scene of shiftTargets) {
+      await tx.scene.update({
+        where: { id: scene.id },
+        data: { sortOrder: scene.sortOrder + insertCount },
+      });
+    }
+
+    for (let index = 0; index < scenes.length; index += 1) {
+      const scene = scenes[index];
+      await tx.scene.create({
+        data: {
+          videoId,
+          sortOrder: index + 1,
+          scriptText: scene.scriptText,
+          sceneType: scene.sceneType,
+          visualPurpose: scene.visualPurpose,
+          visualIdea: scene.visualIdea,
+          imagePrompt: scene.imagePrompt,
+          duration: scene.duration,
+          status: scene.status,
+          pauseAfterMs: scene.pauseAfterMs ?? null,
+        },
+      });
+    }
+  });
+
+  await invalidateSceneStructureArtifacts(videoId);
+}
+
 async function createScenesFromImport(
   videoId: string,
   scenes: NormalizedImportedScene[],
-  mode: "replace" | "append",
+  mode: "replace" | "append" | "prepend",
 ) {
+  if (mode === "prepend") {
+    await prependScenesToVideo(
+      videoId,
+      scenes.map((scene) => ({
+        scriptText: scene.scriptText,
+        sceneType: scene.sceneType,
+        visualPurpose: scene.visualPurpose,
+        visualIdea: scene.visualIdea,
+        imagePrompt: scene.imagePrompt,
+        duration: scene.duration,
+        status: scene.status,
+        pauseAfterMs: scene.pauseAfterMs,
+        sourceOrder: scene.sortOrder,
+      })),
+    );
+    await persistComputedVideoStatus(videoId);
+    await maybeAttachPodcastSectionClips(videoId);
+    return;
+  }
+
   const existingMaxOrder =
     mode === "append"
       ? await prisma.scene.aggregate({
@@ -2007,6 +2913,7 @@ async function createScenesFromImport(
       ...createManyOperations,
     ]);
     await persistComputedVideoStatus(videoId);
+    await maybeAttachPodcastSectionClips(videoId);
     return;
   }
 
@@ -2014,11 +2921,12 @@ async function createScenesFromImport(
     ...createManyOperations,
   ]);
   await persistComputedVideoStatus(videoId);
+  await maybeAttachPodcastSectionClips(videoId);
 }
 
 export async function importVisualPlanJson(
   videoId: string,
-  mode: "replace" | "append",
+  mode: "replace" | "append" | "prepend",
   formData: FormData,
 ) {
   const rawVisualPlanJson = requiredText(formData, "visualPlanJson");
@@ -2037,6 +2945,8 @@ export async function importScenePatch(videoId: string, formData: FormData) {
     formData.get("confirmLargePatch")?.toString() === "on";
   const confirmDuplicateTargets =
     formData.get("confirmDuplicateTargets")?.toString() === "on";
+  const confirmClearImages =
+    formData.get("confirmClearImages")?.toString() === "on";
   const channelKey = requiredText(formData, "channelKey");
 
   const scenes = await prisma.scene.findMany({
@@ -2048,6 +2958,9 @@ export async function importScenePatch(videoId: string, formData: FormData) {
       scriptText: true,
       visualIdea: true,
       imagePrompt: true,
+      imageLocalPath: true,
+      imageFileName: true,
+      imageUrl: true,
     },
   });
 
@@ -2059,6 +2972,9 @@ export async function importScenePatch(videoId: string, formData: FormData) {
       scriptText: scene.scriptText,
       visualIdea: scene.visualIdea,
       imagePrompt: scene.imagePrompt,
+      hasGeneratedImage: Boolean(
+        scene.imageLocalPath || scene.imageFileName || scene.imageUrl,
+      ),
     })),
     channelKey,
     currentVideoId: videoId,
@@ -2073,24 +2989,93 @@ export async function importScenePatch(videoId: string, formData: FormData) {
     throw new Error("Duplicate target confirmation is required before applying this patch.");
   }
 
-  const updates = buildScenePatchApplyItems(preview, allowScriptTextChanges);
+  if (preview.clearImageCount > 0 && !confirmClearImages) {
+    throw new Error(
+      "Confirm clearing generated images on patched scenes before applying this patch.",
+    );
+  }
 
-  if (updates.length === 0) {
+  const updates = buildScenePatchApplyItems(preview, allowScriptTextChanges);
+  const prepends = buildScenePatchPrependItems(preview);
+
+  if (updates.length === 0 && prepends.length === 0) {
     throw new Error("No valid scene patch items were found to apply.");
   }
 
-  await prisma.$transaction(
-    updates.map((update) =>
-      prisma.scene.update({
-        where: { id: update.sceneId },
-        data: update.fields,
+  const sceneById = new Map(scenes.map((scene) => [scene.id, scene]));
+
+  // Apply positive-order / id updates first so they target current orders,
+  // then prepend negative-order scenes and shift everything else.
+  if (updates.length > 0) {
+    await prisma.$transaction(
+      updates.map((update) => {
+        const imageReset = update.clearGeneratedImage
+          ? {
+              imageUrl: null,
+              imageLocalPath: null,
+              imageFileName: null,
+              imageStatus: "pending",
+              imageError: null,
+              imageBatchId: null,
+            }
+          : {};
+        const voiceoverReset = update.clearSceneVoiceover
+          ? {
+              voiceoverStatus: "pending",
+              voiceoverError: null,
+              voiceoverLocalPath: null,
+              voiceoverFileName: null,
+              voiceoverDuration: null,
+              voiceoverProvider: null,
+              voiceoverSettingsJson: Prisma.JsonNull,
+            }
+          : {};
+
+        return prisma.scene.update({
+          where: { id: update.sceneId },
+          data: {
+            ...update.fields,
+            ...imageReset,
+            ...voiceoverReset,
+          },
+        });
       }),
-    ),
-  );
+    );
+
+    // Only patched scenes lose image DB refs. Files for untouched scenes stay put.
+    // Flow maps images by scene id (`scene_<id>.png`), so order/classification for
+    // the rest of the video remains stable.
+    for (const update of updates) {
+      if (!update.clearGeneratedImage) {
+        continue;
+      }
+
+      const existing = sceneById.get(update.sceneId);
+      if (existing?.imageLocalPath) {
+        await removePreviousGeneratedImage(
+          existing.imageLocalPath,
+          path.join(process.cwd(), "storage", "generated-images", "__patched__"),
+        );
+      }
+    }
+  }
+
+  if (prepends.length > 0) {
+    await prependScenesToVideo(videoId, prepends);
+  }
 
   await persistComputedVideoStatus(videoId);
   revalidatePath("/");
   revalidatePath(`/videos/${videoId}`);
+  const parts = [
+    updates.length > 0 ? `updated ${updates.length}` : null,
+    prepends.length > 0 ? `prepended ${prepends.length}` : null,
+  ].filter(Boolean);
+  redirectToVisualPlan(
+    videoId,
+    "success",
+    `Applied patch (${parts.join(", ")}). Untouched scenes and their images were preserved.`,
+  );
 }
 
 export async function importHookReplacementPatch(videoId: string, formData: FormData) {
@@ -2482,6 +3467,77 @@ function imageBatchOptionsFromForm(formData: FormData) {
   };
 }
 
+async function persistImageOutputFolderFromForm(
+  videoId: string,
+  formData: FormData,
+) {
+  const folder = emptyToNull(formData.get("outputFolder"));
+  if (!folder) {
+    return null;
+  }
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { title: true },
+  });
+  const stored = await saveVideoImageOutputFolder(videoId, folder);
+  await mkdir(
+    resolveImageOutputFolderAbsolute(stored, videoId, video?.title),
+    { recursive: true },
+  );
+  return stored;
+}
+
+/**
+ * Save the video-level image attach/output folder from Visual Plan.
+ * Used by Flow prepare and rebuild-from-script.
+ */
+export async function saveVideoImageOutputFolderAction(
+  videoId: string,
+  formData: FormData,
+) {
+  const folder =
+    emptyToNull(formData.get("imageOutputFolder")) ??
+    emptyToNull(formData.get("outputFolder"));
+  const stored = await saveVideoImageOutputFolder(videoId, folder);
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { title: true },
+  });
+  await mkdir(
+    resolveImageOutputFolderAbsolute(stored, videoId, video?.title),
+    { recursive: true },
+  );
+  revalidatePath(`/videos/${videoId}`);
+  redirectToVisualPlan(
+    videoId,
+    "success",
+    `Image folder saved: ${stored ?? "default generated-images folder"}.`,
+  );
+}
+
+/**
+ * Client-callable save (no redirect) so Rebuild can persist folder first.
+ */
+export async function updateVideoImageOutputFolder(
+  videoId: string,
+  folder: string,
+) {
+  const stored = await saveVideoImageOutputFolder(videoId, folder);
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { title: true },
+  });
+  await mkdir(
+    resolveImageOutputFolderAbsolute(stored, videoId, video?.title),
+    { recursive: true },
+  );
+  revalidatePath(`/videos/${videoId}`);
+  return {
+    imageOutputFolder: stored,
+    displayFolder: displayImageOutputFolder(stored, videoId, video?.title),
+  };
+}
+
 function redirectToAssets(
   videoId: string,
   type: "error" | "success",
@@ -2489,6 +3545,18 @@ function redirectToAssets(
 ): never {
   redirect(
     `/videos/${videoId}?tab=assets&assetNoticeType=${type}&assetNotice=${encodeURIComponent(
+      message,
+    )}`,
+  );
+}
+
+function redirectToVisualPlan(
+  videoId: string,
+  type: "error" | "success",
+  message: string,
+): never {
+  redirect(
+    `/videos/${videoId}?tab=visual-plan&assetNoticeType=${type}&assetNotice=${encodeURIComponent(
       message,
     )}`,
   );
@@ -2577,6 +3645,149 @@ function parseVoiceoverGenerationOptions(formData: FormData) {
     stability: parseOptionalFloat(formData.get("stability"), 0.5),
     similarityBoost: parseOptionalFloat(formData.get("similarityBoost"), 0.75),
     speed: parseOptionalFloat(formData.get("speed"), 0.85),
+  };
+}
+
+function parseVoiceoverSectionVoicesFromForm(formData: FormData) {
+  const raw = emptyToNull(formData.get("voiceoverSectionVoicesJson"));
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return normalizeVoiceoverSectionVoices(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+async function persistVoiceoverGenerationOptions(formData: FormData) {
+  const generationOptions = parseVoiceoverGenerationOptions(formData);
+
+  await saveElevenLabsPreferences({
+    voiceId: generationOptions.voiceId ?? undefined,
+    voiceName: emptyToNull(formData.get("voiceName")) ?? undefined,
+    modelId: generationOptions.modelId ?? undefined,
+    outputFormat: generationOptions.outputFormat,
+    stability: generationOptions.stability,
+    similarityBoost: generationOptions.similarityBoost,
+    speed: generationOptions.speed,
+  });
+
+  return generationOptions;
+}
+
+export async function saveBibleOneYearDayConfigAction(
+  videoId: string,
+  formData: FormData,
+) {
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: {
+      ideaJson: true,
+      topicCategory: true,
+      channelKey: true,
+      title: true,
+      topic: true,
+    },
+  });
+
+  if (!video) {
+    throw new Error("Video not found.");
+  }
+
+  if (!isBibleOneYearCategory(video.topicCategory)) {
+    throw new Error("This video is not using The Bible in One Year category.");
+  }
+
+  const chapterBlocksRaw = formData.get("chapterBlocksJson")?.toString() ?? "[]";
+  let chapterBlocks: unknown = [];
+  try {
+    chapterBlocks = JSON.parse(chapterBlocksRaw);
+  } catch {
+    throw new Error("Chapter blocks JSON is invalid.");
+  }
+
+  const dayConfig = normalizeBibleOneYearDayConfig({
+    dayNumber: Number(formData.get("dayNumber")),
+    journeyAction: formData.get("journeyAction"),
+    todayReadingDisplay: formData.get("todayReadingDisplay"),
+    nextReadingDisplay: formData.get("nextReadingDisplay"),
+    listeningFocus: formData.get("listeningFocus"),
+    reflectionMainThought: formData.get("reflectionMainThought"),
+    reflectionApplication: formData.get("reflectionApplication"),
+    prayerPoints: String(formData.get("prayerPoints") ?? "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+    chapterBlocks,
+  });
+
+  if (!dayConfig) {
+    throw new Error("Bible in One Year day config is incomplete.");
+  }
+
+  let ideaJson: Record<string, unknown> = {};
+  if (video.ideaJson?.trim()) {
+    try {
+      const parsed = JSON.parse(video.ideaJson) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        ideaJson = parsed as Record<string, unknown>;
+      }
+    } catch {
+      ideaJson = {};
+    }
+  }
+
+  ideaJson.bibleOneYear = dayConfig;
+  ideaJson.topicCategory = video.topicCategory;
+  ideaJson.workingTitle =
+    typeof ideaJson.workingTitle === "string" && ideaJson.workingTitle.trim()
+      ? ideaJson.workingTitle
+      : `The Bible in One Year — Day ${dayConfig.dayNumber}`;
+
+  await prisma.video.update({
+    where: { id: videoId },
+    data: {
+      ideaJson: JSON.stringify(ideaJson, null, 2),
+      title: `The Bible in One Year — Day ${dayConfig.dayNumber}`,
+      topic: dayConfig.todayReadingDisplay || video.topic,
+    },
+  });
+
+  revalidatePath(`/videos/${videoId}`);
+}
+
+export async function loadBibleOneYearPlanDayAction(
+  videoId: string,
+  dayNumber: number,
+) {
+  const planDay = await getBibleOneYearPlanDay(dayNumber);
+  if (!planDay) {
+    throw new Error(`No reading-plan entry found for day ${dayNumber}.`);
+  }
+
+  const journey = await getBibleOneYearJourneyState();
+  const dayConfig = buildBibleOneYearDayConfigFromPlan(planDay, {
+    journeyAction: dayNumber === 1 ? "begin" : "continue",
+  });
+
+  const formData = new FormData();
+  formData.set("dayNumber", String(dayConfig.dayNumber));
+  formData.set("journeyAction", dayConfig.journeyAction);
+  formData.set("todayReadingDisplay", dayConfig.todayReadingDisplay);
+  formData.set("nextReadingDisplay", dayConfig.nextReadingDisplay);
+  formData.set("listeningFocus", dayConfig.listeningFocus);
+  formData.set("reflectionMainThought", dayConfig.reflectionMainThought);
+  formData.set("reflectionApplication", dayConfig.reflectionApplication);
+  formData.set("prayerPoints", dayConfig.prayerPoints.join("\n"));
+  formData.set("chapterBlocksJson", JSON.stringify(dayConfig.chapterBlocks));
+
+  await saveBibleOneYearDayConfigAction(videoId, formData);
+
+  return {
+    dayConfig,
+    journey,
   };
 }
 
@@ -2681,10 +3892,115 @@ async function createVoiceoverSegmentDrafts(
   }
 }
 
-async function syncSceneVoiceoversToSubtitleSegments(videoId: string) {
+async function snapshotPreservableSubtitleSegments(videoId: string) {
+  const segments = await prisma.voiceoverSegment.findMany({
+    where: { videoId },
+    select: {
+      sceneStartOrder: true,
+      sceneEndOrder: true,
+      text: true,
+      pacedTextUsed: true,
+      subtitleSegment: {
+        select: {
+          provider: true,
+          rawAlignmentJson: true,
+          localCuesJson: true,
+          localSrt: true,
+          localVtt: true,
+          status: true,
+        },
+      },
+    },
+  });
+
+  const snapshots = new Map<string, PreservedSubtitleSegmentSnapshot>();
+  for (const segment of segments) {
+    const subtitle = segment.subtitleSegment;
+    if (!subtitle) {
+      continue;
+    }
+    snapshots.set(
+      subtitleSegmentPreserveKey(segment.sceneStartOrder, segment.sceneEndOrder),
+      {
+        sceneStartOrder: segment.sceneStartOrder,
+        sceneEndOrder: segment.sceneEndOrder,
+        spokenText: spokenTextForSubtitlePreserve(
+          segment.text,
+          segment.pacedTextUsed,
+        ),
+        provider: subtitle.provider,
+        rawAlignmentJson: subtitle.rawAlignmentJson,
+        localCuesJson: subtitle.localCuesJson,
+        localSrt: subtitle.localSrt,
+        localVtt: subtitle.localVtt,
+        status: subtitle.status,
+      },
+    );
+  }
+  return snapshots;
+}
+
+async function ensureExclusiveClipVoiceoverPathsForVideo(videoId: string) {
+  const exclusiveScenes = await prisma.scene.findMany({
+    where: {
+      videoId,
+      ...sceneIncludedInPipelineWhere(),
+      clipMuted: false,
+      clipLocalPath: { not: null },
+      voiceoverStatus: { in: ["generated", "attached"] },
+      OR: [{ voiceoverLocalPath: null }, { voiceoverLocalPath: "" }],
+    },
+    select: {
+      id: true,
+      clipLocalPath: true,
+      clipFileName: true,
+      voiceoverDuration: true,
+      duration: true,
+    },
+  });
+
+  let repaired = 0;
+  for (const scene of exclusiveScenes) {
+    const targetDurationSec =
+      scene.voiceoverDuration && scene.voiceoverDuration > 0
+        ? scene.voiceoverDuration
+        : Math.max(0.5, scene.duration ?? 5);
+    const audio = await ensureExclusiveSceneVoiceoverAudio({
+      videoId,
+      sceneId: scene.id,
+      clipLocalPath: scene.clipLocalPath,
+      clipFileName: scene.clipFileName,
+      targetDurationSec,
+    });
+    await prisma.scene.update({
+      where: { id: scene.id },
+      data: {
+        voiceoverLocalPath: audio.relativePath,
+        voiceoverFileName: audio.fileName,
+        voiceoverStatus: "attached",
+        voiceoverError: null,
+      },
+    });
+    repaired += 1;
+  }
+  return repaired;
+}
+
+async function syncSceneVoiceoversToSubtitleSegments(
+  videoId: string,
+  options: { preserveSubtitles?: boolean } = {},
+) {
+  const preserveSubtitles = options.preserveSubtitles !== false;
+  const preserved = preserveSubtitles
+    ? await snapshotPreservableSubtitleSegments(videoId)
+    : new Map<string, PreservedSubtitleSegmentSnapshot>();
+
+  await ensureExclusiveClipVoiceoverPathsForVideo(videoId);
+
   const scenes = await prisma.scene.findMany({
     where: {
       videoId,
+      ...sceneIncludedInPipelineWhere(),
       voiceoverLocalPath: { not: null },
       voiceoverStatus: { in: ["generated", "attached"] },
     },
@@ -2692,40 +4008,315 @@ async function syncSceneVoiceoversToSubtitleSegments(videoId: string) {
     select: {
       sortOrder: true,
       scriptText: true,
+      visualIdea: true,
       voiceoverLocalPath: true,
       voiceoverFileName: true,
       voiceoverDuration: true,
       voiceoverProvider: true,
       pauseAfterMs: true,
+      clipLocalPath: true,
+      clipMuted: true,
     },
   });
 
   await prisma.voiceoverSegment.deleteMany({ where: { videoId } });
 
   if (scenes.length === 0) {
-    return 0;
+    return { sceneCount: 0, restoredSubtitles: 0 };
+  }
+
+  const introByBedOrder = new Map<number, number>();
+  const stitchPlan = planMusicBedStitch(
+    scenes.map((scene) => {
+      const exclusiveClip = sceneUsesExclusiveClipAudio(scene);
+      return {
+        isMusicBed:
+          !exclusiveClip &&
+          (scene.voiceoverProvider === MUSIC_BED_PROVIDER ||
+            isMusicBedScene(scene)),
+        pauseAfterMs: scene.pauseAfterMs,
+        durationSec: scene.voiceoverDuration ?? 0,
+      };
+    }),
+  );
+  for (const overlap of musicBedOverlapsFromSteps(stitchPlan)) {
+    const bed = scenes[overlap.bedIndex];
+    if (bed) {
+      introByBedOrder.set(bed.sortOrder, overlap.introSec);
+    }
   }
 
   await prisma.voiceoverSegment.createMany({
-    data: scenes.map((scene, index) => ({
-      videoId,
-      index: index + 1,
-      sceneStartOrder: scene.sortOrder,
-      sceneEndOrder: scene.sortOrder,
-      text: normalizeSceneVoiceoverText(scene.scriptText),
-      provider: scene.voiceoverProvider ?? "elevenlabs",
-      audioPath: scene.voiceoverLocalPath,
-      fileName: scene.voiceoverFileName,
-      durationSec:
-        scene.voiceoverDuration === null
-          ? null
-          : scene.voiceoverDuration + (scene.pauseAfterMs ?? 0) / 1000,
-      status: "generated",
-      error: null,
-    })),
+    data: scenes.map((scene, index) => {
+      const displayText = normalizeSceneVoiceoverText(scene.scriptText);
+      const speech = prepareVoiceoverSpeechText(displayText);
+      const exclusiveClip = sceneUsesExclusiveClipAudio(scene);
+      const isMusicBed =
+        !exclusiveClip &&
+        (scene.voiceoverProvider === MUSIC_BED_PROVIDER ||
+          isMusicBedScene(scene));
+      const visualDuration = sceneVisualDurationSec({
+        voiceoverDuration: scene.voiceoverDuration,
+        pauseAfterMs: scene.pauseAfterMs,
+        isMusicBed,
+        introSec: introByBedOrder.get(scene.sortOrder),
+      });
+
+      return {
+        videoId,
+        index: index + 1,
+        sceneStartOrder: scene.sortOrder,
+        sceneEndOrder: scene.sortOrder,
+        text: displayText,
+        pacedTextUsed: speech.spokenText,
+        provider: scene.voiceoverProvider ?? "elevenlabs",
+        audioPath: scene.voiceoverLocalPath,
+        fileName: scene.voiceoverFileName,
+        durationSec: visualDuration,
+        status: "generated",
+        error: null,
+      };
+    }),
   });
 
-  return scenes.length;
+  const createdSegments = await prisma.voiceoverSegment.findMany({
+    where: { videoId },
+    select: {
+      id: true,
+      index: true,
+      sceneStartOrder: true,
+      sceneEndOrder: true,
+      text: true,
+      pacedTextUsed: true,
+    },
+    orderBy: { index: "asc" },
+  });
+
+  let restoredSubtitles = 0;
+  for (const segment of createdSegments) {
+    const nextSpoken = spokenTextForSubtitlePreserve(
+      segment.text,
+      segment.pacedTextUsed,
+    );
+
+    if (isSilentSubtitleVoiceoverText(nextSpoken)) {
+      await prisma.subtitleSegment.upsert({
+        where: { voiceoverSegmentId: segment.id },
+        create: {
+          videoId,
+          voiceoverSegmentId: segment.id,
+          index: segment.index,
+          sceneStartOrder: segment.sceneStartOrder,
+          sceneEndOrder: segment.sceneEndOrder,
+          provider: "silent_skip",
+          rawAlignmentJson: Prisma.JsonNull,
+          localCuesJson: [],
+          localSrt: "",
+          localVtt: "",
+          status: "ready",
+          error: null,
+        },
+        update: {
+          index: segment.index,
+          sceneStartOrder: segment.sceneStartOrder,
+          sceneEndOrder: segment.sceneEndOrder,
+          provider: "silent_skip",
+          rawAlignmentJson: Prisma.JsonNull,
+          localCuesJson: [],
+          localSrt: "",
+          localVtt: "",
+          status: "ready",
+          error: null,
+        },
+      });
+      continue;
+    }
+
+    const snapshot = preserved.get(
+      subtitleSegmentPreserveKey(segment.sceneStartOrder, segment.sceneEndOrder),
+    );
+    if (!snapshot) {
+      continue;
+    }
+
+    const cueCount = parseSubtitleCuesJson(snapshot.localCuesJson).length;
+    if (
+      !shouldRestorePreservedSubtitleCues({
+        previousSpokenText: snapshot.spokenText,
+        nextSpokenText: nextSpoken,
+        cueCount,
+        previousStatus: snapshot.status,
+      })
+    ) {
+      continue;
+    }
+
+    await prisma.subtitleSegment.create({
+      data: {
+        videoId,
+        voiceoverSegmentId: segment.id,
+        index: segment.index,
+        sceneStartOrder: segment.sceneStartOrder,
+        sceneEndOrder: segment.sceneEndOrder,
+        provider: snapshot.provider ?? "elevenlabs_forced_alignment",
+        rawAlignmentJson:
+          snapshot.rawAlignmentJson === null ||
+          snapshot.rawAlignmentJson === undefined
+            ? Prisma.JsonNull
+            : (snapshot.rawAlignmentJson as Prisma.InputJsonValue),
+        localCuesJson:
+          snapshot.localCuesJson === null ||
+          snapshot.localCuesJson === undefined
+            ? Prisma.JsonNull
+            : (snapshot.localCuesJson as Prisma.InputJsonValue),
+        localSrt: snapshot.localSrt,
+        localVtt: snapshot.localVtt,
+        status: restoredSubtitleSegmentStatus(snapshot.status),
+        error: null,
+      },
+    });
+    restoredSubtitles += 1;
+  }
+
+  return { sceneCount: scenes.length, restoredSubtitles };
+}
+
+async function refreshVoiceoverSegmentDurationsFromScenes(videoId: string) {
+  await ensureExclusiveClipVoiceoverPathsForVideo(videoId);
+
+  const scenes = await prisma.scene.findMany({
+    where: {
+      videoId,
+      ...sceneIncludedInPipelineWhere(),
+      voiceoverLocalPath: { not: null },
+      voiceoverStatus: { in: ["generated", "attached"] },
+    },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      sortOrder: true,
+      voiceoverDuration: true,
+      voiceoverProvider: true,
+      visualIdea: true,
+      pauseAfterMs: true,
+      clipLocalPath: true,
+      clipMuted: true,
+    },
+  });
+
+  if (scenes.length === 0) {
+    return 0;
+  }
+
+  const introByBedOrder = new Map<number, number>();
+  const stitchPlan = planMusicBedStitch(
+    scenes.map((scene) => {
+      const exclusiveClip = sceneUsesExclusiveClipAudio(scene);
+      return {
+        isMusicBed:
+          !exclusiveClip &&
+          (scene.voiceoverProvider === MUSIC_BED_PROVIDER ||
+            isMusicBedScene(scene)),
+        pauseAfterMs: scene.pauseAfterMs,
+        durationSec: scene.voiceoverDuration ?? 0,
+      };
+    }),
+  );
+  for (const overlap of musicBedOverlapsFromSteps(stitchPlan)) {
+    const bed = scenes[overlap.bedIndex];
+    if (bed) {
+      introByBedOrder.set(bed.sortOrder, overlap.introSec);
+    }
+  }
+
+  const sceneByOrder = new Map(scenes.map((scene) => [scene.sortOrder, scene]));
+  const segments = await prisma.voiceoverSegment.findMany({
+    where: { videoId },
+    select: {
+      id: true,
+      sceneStartOrder: true,
+      sceneEndOrder: true,
+    },
+  });
+
+  let updated = 0;
+  for (const segment of segments) {
+    if (segment.sceneStartOrder !== segment.sceneEndOrder) {
+      continue;
+    }
+    const scene = sceneByOrder.get(segment.sceneStartOrder);
+    if (!scene) {
+      continue;
+    }
+    const exclusiveClip = sceneUsesExclusiveClipAudio(scene);
+    const isMusicBed =
+      !exclusiveClip &&
+      (scene.voiceoverProvider === MUSIC_BED_PROVIDER || isMusicBedScene(scene));
+    const durationSec = sceneVisualDurationSec({
+      voiceoverDuration: scene.voiceoverDuration,
+      pauseAfterMs: scene.pauseAfterMs,
+      isMusicBed,
+      introSec: introByBedOrder.get(scene.sortOrder),
+    });
+    await prisma.voiceoverSegment.update({
+      where: { id: segment.id },
+      data: { durationSec },
+    });
+    updated += 1;
+  }
+
+  return updated;
+}
+
+async function maybeRecombineSubtitlesAfterVoiceoverSync(videoId: string) {
+  const previous = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { subtitleStatus: true },
+  });
+  const segments = await prisma.voiceoverSegment.findMany({
+    where: { videoId },
+    include: {
+      subtitleSegment: {
+        select: {
+          status: true,
+          localCuesJson: true,
+        },
+      },
+    },
+  });
+
+  if (segments.length === 0) {
+    return { recombined: false, restoredReady: false };
+  }
+
+  const allLocallyReady = segments.every((segment) => {
+    const silent = isSilentSubtitleVoiceoverText(
+      spokenTextForSubtitlePreserve(segment.text, segment.pacedTextUsed),
+    );
+    const subtitle = segment.subtitleSegment;
+    if (!subtitle || !["formatted", "ready"].includes(subtitle.status)) {
+      return false;
+    }
+    if (silent) {
+      return true;
+    }
+    return parseSubtitleCuesJson(subtitle.localCuesJson).length > 0;
+  });
+
+  if (!allLocallyReady) {
+    await prisma.video.update({
+      where: { id: videoId },
+      data: {
+        subtitleStatus: "needs_update",
+        renderDraftStatus: "pending",
+      },
+    });
+    return { recombined: false, restoredReady: false };
+  }
+
+  const nextStatus =
+    previous?.subtitleStatus === "ready" ? "ready" : "formatted";
+  await combineSegmentSubtitlesForVideo(videoId, nextStatus);
+  return { recombined: true, restoredReady: nextStatus === "ready" };
 }
 
 async function reindexVoiceoverSegments(videoId: string) {
@@ -2771,7 +4362,7 @@ async function generateAndSaveVoiceoverSegment(
   formData: FormData,
   options: { allowOverwrite?: boolean } = {},
 ) {
-  const generationOptions = parseVoiceoverGenerationOptions(formData);
+  const generationOptions = await persistVoiceoverGenerationOptions(formData);
   const pacingOptions = parseVoiceoverPacingOptions(formData);
   const segment = await prisma.voiceoverSegment.findUnique({
     where: { id: segmentId },
@@ -2805,8 +4396,11 @@ async function generateAndSaveVoiceoverSegment(
       );
     }
 
+    const speech = prepareVoiceoverSpeechText(pacedText);
+    const spokenText = speech.spokenText;
+
     const audio = await generateElevenLabsSpeech({
-      text: pacedText,
+      text: spokenText,
       ...generationOptions,
     });
     const directory = await ensureVoiceoverSegmentsDir(segment.videoId);
@@ -2826,7 +4420,7 @@ async function generateAndSaveVoiceoverSegment(
           voiceId: generationOptions.voiceId,
           modelId: generationOptions.modelId,
           outputFormat: generationOptions.outputFormat,
-          pacedTextUsed: pacedText,
+          pacedTextUsed: spokenText,
           audioPath,
           fileName,
           durationSec,
@@ -2876,32 +4470,121 @@ async function generateVoiceoverForScenes(
     processId?: string;
   } = {},
 ) {
-  const generationOptions = parseVoiceoverGenerationOptions(formData);
+  const generationOptions = await persistVoiceoverGenerationOptions(formData);
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: {
+      script: true,
+      voiceoverSectionVoicesJson: true,
+    },
+  });
   const selectedOrders = new Set(options.selectedOrders ?? []);
-  const scenes = await prisma.scene.findMany({
+  let scenes = await prisma.scene.findMany({
     where: {
       videoId,
+      ...sceneIncludedInPipelineWhere(),
       ...(selectedOrders.size > 0
         ? { sortOrder: { in: [...selectedOrders] } }
         : {}),
       ...(options.retryFailedOnly
         ? { voiceoverStatus: { in: ["failed", "needs_retry"] } }
         : {}),
-      ...(options.missingOnly
-        ? {
-            OR: [
-              { voiceoverLocalPath: null },
-              { voiceoverLocalPath: "" },
-            ],
-          }
-        : {}),
+      // missingOnly is resolved after load (path may be set but file gone).
     },
     orderBy: { sortOrder: "asc" },
   });
 
+  if (options.missingOnly) {
+    const needing = [];
+    for (const scene of scenes) {
+      if (sceneUsesExclusiveClipAudio(scene)) {
+        continue;
+      }
+      const status = scene.voiceoverStatus ?? "";
+      if (status === "failed" || status === "needs_retry") {
+        needing.push(scene);
+        continue;
+      }
+      const check = await sceneVoiceoverFileExists(scene.voiceoverLocalPath);
+      if (!check.ok) {
+        needing.push(scene);
+      }
+    }
+    scenes = needing;
+  }
+
   if (scenes.length === 0) {
     throw new Error("No scenes found for by-scene voiceover.");
   }
+
+  // Prefer the live Section Voices panel payload (may be unsaved) over DB.
+  const sectionVoicesFromForm = parseVoiceoverSectionVoicesFromForm(formData);
+  const sectionVoices =
+    sectionVoicesFromForm ??
+    normalizeVoiceoverSectionVoices(video?.voiceoverSectionVoicesJson);
+
+  if (sectionVoicesFromForm) {
+    await prisma.video.update({
+      where: { id: videoId },
+      data: {
+        voiceoverSectionVoicesJson:
+          sectionVoicesFromForm as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  // Always map sections against the full scene list so selected regenerations
+  // get the same section assignment as a full run.
+  const allScenesForSections = await prisma.scene.findMany({
+    where: { videoId },
+    orderBy: { sortOrder: "asc" },
+    select: { sortOrder: true, scriptText: true, visualIdea: true },
+  });
+  const autoSceneSectionAssignments = video?.script?.trim()
+    ? groupScenesByScriptSection({
+        script: video.script,
+        scenes: allScenesForSections,
+      })
+    : allScenesForSections.map((scene) => ({
+        sortOrder: scene.sortOrder,
+        sectionId: "section-1",
+        sectionLabel: "Full script",
+        sectionKind: "other" as const,
+      }));
+  const sceneSectionAssignments = applyManualSectionRanges({
+    autoAssignments: autoSceneSectionAssignments,
+    ranges: extractVoiceoverSectionRanges(sectionVoices),
+  });
+  const sectionBySortOrder = new Map(
+    sceneSectionAssignments.map((assignment) => [
+      assignment.sortOrder,
+      assignment,
+    ]),
+  );
+  const actingCuesBySortOrder = video?.script?.trim()
+    ? mapPodcastActingCuesToScenes({
+        script: video.script,
+        scenes: allScenesForSections,
+      })
+    : new Map();
+  const prefsForCatalog = await readElevenLabsPreferences();
+  const namedVoices = prefsForCatalog?.namedVoices ?? [];
+  const formTtsProviderRaw = emptyToNull(formData.get("ttsProvider"));
+  const formTtsProvider =
+    formTtsProviderRaw === "chatterbox" ||
+    formTtsProviderRaw === "elevenlabs" ||
+    formTtsProviderRaw === "google"
+      ? formTtsProviderRaw
+      : null;
+  const fallbackVoice = {
+    voiceId: generationOptions.voiceId ?? "",
+    voiceName: emptyToNull(formData.get("voiceName")) ?? undefined,
+    provider: resolveNamedVoiceProvider(
+      namedVoices,
+      generationOptions.voiceId ?? "",
+      formTtsProvider,
+    ),
+  };
 
   const directory = await ensureSceneVoiceoversDir(videoId);
   let generated = 0;
@@ -2909,17 +4592,71 @@ async function generateVoiceoverForScenes(
   let failed = 0;
   let cumulativeTimeSec = 0;
 
+  clearSceneVoiceoverCancel(videoId);
+
+  async function isCanceledNow() {
+    if (isSceneVoiceoverCancelRequested(videoId)) {
+      return true;
+    }
+    if (!options.processId) {
+      return false;
+    }
+    const run = await prisma.processRun.findUnique({
+      where: { id: options.processId },
+      select: { status: true },
+    });
+    return run?.status === "cancelled";
+  }
+
+  async function throwIfCanceled() {
+    if (!(await isCanceledNow())) {
+      return;
+    }
+    await prisma.video.update({
+      where: { id: videoId },
+      data: {
+        voiceoverAudioPath: null,
+        voiceoverFileName: null,
+        voiceoverStatus: generated > 0 || failed > 0 ? "partial" : "pending",
+        renderDraftStatus: "pending",
+      },
+    });
+    if (generated > 0) {
+      await syncSceneVoiceoversToSubtitleSegments(videoId, {
+        preserveSubtitles: true,
+      });
+      await maybeRecombineSubtitlesAfterVoiceoverSync(videoId);
+    }
+    clearSceneVoiceoverCancel(videoId);
+    throw new SceneVoiceoverCanceledError(
+      `Scene voiceover generation canceled after ${generated} generated, ${skipped} skipped, ${failed} failed.`,
+      { generated, skipped, failed },
+    );
+  }
+
   for (const [index, scene] of scenes.entries()) {
+    await throwIfCanceled();
+
     const cleanText = normalizeSceneVoiceoverText(scene.scriptText);
+    const speech = prepareVoiceoverSpeechText(cleanText);
+    const actingCues = actingCuesBySortOrder.get(scene.sortOrder) ?? [];
+    const spokenText = buildExpressiveVoiceoverText(
+      speech.spokenText,
+      actingCues,
+    );
+    const modelId = resolveVoiceoverModelForActingCues(
+      actingCues,
+      generationOptions.modelId,
+    );
     await updateProcess(options.processId, {
       status: "running",
       currentStep: `Generating scene ${index + 1} of ${scenes.length}`,
       stepIndex: index + 1,
       totalSteps: scenes.length,
-      logMessage: `Scene ${scene.sortOrder}: ${cleanText.slice(0, 120)}`,
+      logMessage: `Scene ${scene.sortOrder}: ${spokenText.slice(0, 120)}`,
     });
 
-    if (!cleanText) {
+    if (!spokenText) {
       skipped += 1;
       await updateProcess(options.processId, {
         logMessage: `Skipped scene ${scene.sortOrder}: empty narration text.`,
@@ -2928,13 +4665,28 @@ async function generateVoiceoverForScenes(
       continue;
     }
 
-    if (scene.voiceoverLocalPath && !options.overwrite) {
-      skipped += 1;
-      cumulativeTimeSec += scene.voiceoverDuration ?? 0;
+    if (scene.voiceoverLocalPath && !options.overwrite && !options.missingOnly) {
+      const existing = await sceneVoiceoverFileExists(scene.voiceoverLocalPath);
+      if (existing.ok) {
+        skipped += 1;
+        cumulativeTimeSec += scene.voiceoverDuration ?? 0;
+        await updateProcess(options.processId, {
+          logMessage: `Skipped scene ${scene.sortOrder}: audio already exists.`,
+        });
+        continue;
+      }
+      // Stale DB path (file deleted) — regenerate instead of skipping.
       await updateProcess(options.processId, {
-        logMessage: `Skipped scene ${scene.sortOrder}: audio already exists.`,
+        logMessage: `Scene ${scene.sortOrder}: voiceover path is set but file is missing; regenerating.`,
+        logLevel: "warning",
       });
-      continue;
+    }
+
+    if (options.missingOnly && scene.voiceoverLocalPath) {
+      await updateProcess(options.processId, {
+        logMessage: `Scene ${scene.sortOrder}: regenerating missing/invalid voiceover.`,
+        logLevel: "warning",
+      });
     }
 
     const pauseAfterMs = getPauseAfterScene({
@@ -2942,6 +4694,7 @@ async function generateVoiceoverForScenes(
       sortOrder: scene.sortOrder,
       index,
       cumulativeTimeSec,
+      existingPauseAfterMs: scene.pauseAfterMs,
     });
 
     await prisma.scene.update({
@@ -2954,10 +4707,104 @@ async function generateVoiceoverForScenes(
     });
 
     try {
-      const audio = await generateElevenLabsSpeech({
-        text: cleanText,
-        ...generationOptions,
+      const sectionAssignment = sectionBySortOrder.get(scene.sortOrder);
+      const resolvedVoice = resolveSceneVoiceoverSettings({
+        sectionKind: sectionAssignment?.sectionKind ?? "other",
+        sectionVoices,
+        fallback: fallbackVoice,
       });
+      const voiceProvider = resolveNamedVoiceProvider(
+        namedVoices,
+        resolvedVoice.voiceId || generationOptions.voiceId || "",
+        resolvedVoice.provider,
+      );
+      const namedVoice = findNamedVoice(
+        namedVoices,
+        resolvedVoice.voiceId || generationOptions.voiceId || "",
+      );
+      const sceneGenerationOptions = {
+        ...generationOptions,
+        voiceId: resolvedVoice.voiceId || generationOptions.voiceId,
+        modelId,
+        // eleven_v3 audio tags are more reliable without a forced speed override.
+        // Otherwise prefer per-speaker/section speed (e.g. slower Leo) over global.
+        ...(actingCues.length > 0 && voiceProvider === "elevenlabs"
+          ? { speed: null }
+          : resolvedVoice.speed != null
+            ? { speed: resolvedVoice.speed }
+            : {}),
+      };
+
+      const abortController = new AbortController();
+      const cancelPoll = setInterval(() => {
+        void isCanceledNow().then((canceled) => {
+          if (canceled) {
+            abortController.abort();
+          }
+        });
+      }, 400);
+
+      let audio: Buffer;
+      try {
+        if (voiceProvider === CHATTERBOX_PROVIDER) {
+          const chatterboxMode = resolveChatterboxVoiceMode(namedVoice);
+          const predefinedVoiceId =
+            namedVoice?.predefinedVoiceId?.trim() ||
+            (chatterboxMode === "predefined"
+              ? resolvedVoice.voiceId || generationOptions.voiceId || ""
+              : "");
+          const referenceFileName =
+            namedVoice?.referenceFileName?.trim() ||
+            (chatterboxMode === "clone"
+              ? resolvedVoice.voiceId || generationOptions.voiceId || ""
+              : "");
+          // Chatterbox: speak clean text only (no ElevenLabs acting tags).
+          audio = await generateChatterboxSpeech({
+            text: speech.spokenText,
+            voiceMode: chatterboxMode,
+            predefinedVoiceId:
+              chatterboxMode === "predefined" ? predefinedVoiceId : undefined,
+            referenceFileName:
+              chatterboxMode === "clone" ? referenceFileName : undefined,
+            speed:
+              resolvedVoice.speed != null
+                ? resolvedVoice.speed
+                : generationOptions.speed,
+            signal: abortController.signal,
+          });
+        } else if (voiceProvider === GOOGLE_TTS_PROVIDER) {
+          const googleVoiceId =
+            resolvedVoice.voiceId || generationOptions.voiceId || "";
+          const googleConfig = namedVoice?.googleConfig;
+          audio = await generateGoogleTtsSpeech({
+            text: speech.spokenText,
+            voiceId: googleVoiceId,
+            languageCode:
+              googleConfig?.languageCode ||
+              namedVoice?.googleLanguageCode ||
+              languageCodeFromVoiceName(googleVoiceId),
+            speed:
+              googleConfig?.speakingRate != null
+                ? googleConfig.speakingRate
+                : resolvedVoice.speed != null
+                  ? resolvedVoice.speed
+                  : generationOptions.speed,
+            audioEncoding: googleConfig?.audioEncoding,
+            signal: abortController.signal,
+          });
+        } else {
+          audio = await generateElevenLabsSpeech({
+            text: spokenText,
+            ...sceneGenerationOptions,
+            signal: abortController.signal,
+          });
+        }
+      } finally {
+        clearInterval(cancelPoll);
+      }
+
+      await throwIfCanceled();
+
       const fileName = sceneVoiceoverFileName({
         sceneId: scene.id,
       });
@@ -2976,25 +4823,84 @@ async function generateVoiceoverForScenes(
           voiceoverFileName: fileName,
           voiceoverDuration: durationSec,
           voiceoverError: null,
-          voiceoverProvider: "elevenlabs",
+          voiceoverProvider: voiceProvider,
           voiceoverSettingsJson: {
-            voiceId: generationOptions.voiceId,
-            modelId: generationOptions.modelId,
+            voiceId: sceneGenerationOptions.voiceId,
+            voiceName: resolvedVoice.voiceName ?? namedVoice?.name,
+            provider: voiceProvider,
+            chatterboxMode:
+              voiceProvider === CHATTERBOX_PROVIDER
+                ? resolveChatterboxVoiceMode(namedVoice)
+                : undefined,
+            predefinedVoiceId:
+              voiceProvider === CHATTERBOX_PROVIDER &&
+              resolveChatterboxVoiceMode(namedVoice) === "predefined"
+                ? namedVoice?.predefinedVoiceId ?? resolvedVoice.voiceId
+                : undefined,
+            referenceFileName:
+              voiceProvider === CHATTERBOX_PROVIDER &&
+              resolveChatterboxVoiceMode(namedVoice) === "clone"
+                ? namedVoice?.referenceFileName ?? resolvedVoice.voiceId
+                : undefined,
+            googleLanguageCode:
+              voiceProvider === GOOGLE_TTS_PROVIDER
+                ? namedVoice?.googleConfig?.languageCode ||
+                  namedVoice?.googleLanguageCode ||
+                  languageCodeFromVoiceName(
+                    resolvedVoice.voiceId || generationOptions.voiceId || "",
+                  )
+                : undefined,
+            googleConfig:
+              voiceProvider === GOOGLE_TTS_PROVIDER
+                ? namedVoice?.googleConfig
+                : undefined,
+            modelId: voiceProvider === "elevenlabs" ? modelId : undefined,
             outputFormat: generationOptions.outputFormat,
             stability: generationOptions.stability,
             similarityBoost: generationOptions.similarityBoost,
-            speed: generationOptions.speed,
+            speed:
+              actingCues.length > 0 && voiceProvider === "elevenlabs"
+                ? null
+                : (resolvedVoice.speed ?? generationOptions.speed),
+            sectionKind: sectionAssignment?.sectionKind ?? "other",
+            sectionLabel: sectionAssignment?.sectionLabel ?? null,
+            actingCues:
+              voiceProvider === "elevenlabs"
+                ? actingCues.map((cue: { audioTag: string }) => cue.audioTag)
+                : [],
           } as Prisma.InputJsonValue,
           pauseAfterMs,
         },
       });
       generated += 1;
       cumulativeTimeSec += (durationSec ?? 0) + pauseAfterMs / 1000;
+      const voiceLabel =
+        resolvedVoice.voiceName?.trim() ||
+        namedVoice?.name?.trim() ||
+        sceneGenerationOptions.voiceId ||
+        "default voice";
+      const cueLabel =
+        voiceProvider === "elevenlabs" && actingCues.length > 0
+          ? ` + ${actingCues.map((cue: { audioTag: string }) => cue.audioTag).join(" ")} via ${modelId}`
+          : "";
       await updateProcess(options.processId, {
-        logMessage: `Generated scene ${scene.sortOrder} (${(durationSec ?? 0).toFixed(1)}s).`,
+        logMessage: `Generated scene ${scene.sortOrder} with ${voiceProvider} · ${voiceLabel} [${sectionAssignment?.sectionKind ?? "other"}]${cueLabel} (${(durationSec ?? 0).toFixed(1)}s).`,
         logLevel: "success",
       });
     } catch (error) {
+      if (error instanceof SceneVoiceoverCanceledError) {
+        throw error;
+      }
+      if (await isCanceledNow()) {
+        await prisma.scene.update({
+          where: { id: scene.id },
+          data: {
+            voiceoverStatus: "needs_retry",
+            voiceoverError: "Canceled before audio finished.",
+          },
+        });
+        await throwIfCanceled();
+      }
       failed += 1;
       const message = errorMessage(error, "Could not generate scene voiceover.");
       await prisma.scene.update({
@@ -3017,17 +4923,37 @@ async function generateVoiceoverForScenes(
       voiceoverAudioPath: null,
       voiceoverFileName: null,
       voiceoverStatus: failed > 0 ? "partial" : "generated",
-      subtitleStatus: "needs_update",
-      formattedSubtitleJson: Prisma.JsonNull,
-      formattedSubtitleText: null,
-      styledSubtitleJson: Prisma.JsonNull,
-      styledSubtitleAss: null,
       renderDraftStatus: "pending",
     },
   });
-  await syncSceneVoiceoversToSubtitleSegments(videoId);
+  await syncSceneVoiceoversToSubtitleSegments(videoId, {
+    preserveSubtitles: true,
+  });
+  await maybeRecombineSubtitlesAfterVoiceoverSync(videoId);
 
+  clearSceneVoiceoverCancel(videoId);
   return { generated, skipped, failed };
+}
+
+async function handleSceneVoiceoverCancel(
+  processId: string,
+  videoId: string,
+  error: SceneVoiceoverCanceledError,
+): Promise<never> {
+  // Process may already be cancelled by the cancel-batch API — keep that status.
+  const run = await prisma.processRun.findUnique({
+    where: { id: processId },
+    select: { status: true },
+  });
+  if (run?.status !== "cancelled") {
+    await cancelProcess(processId);
+  }
+  await updateProcess(processId, {
+    logMessage: error.message,
+    logLevel: "warning",
+  });
+  revalidatePath(`/videos/${videoId}`);
+  redirectToVoiceover(videoId, "error", error.message);
 }
 
 export async function generateSceneVoiceovers(videoId: string, formData: FormData) {
@@ -3042,6 +4968,8 @@ export async function generateSceneVoiceovers(videoId: string, formData: FormDat
   });
 
   let result: Awaited<ReturnType<typeof generateVoiceoverForScenes>>;
+  let autoStitch: Awaited<ReturnType<typeof maybeAutoStitchAfterSceneVoiceovers>> =
+    null;
   try {
     result = await generateVoiceoverForScenes(videoId, formData, {
       overwrite: formData.get("overwriteSceneVoiceovers") === "on",
@@ -3051,9 +4979,17 @@ export async function generateSceneVoiceovers(videoId: string, formData: FormDat
       result,
       logMessage: `Scene voiceovers complete: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.`,
     });
+    autoStitch = await safeMaybeAutoStitchAfterSceneVoiceovers(
+      videoId,
+      result,
+      processId,
+    );
   } catch (error) {
     if (isRedirectError(error)) {
       throw error;
+    }
+    if (error instanceof SceneVoiceoverCanceledError) {
+      await handleSceneVoiceoverCancel(processId, videoId, error);
     }
 
     await failProcess(processId, {
@@ -3070,7 +5006,11 @@ export async function generateSceneVoiceovers(videoId: string, formData: FormDat
   redirectToVoiceover(
     videoId,
     result.failed > 0 ? "error" : "success",
-    `Scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.`,
+    `Scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${
+      autoStitch
+        ? ` Auto-stitched master (${autoStitch.durationSec.toFixed(1)}s).`
+        : ""
+    }`,
   );
 }
 
@@ -3094,6 +5034,8 @@ export async function generateSelectedSceneVoiceovers(
   });
 
   let result: Awaited<ReturnType<typeof generateVoiceoverForScenes>>;
+  let autoStitch: Awaited<ReturnType<typeof maybeAutoStitchAfterSceneVoiceovers>> =
+    null;
   try {
     result = await generateVoiceoverForScenes(videoId, formData, {
       selectedOrders,
@@ -3101,9 +5043,17 @@ export async function generateSelectedSceneVoiceovers(
       processId,
     });
     await finishProcess(processId, { result });
+    autoStitch = await safeMaybeAutoStitchAfterSceneVoiceovers(
+      videoId,
+      result,
+      processId,
+    );
   } catch (error) {
     if (isRedirectError(error)) {
       throw error;
+    }
+    if (error instanceof SceneVoiceoverCanceledError) {
+      await handleSceneVoiceoverCancel(processId, videoId, error);
     }
 
     await failProcess(processId, {
@@ -3120,25 +5070,608 @@ export async function generateSelectedSceneVoiceovers(
   redirectToVoiceover(
     videoId,
     result.failed > 0 ? "error" : "success",
-    `Selected scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.`,
+    `Selected scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${
+      autoStitch
+        ? ` Auto-stitched master (${autoStitch.durationSec.toFixed(1)}s).`
+        : ""
+    }`,
   );
+}
+
+export async function updateSelectedScenePauses(
+  videoId: string,
+  formData: FormData,
+) {
+  const selectedOrders = selectedSceneVoiceoverOrders(formData);
+
+  if (selectedOrders.length === 0) {
+    redirectToVoiceover(videoId, "error", "Select one or more scenes to update pause.");
+  }
+
+  const rawPause = formData.get("scenePauseAfterMs")?.toString().trim() ?? "";
+  const pauseAfterMs = Number(rawPause);
+
+  if (!Number.isFinite(pauseAfterMs) || pauseAfterMs < 0) {
+    redirectToVoiceover(
+      videoId,
+      "error",
+      "Pause must be a number of milliseconds (0 or greater).",
+    );
+  }
+
+  const roundedPauseMs = Math.round(pauseAfterMs);
+  const scenes = await prisma.scene.findMany({
+    where: {
+      videoId,
+      sortOrder: { in: selectedOrders },
+    },
+    select: {
+      id: true,
+      sortOrder: true,
+      voiceoverDuration: true,
+      duration: true,
+    },
+  });
+
+  if (scenes.length === 0) {
+    redirectToVoiceover(videoId, "error", "No matching selected scenes found.");
+  }
+
+  const updateDurations = formData.get("updateSceneDurationsFromAudio") === "on";
+
+  await prisma.$transaction(
+    scenes.map((scene) => {
+      const nextDuration =
+        updateDurations && scene.voiceoverDuration !== null
+          ? Math.max(
+              1,
+              Math.ceil(scene.voiceoverDuration + roundedPauseMs / 1000),
+            )
+          : undefined;
+
+      return prisma.scene.update({
+        where: { id: scene.id },
+        data: {
+          pauseAfterMs: roundedPauseMs,
+          ...(nextDuration === undefined ? {} : { duration: nextDuration }),
+        },
+      });
+    }),
+  );
+
+  // Pause changes only affect timeline offsets — keep local caption cues and
+  // recombine the global track in place (no subtitle wipe).
+  await refreshVoiceoverSegmentDurationsFromScenes(videoId);
+  const subtitleRefresh = await maybeRecombineSubtitlesAfterVoiceoverSync(
+    videoId,
+  );
+
+  revalidatePath(`/videos/${videoId}`);
+  redirectToVoiceover(
+    videoId,
+    "success",
+    `Updated pause to ${roundedPauseMs}ms on ${scenes.length} scene(s). Re-stitch the master voiceover to apply pacing.${
+      subtitleRefresh.recombined
+        ? " Existing subtitles were kept and recombined with the new offsets."
+        : ""
+    }`,
+  );
+}
+
+function musicBedPresetSelectionsFromForm(formData: FormData) {
+  const byOrder = new Map<number, string>();
+
+  for (const [key, value] of formData.entries()) {
+    const match = /^musicBedPresetByOrder\[(\d+)\]$/.exec(key);
+    if (!match) {
+      continue;
+    }
+    const order = Number(match[1]);
+    const presetId = String(value ?? "").trim();
+    if (Number.isFinite(order) && presetId) {
+      byOrder.set(order, presetId);
+    }
+  }
+
+  return byOrder;
+}
+
+async function attachMusicBedsForOrders({
+  videoId,
+  orders,
+  presetByOrder,
+  useSuggestedWhenMissing,
+}: {
+  videoId: string;
+  orders: number[];
+  presetByOrder: Map<number, string>;
+  useSuggestedWhenMissing: boolean;
+}) {
+  const scenes = await prisma.scene.findMany({
+    where: { videoId, sortOrder: { in: orders } },
+    orderBy: { sortOrder: "asc" },
+  });
+
+  if (scenes.length === 0) {
+    throw new Error("No matching MUSIC_BED scenes found.");
+  }
+
+  let attached = 0;
+  const failures: string[] = [];
+
+  for (const scene of scenes) {
+    if (!isMusicBedScene(scene)) {
+      failures.push(`Scene ${scene.sortOrder}: not a MUSIC_BED scene.`);
+      continue;
+    }
+
+    const presetId =
+      presetByOrder.get(scene.sortOrder) ||
+      (useSuggestedWhenMissing
+        ? suggestMusicBedPresetId({
+            visualIdea: scene.visualIdea,
+            visualPurpose: scene.visualPurpose,
+          })
+        : "");
+    const preset = getMusicBedPreset(presetId);
+    if (!preset) {
+      failures.push(`Scene ${scene.sortOrder}: unknown music bed preset.`);
+      continue;
+    }
+
+    try {
+      const result = await attachMusicBedFileToScenePaths({
+        videoId,
+        sceneId: scene.id,
+        preset,
+        visualIdea: scene.visualIdea,
+        visualPurpose: scene.visualPurpose,
+        sceneDurationSec: scene.duration,
+      });
+
+      await prisma.scene.update({
+        where: { id: scene.id },
+        data: {
+          voiceoverStatus: "attached",
+          voiceoverLocalPath: result.relativePath,
+          voiceoverFileName: result.fileName,
+          voiceoverDuration: result.durationSec,
+          voiceoverError: null,
+          voiceoverProvider: MUSIC_BED_PROVIDER,
+          voiceoverSettingsJson: result.settings as Prisma.InputJsonValue,
+          // Beds crossfade into the next spoken scene; no trailing silence.
+          pauseAfterMs: 0,
+          ...(result.durationSec != null
+            ? {
+                duration: Math.max(1, Math.ceil(result.durationSec)),
+              }
+            : {}),
+        },
+      });
+      attached += 1;
+    } catch (error) {
+      const message =
+        error instanceof MusicBedAttachError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Could not attach music bed.";
+      failures.push(`Scene ${scene.sortOrder}: ${message}`);
+      await prisma.scene.update({
+        where: { id: scene.id },
+        data: {
+          voiceoverStatus: "failed",
+          voiceoverError: message,
+        },
+      });
+    }
+  }
+
+  return { attached, failures };
+}
+
+export async function attachMusicBedsToScenes(
+  videoId: string,
+  sceneOrder: number,
+  formData: FormData,
+) {
+  const order = Number(sceneOrder);
+  const orders = Number.isFinite(order) && order >= 1 ? [Math.floor(order)] : [];
+
+  if (orders.length === 0) {
+    redirectToVoiceover(videoId, "error", "No MUSIC_BED scene selected to attach.");
+  }
+
+  try {
+    const result = await attachMusicBedsForOrders({
+      videoId,
+      orders,
+      presetByOrder: musicBedPresetSelectionsFromForm(formData),
+      useSuggestedWhenMissing: true,
+    });
+
+    revalidatePath(`/videos/${videoId}`);
+    if (result.attached === 0) {
+      redirectToVoiceover(
+        videoId,
+        "error",
+        result.failures[0] ?? "Could not attach music beds.",
+      );
+    }
+
+    const failureNote =
+      result.failures.length > 0
+        ? ` ${result.failures.length} failed: ${result.failures[0]}`
+        : "";
+    redirectToVoiceover(
+      videoId,
+      result.failures.length > 0 ? "error" : "success",
+      `Attached Freesound beds on ${result.attached} scene(s).${failureNote} Re-stitch the master when ready.`,
+    );
+  } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
+    redirectToVoiceover(
+      videoId,
+      "error",
+      error instanceof Error ? error.message : "Could not attach music beds.",
+    );
+  }
+}
+
+export async function importMusicBedAudioToScene(
+  videoId: string,
+  sceneOrder: number,
+  formData: FormData,
+) {
+  const order = Number(sceneOrder);
+  if (!Number.isFinite(order) || order < 1) {
+    redirectToVoiceover(videoId, "error", "No MUSIC_BED scene selected to import.");
+  }
+
+  const scene = await prisma.scene.findFirst({
+    where: { videoId, sortOrder: Math.floor(order) },
+  });
+
+  if (!scene || !isMusicBedScene(scene)) {
+    redirectToVoiceover(
+      videoId,
+      "error",
+      `Scene ${Math.floor(order)} is not a MUSIC_BED scene.`,
+    );
+  }
+
+  const file = formData.get("musicBedAudio");
+  if (!(file instanceof File)) {
+    redirectToVoiceover(
+      videoId,
+      "error",
+      "Choose an audio file (mp3, wav, m4a, ogg, or flac) to import.",
+    );
+  }
+
+  try {
+    const suggestedPreset = getMusicBedPreset(
+      suggestMusicBedPresetId({
+        visualIdea: scene.visualIdea,
+        visualPurpose: scene.visualPurpose,
+      }),
+    );
+    // Visual-planner bed intros are short (a few seconds). If duration was
+    // inflated by a previous full-file import, fall back to the preset default.
+    const plannerDuration =
+      typeof scene.duration === "number" &&
+      Number.isFinite(scene.duration) &&
+      scene.duration > 0 &&
+      scene.duration <= 12
+        ? scene.duration
+        : (suggestedPreset?.defaultDurationSec ?? MUSIC_BED_MIN_INTRO_SEC);
+
+    const result = await attachImportedMusicBedFileToScenePaths({
+      videoId,
+      sceneId: scene.id,
+      file,
+      visualIdea: scene.visualIdea,
+      visualPurpose: scene.visualPurpose,
+      sceneDurationSec: plannerDuration,
+    });
+
+    await prisma.scene.update({
+      where: { id: scene.id },
+      data: {
+        voiceoverStatus: "attached",
+        voiceoverLocalPath: result.relativePath,
+        voiceoverFileName: result.fileName,
+        voiceoverDuration: result.durationSec,
+        voiceoverError: null,
+        voiceoverProvider: MUSIC_BED_PROVIDER,
+        voiceoverSettingsJson: result.settings as Prisma.InputJsonValue,
+        pauseAfterMs: 0,
+        // Restore/keep the planner intro duration (not the full source length).
+        duration: Math.max(1, Math.ceil(plannerDuration)),
+      },
+    });
+
+    revalidatePath(`/videos/${videoId}`);
+    redirectToVoiceover(
+      videoId,
+      "success",
+      `Imported music bed on scene ${scene.sortOrder} (trimmed to ${result.durationSec?.toFixed(1) ?? "?"}s; stitch adds the underlay fade under the next scene). Re-stitch when ready.`,
+    );
+  } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
+    const message =
+      error instanceof MusicBedAttachError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : "Could not import music bed audio.";
+    await prisma.scene.update({
+      where: { id: scene.id },
+      data: {
+        voiceoverStatus: "failed",
+        voiceoverError: message,
+      },
+    });
+    redirectToVoiceover(videoId, "error", `Scene ${scene.sortOrder}: ${message}`);
+  }
+}
+
+export async function attachSceneClipVideo(
+  videoId: string,
+  sceneOrder: number,
+  formData: FormData,
+) {
+  const order = Number(sceneOrder);
+  if (!Number.isFinite(order) || order < 1) {
+    redirectToVoiceover(videoId, "error", "No scene selected for clip upload.");
+  }
+
+  const scene = await prisma.scene.findFirst({
+    where: { videoId, sortOrder: Math.floor(order) },
+  });
+  if (!scene) {
+    redirectToVoiceover(videoId, "error", `Scene ${Math.floor(order)} not found.`);
+  }
+
+  const file = formData.get("sceneClipVideo");
+  if (!(file instanceof File) || file.size <= 0) {
+    redirectToVoiceover(
+      videoId,
+      "error",
+      "Choose a video file (mp4, mov, webm, mkv, or m4v).",
+    );
+  }
+  if (!isSupportedSceneClipExtension(file.name)) {
+    redirectToVoiceover(
+      videoId,
+      "error",
+      "Unsupported video type. Use mp4, mov, webm, mkv, or m4v.",
+    );
+  }
+
+  const mutedValues = formData.getAll("clipMuted").map(String);
+  const clipMuted = mutedValues.includes("1");
+
+  try {
+    const tempDir = path.join(process.cwd(), "storage", "tmp");
+    await mkdir(tempDir, { recursive: true });
+    const tempPath = path.join(
+      tempDir,
+      `upload-clip-${scene.id}-${Date.now()}${path.extname(file.name) || ".mp4"}`,
+    );
+    await writeFile(tempPath, Buffer.from(await file.arrayBuffer()));
+
+    const stored = await storeUploadedSceneClip({
+      videoId,
+      sceneId: scene.id,
+      sourcePath: tempPath,
+      originalFileName: file.name,
+    });
+    try {
+      await unlink(tempPath);
+    } catch {
+      // ignore temp cleanup
+    }
+
+    await removePreviousSceneClip(scene.clipLocalPath);
+    await prisma.scene.update({
+      where: { id: scene.id },
+      data: {
+        clipLocalPath: stored.relativePath,
+        clipFileName: stored.fileName,
+        clipMuted,
+      },
+    });
+
+    revalidatePath(`/videos/${videoId}`);
+    redirectToVoiceover(
+      videoId,
+      "success",
+      `Attached video clip on scene ${scene.sortOrder}${
+        clipMuted ? " (muted — music bed audio)" : " (clip audio only — no music bed)"
+      }. Render fits it to the scene duration.`,
+    );
+  } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
+    redirectToVoiceover(
+      videoId,
+      "error",
+      error instanceof Error ? error.message : "Could not attach scene clip.",
+    );
+  }
+}
+
+export async function clearSceneClipVideo(
+  videoId: string,
+  sceneOrder: number,
+  _formData: FormData,
+) {
+  const order = Number(sceneOrder);
+  const scene = await prisma.scene.findFirst({
+    where: { videoId, sortOrder: Math.floor(order) },
+  });
+  if (!scene) {
+    redirectToVoiceover(videoId, "error", "Scene not found.");
+  }
+
+  await removePreviousSceneClip(scene.clipLocalPath);
+  await prisma.scene.update({
+    where: { id: scene.id },
+    data: {
+      clipLocalPath: null,
+      clipFileName: null,
+    },
+  });
+  revalidatePath(`/videos/${videoId}`);
+  redirectToVoiceover(
+    videoId,
+    "success",
+    `Cleared video clip on scene ${scene.sortOrder}. Still image will be used again.`,
+  );
+}
+
+export async function updateSceneClipMuted(
+  videoId: string,
+  sceneOrder: number,
+  formData: FormData,
+) {
+  const order = Number(sceneOrder);
+  const scene = await prisma.scene.findFirst({
+    where: { videoId, sortOrder: Math.floor(order) },
+  });
+  if (!scene) {
+    redirectToVoiceover(videoId, "error", "Scene not found.");
+  }
+  if (!scene.clipLocalPath?.trim()) {
+    redirectToVoiceover(
+      videoId,
+      "error",
+      `Scene ${scene.sortOrder} has no video clip attached.`,
+    );
+  }
+
+  const mutedValues = formData.getAll("clipMuted").map(String);
+  const clipMuted = mutedValues.includes("1");
+  await prisma.scene.update({
+    where: { id: scene.id },
+    data: { clipMuted },
+  });
+  revalidatePath(`/videos/${videoId}`);
+  redirectToVoiceover(
+    videoId,
+    "success",
+    `Scene ${scene.sortOrder} clip ${
+      clipMuted
+        ? "muted (music bed only)"
+        : "unmuted (clip audio only — re-stitch or re-render draft)"
+    }.`,
+  );
+}
+
+export async function attachSuggestedMusicBeds(
+  videoId: string,
+  _formData: FormData,
+) {
+  const scenes = await prisma.scene.findMany({
+    where: { videoId },
+    select: {
+      sortOrder: true,
+      visualIdea: true,
+      scriptText: true,
+    },
+    orderBy: { sortOrder: "asc" },
+  });
+  const orders = scenes
+    .filter((scene) => isMusicBedScene(scene))
+    .map((scene) => scene.sortOrder);
+
+  if (orders.length === 0) {
+    redirectToVoiceover(videoId, "error", "No MUSIC_BED scenes found on this video.");
+  }
+
+  try {
+    const result = await attachMusicBedsForOrders({
+      videoId,
+      orders,
+      presetByOrder: new Map(),
+      useSuggestedWhenMissing: true,
+    });
+
+    revalidatePath(`/videos/${videoId}`);
+    if (result.attached === 0) {
+      redirectToVoiceover(
+        videoId,
+        "error",
+        result.failures[0] ??
+          "Could not attach suggested beds. Set FREESOUND_API_KEY or add local MP3 overrides under data/music-beds/freesound/.",
+      );
+    }
+
+    const failureNote =
+      result.failures.length > 0
+        ? ` ${result.failures.length} failed: ${result.failures[0]}`
+        : "";
+    redirectToVoiceover(
+      videoId,
+      result.failures.length > 0 ? "error" : "success",
+      `Attached suggested Freesound beds on ${result.attached} MUSIC_BED scene(s).${failureNote}`,
+    );
+  } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
+    redirectToVoiceover(
+      videoId,
+      "error",
+      error instanceof Error ? error.message : "Could not attach suggested music beds.",
+    );
+  }
 }
 
 export async function generateMissingSceneVoiceovers(
   videoId: string,
   formData: FormData,
 ) {
-  const missingCount = await prisma.scene.count({
+  const candidateScenes = await prisma.scene.findMany({
     where: {
       videoId,
-      OR: [
-        { voiceoverLocalPath: null },
-        { voiceoverLocalPath: "" },
-      ],
+      ...sceneIncludedInPipelineWhere(),
     },
+    select: {
+      sortOrder: true,
+      voiceoverLocalPath: true,
+      voiceoverStatus: true,
+      voiceoverProvider: true,
+      visualIdea: true,
+      clipLocalPath: true,
+      clipMuted: true,
+    },
+    orderBy: { sortOrder: "asc" },
   });
 
-  if (missingCount === 0) {
+  const missingOrders: number[] = [];
+  for (const scene of candidateScenes) {
+    if (sceneUsesExclusiveClipAudio(scene)) {
+      continue;
+    }
+    const status = scene.voiceoverStatus ?? "";
+    if (status === "failed" || status === "needs_retry") {
+      missingOrders.push(scene.sortOrder);
+      continue;
+    }
+    const check = await sceneVoiceoverFileExists(scene.voiceoverLocalPath);
+    if (!check.ok) {
+      missingOrders.push(scene.sortOrder);
+    }
+  }
+
+  if (missingOrders.length === 0) {
     redirectToVoiceover(videoId, "success", "No missing scene voiceovers found.");
   }
 
@@ -3146,12 +5679,14 @@ export async function generateMissingSceneVoiceovers(
     type: "scene_voiceover_generation",
     videoId,
     title: "Generating missing scene voiceovers",
-    description: `${missingCount} missing scenes queued for ElevenLabs.`,
-    totalSteps: missingCount,
+    description: `${missingOrders.length} missing scenes queued (including stale/missing files).`,
+    totalSteps: missingOrders.length,
     currentStep: "Preparing missing scenes",
   });
 
   let result: Awaited<ReturnType<typeof generateVoiceoverForScenes>>;
+  let autoStitch: Awaited<ReturnType<typeof maybeAutoStitchAfterSceneVoiceovers>> =
+    null;
   try {
     result = await generateVoiceoverForScenes(videoId, formData, {
       missingOnly: true,
@@ -3159,9 +5694,17 @@ export async function generateMissingSceneVoiceovers(
       processId,
     });
     await finishProcess(processId, { result });
+    autoStitch = await safeMaybeAutoStitchAfterSceneVoiceovers(
+      videoId,
+      result,
+      processId,
+    );
   } catch (error) {
     if (isRedirectError(error)) {
       throw error;
+    }
+    if (error instanceof SceneVoiceoverCanceledError) {
+      await handleSceneVoiceoverCancel(processId, videoId, error);
     }
 
     await failProcess(processId, {
@@ -3178,7 +5721,13 @@ export async function generateMissingSceneVoiceovers(
   redirectToVoiceover(
     videoId,
     result.failed > 0 ? "error" : "success",
-    `Missing scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.`,
+    `Missing scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${
+      autoStitch
+        ? ` Auto-stitched master (${autoStitch.durationSec.toFixed(1)}s).`
+        : result.failed === 0
+          ? " Master not auto-stitched yet — run Stitch when all scenes are ready."
+          : ""
+    }`,
   );
 }
 
@@ -3199,6 +5748,8 @@ export async function retryFailedSceneVoiceovers(
   });
 
   let result: Awaited<ReturnType<typeof generateVoiceoverForScenes>>;
+  let autoStitch: Awaited<ReturnType<typeof maybeAutoStitchAfterSceneVoiceovers>> =
+    null;
   try {
     result = await generateVoiceoverForScenes(videoId, formData, {
       retryFailedOnly: true,
@@ -3206,9 +5757,17 @@ export async function retryFailedSceneVoiceovers(
       processId,
     });
     await finishProcess(processId, { result });
+    autoStitch = await safeMaybeAutoStitchAfterSceneVoiceovers(
+      videoId,
+      result,
+      processId,
+    );
   } catch (error) {
     if (isRedirectError(error)) {
       throw error;
+    }
+    if (error instanceof SceneVoiceoverCanceledError) {
+      await handleSceneVoiceoverCancel(processId, videoId, error);
     }
 
     await failProcess(processId, {
@@ -3225,15 +5784,92 @@ export async function retryFailedSceneVoiceovers(
   redirectToVoiceover(
     videoId,
     result.failed > 0 ? "error" : "success",
-    `Retried scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.`,
+    `Retried scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${
+      autoStitch
+        ? ` Auto-stitched master (${autoStitch.durationSec.toFixed(1)}s).`
+        : ""
+    }`,
   );
 }
 
-export async function stitchSceneVoiceovers(videoId: string, formData: FormData) {
+/**
+ * Repair exclusive SECTION_CLIP / unmuted clip scenes missing voiceoverLocalPath,
+ * then rebuild subtitle segment offsets so captions do not burn over bumpers.
+ */
+export async function repairExclusiveClipSubtitleTimeline(videoId: string) {
+  const repaired = await ensureExclusiveClipVoiceoverPathsForVideo(videoId);
+  const sync = await syncSceneVoiceoversToSubtitleSegments(videoId, {
+    preserveSubtitles: true,
+  });
+  await refreshVoiceoverSegmentDurationsFromScenes(videoId);
+  const subtitleRefresh = await maybeRecombineSubtitlesAfterVoiceoverSync(
+    videoId,
+  );
+  try {
+    revalidatePath(`/videos/${videoId}`);
+  } catch {
+    // Allowed when called outside a Next request (scripts / one-off repair).
+  }
+  return {
+    repairedExclusiveAudio: repaired,
+    sceneCount: sync.sceneCount,
+    restoredSubtitles: sync.restoredSubtitles,
+    recombined: subtitleRefresh.recombined,
+  };
+}
+
+
+async function areAllPipelineSceneVoiceoversReady(videoId: string) {
+  const scenes = await prisma.scene.findMany({
+    where: {
+      videoId,
+      ...sceneIncludedInPipelineWhere(),
+    },
+    select: {
+      voiceoverStatus: true,
+      voiceoverLocalPath: true,
+      voiceoverProvider: true,
+      visualIdea: true,
+      clipLocalPath: true,
+      clipMuted: true,
+    },
+  });
+
+  if (scenes.length === 0) {
+    return false;
+  }
+
+  for (const scene of scenes) {
+    if (sceneUsesExclusiveClipAudio(scene)) {
+      if (!(scene.clipLocalPath?.trim() || scene.voiceoverLocalPath?.trim())) {
+        return false;
+      }
+      continue;
+    }
+    const status = scene.voiceoverStatus ?? "";
+    if (status !== "generated" && status !== "attached") {
+      return false;
+    }
+    const check = await sceneVoiceoverFileExists(scene.voiceoverLocalPath);
+    if (!check.ok) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function runStitchSceneVoiceovers(
+  videoId: string,
+  options: {
+    updateSceneDurationsFromAudio?: boolean;
+    processTitle?: string;
+  } = {},
+) {
   const processId = await startProcess({
     type: "voiceover_stitching",
     videoId,
-    title: "Stitching scene voiceover",
+    title: options.processTitle ?? "Stitching scene voiceover",
     totalSteps: 5,
     currentStep: "Checking FFmpeg",
   });
@@ -3246,17 +5882,81 @@ export async function stitchSceneVoiceovers(videoId: string, formData: FormData)
       totalSteps: 5,
     });
 
+    await ensureExclusiveClipVoiceoverPathsForVideo(videoId);
+
     const scenes = await prisma.scene.findMany({
       where: {
         videoId,
+        ...sceneIncludedInPipelineWhere(),
         voiceoverLocalPath: { not: null },
-        voiceoverStatus: { in: ["generated", "attached"] },
+        OR: [
+          { voiceoverStatus: { in: ["generated", "attached"] } },
+          {
+            voiceoverProvider: MUSIC_BED_PROVIDER,
+            voiceoverError: { contains: "NEXT_REDIRECT" },
+          },
+        ],
       },
       orderBy: { sortOrder: "asc" },
     });
 
+    const healIds = scenes
+      .filter(
+        (scene) =>
+          scene.voiceoverStatus === "failed" &&
+          scene.voiceoverProvider === MUSIC_BED_PROVIDER &&
+          scene.voiceoverLocalPath,
+      )
+      .map((scene) => scene.id);
+    if (healIds.length > 0) {
+      await prisma.scene.updateMany({
+        where: { id: { in: healIds } },
+        data: { voiceoverStatus: "attached", voiceoverError: null },
+      });
+    }
+
     if (scenes.length === 0) {
       throw new Error("No generated scene voiceovers found.");
+    }
+
+    const invalidScenes: Array<{ id: string; sortOrder: number; reason: string }> =
+      [];
+    for (const scene of scenes) {
+      if (sceneUsesExclusiveClipAudio(scene)) {
+        continue;
+      }
+      const check = await sceneVoiceoverAudioHasUsableStream(
+        scene.voiceoverLocalPath,
+      );
+      if (!check.ok) {
+        invalidScenes.push({
+          id: scene.id,
+          sortOrder: scene.sortOrder,
+          reason: check.reason ?? "invalid_audio",
+        });
+      }
+    }
+
+    if (invalidScenes.length > 0) {
+      await prisma.scene.updateMany({
+        where: { id: { in: invalidScenes.map((scene) => scene.id) } },
+        data: {
+          voiceoverStatus: "needs_retry",
+          voiceoverError:
+            "Missing or invalid voiceover audio file on disk (regenerate).",
+        },
+      });
+      const sample = invalidScenes
+        .slice(0, 12)
+        .map((scene) => scene.sortOrder)
+        .join(", ");
+      const more =
+        invalidScenes.length > 12
+          ? ` (+${invalidScenes.length - 12} more)`
+          : "";
+      throw new Error(
+        `Cannot stitch: ${invalidScenes.length} scene(s) missing usable voiceover audio (scenes ${sample}${more}). Use “Generate missing scene voiceovers” — other scenes are unchanged.`,
+      );
     }
 
     await updateProcess(processId, {
@@ -3267,43 +5967,111 @@ export async function stitchSceneVoiceovers(videoId: string, formData: FormData)
     });
     const outputRelativePath = sceneVoiceoverMasterRelativePath(videoId);
     await ensureSceneVoiceoversDir(videoId);
-    const stitched = await stitchSceneVoiceoverAudio(
-      videoId,
-      scenes.map((scene) => ({
+    const stitchClips = [];
+    for (const scene of scenes) {
+      const isMusicBed =
+        scene.voiceoverProvider === MUSIC_BED_PROVIDER ||
+        isMusicBedScene(scene);
+      const useExclusiveClip = sceneUsesExclusiveClipAudio(scene);
+
+      if (useExclusiveClip) {
+        const targetDurationSec =
+          scene.voiceoverDuration && scene.voiceoverDuration > 0
+            ? scene.voiceoverDuration
+            : Math.max(0.5, scene.duration ?? 5);
+        const clipAudioPath =
+          scene.voiceoverLocalPath?.trim() ||
+          (await prepareExclusiveClipAudioForScene({
+            videoId,
+            sceneId: scene.id,
+            clipLocalPath: scene.clipLocalPath,
+            clipFileName: scene.clipFileName,
+            targetDurationSec,
+          }));
+        if (!scene.voiceoverLocalPath?.trim()) {
+          await prisma.scene.update({
+            where: { id: scene.id },
+            data: {
+              voiceoverLocalPath: clipAudioPath,
+              voiceoverFileName: path.basename(clipAudioPath),
+              voiceoverStatus: "attached",
+              voiceoverError: null,
+            },
+          });
+        }
+        stitchClips.push({
+          sortOrder: scene.sortOrder,
+          audioPath: clipAudioPath,
+          pauseAfterMs: scene.pauseAfterMs,
+          isMusicBed: false,
+        });
+        continue;
+      }
+
+      stitchClips.push({
         sortOrder: scene.sortOrder,
         audioPath: scene.voiceoverLocalPath,
         pauseAfterMs: scene.pauseAfterMs,
-      })),
+        isMusicBed,
+      });
+    }
+
+    const stitched = await stitchSceneVoiceoverAudio(
+      videoId,
+      stitchClips,
       outputRelativePath,
     );
 
-    if (formData.get("updateSceneDurationsFromAudio") === "on") {
+    const introByBedOrder = new Map(
+      stitched.overlaps.map((overlap) => [
+        overlap.bedSortOrder,
+        overlap.introSec,
+      ]),
+    );
+    const shouldUpdateAllDurations = options.updateSceneDurationsFromAudio === true;
+    const durationUpdates = scenes.flatMap((scene) => {
+      const useExclusiveClip = sceneUsesExclusiveClipAudio(scene);
+      const isMusicBed =
+        !useExclusiveClip &&
+        (scene.voiceoverProvider === MUSIC_BED_PROVIDER ||
+          isMusicBedScene(scene));
+      const introSec = introByBedOrder.get(scene.sortOrder);
+      if (!shouldUpdateAllDurations && introSec == null) {
+        return [];
+      }
+
+      const pauseAfterMs = effectiveScenePauseAfterMs({
+        isMusicBed,
+        pauseAfterMs: scene.pauseAfterMs,
+      });
+      const visualDuration = sceneVisualDurationSec({
+        voiceoverDuration: scene.voiceoverDuration,
+        pauseAfterMs,
+        isMusicBed,
+        introSec,
+      });
+
+      return [
+        prisma.scene.update({
+          where: { id: scene.id },
+          data: {
+            pauseAfterMs,
+            duration:
+              visualDuration == null
+                ? scene.duration
+                : Math.max(1, Math.ceil(visualDuration)),
+          },
+        }),
+      ];
+    });
+
+    if (durationUpdates.length > 0) {
       await updateProcess(processId, {
         currentStep: "Updating scene durations",
         stepIndex: 4,
         totalSteps: 5,
       });
-      await prisma.$transaction(
-        scenes.map((scene) => {
-          const nextDuration =
-            scene.voiceoverDuration === null
-              ? scene.duration
-              : Math.max(
-                  scene.voiceoverDuration + (scene.pauseAfterMs ?? 0) / 1000,
-                  scene.voiceoverDuration,
-                );
-
-          return prisma.scene.update({
-            where: { id: scene.id },
-            data: {
-              duration:
-                nextDuration === null || nextDuration === undefined
-                  ? scene.duration
-                  : Math.max(1, Math.ceil(nextDuration)),
-            },
-          });
-        }),
-      );
+      await prisma.$transaction(durationUpdates);
     }
 
     await updateProcess(processId, {
@@ -3311,7 +6079,12 @@ export async function stitchSceneVoiceovers(videoId: string, formData: FormData)
       stepIndex: 5,
       totalSteps: 5,
     });
-    await syncSceneVoiceoversToSubtitleSegments(videoId);
+    await syncSceneVoiceoversToSubtitleSegments(videoId, {
+      preserveSubtitles: true,
+    });
+    const subtitleRefresh = await maybeRecombineSubtitlesAfterVoiceoverSync(
+      videoId,
+    );
 
     await prisma.video.update({
       where: { id: videoId },
@@ -3320,29 +6093,96 @@ export async function stitchSceneVoiceovers(videoId: string, formData: FormData)
         voiceoverFileName: path.basename(outputRelativePath),
         voiceoverDurationSec: stitched.durationSec,
         voiceoverStatus: "ready",
-        subtitleStatus: "needs_update",
+        ...(subtitleRefresh.recombined
+          ? {}
+          : { subtitleStatus: "needs_update" }),
         renderDraftStatus: "pending",
       },
     });
     await finishProcess(processId, {
       result: { durationSec: stitched.durationSec, scenes: scenes.length },
-      logMessage: `Master voiceover ready (${stitched.durationSec.toFixed(1)}s).`,
+      logMessage: `Master voiceover ready (${stitched.durationSec.toFixed(1)}s)${
+        stitched.musicBedOverlaps > 0
+          ? ` with ${stitched.musicBedOverlaps} music-bed underlay fade(s)`
+          : ""
+      }${
+        subtitleRefresh.recombined
+          ? "; existing scene subtitles preserved and recombined."
+          : ""
+      }.`,
     });
 
+    return {
+      durationSec: stitched.durationSec,
+      sceneCount: scenes.length,
+      recombinedSubtitles: subtitleRefresh.recombined,
+    };
+  } catch (error) {
+    await failProcess(processId, {
+      errorMessage: errorMessage(error, "Voiceover stitching failed."),
+    });
+    throw error;
+  }
+}
+
+async function maybeAutoStitchAfterSceneVoiceovers(
+  videoId: string,
+  generation: { failed: number },
+) {
+  if (generation.failed > 0) {
+    return null;
+  }
+  if (!(await areAllPipelineSceneVoiceoversReady(videoId))) {
+    return null;
+  }
+  return runStitchSceneVoiceovers(videoId, {
+    updateSceneDurationsFromAudio: true,
+    processTitle: "Auto-stitching scene voiceover",
+  });
+}
+
+/** Never fails the voiceover generation job if stitch cannot complete. */
+async function safeMaybeAutoStitchAfterSceneVoiceovers(
+  videoId: string,
+  generation: { failed: number },
+  processId?: string,
+) {
+  try {
+    return await maybeAutoStitchAfterSceneVoiceovers(videoId, generation);
+  } catch (stitchError) {
+    if (isRedirectError(stitchError)) {
+      throw stitchError;
+    }
+    if (processId) {
+      await updateProcess(processId, {
+        logMessage: `Voiceovers generated, but auto-stitch skipped: ${errorMessage(
+          stitchError,
+          "stitch failed",
+        )}`,
+        logLevel: "warning",
+      });
+    }
+    return null;
+  }
+}
+
+export async function stitchSceneVoiceovers(videoId: string, formData: FormData) {
+  try {
+    const result = await runStitchSceneVoiceovers(videoId, {
+      updateSceneDurationsFromAudio:
+        formData.get("updateSceneDurationsFromAudio") === "on",
+    });
     revalidatePath(`/videos/${videoId}`);
     redirectToVoiceover(
       videoId,
       "success",
-      `Stitched scene voiceover master (${stitched.durationSec.toFixed(1)}s).`,
+      `Stitched scene voiceover master (${result.durationSec.toFixed(1)}s).`,
     );
   } catch (error) {
     if (isRedirectError(error)) {
       throw error;
     }
-
-    await failProcess(processId, {
-      errorMessage: errorMessage(error, "Voiceover stitching failed."),
-    });
+    revalidatePath(`/videos/${videoId}`);
     redirectToVoiceover(
       videoId,
       "error",
@@ -3356,23 +6196,19 @@ function subtitleTextFromCues(cues: FormattedSubtitleCue[]) {
 }
 
 async function invalidateSubtitlesForVideo(videoId: string) {
-  await prisma.$transaction([
-    prisma.subtitleSegment.updateMany({
-      where: { videoId },
-      data: { status: "needs_update" },
-    }),
-    prisma.video.update({
-      where: { id: videoId },
-      data: {
-        subtitleStatus: "needs_update",
-        formattedSubtitleJson: Prisma.JsonNull,
-        formattedSubtitleText: null,
-        styledSubtitleJson: Prisma.JsonNull,
-        styledSubtitleAss: null,
-        renderDraftStatus: "pending",
-      },
-    }),
-  ]);
+  // Keep local scene cue JSON and segment status so a later stitch/sync can
+  // restore them. Only clear the combined video-level track.
+  await prisma.video.update({
+    where: { id: videoId },
+    data: {
+      subtitleStatus: "needs_update",
+      formattedSubtitleJson: Prisma.JsonNull,
+      formattedSubtitleText: null,
+      styledSubtitleJson: Prisma.JsonNull,
+      styledSubtitleAss: null,
+      renderDraftStatus: "pending",
+    },
+  });
 }
 
 function resolveStoredAudioPath(audioPath: string) {
@@ -3438,7 +6274,9 @@ function defaultCaptionPresetForVideo(video: {
 
   return video.channelKey === "wealth-insights"
     ? "clean_active_word"
-    : video.captionStylePreset;
+    : video.channelKey === "the-gods-word"
+      ? "godsword_style"
+      : video.captionStylePreset;
 }
 
 async function rebuildSubtitleSegmentsFromStoredAlignment(
@@ -3453,15 +6291,74 @@ async function rebuildSubtitleSegmentsFromStoredAlignment(
       id: true,
       index: true,
       rawAlignmentJson: true,
+      voiceoverSegment: {
+        select: {
+          text: true,
+          pacedTextUsed: true,
+          durationSec: true,
+          sceneStartOrder: true,
+        },
+      },
     },
   });
 
-  for (const segment of segments) {
-    const words = normalizeElevenLabsAlignment(segment.rawAlignmentJson);
+  const scenes = await prisma.scene.findMany({
+    where: { videoId },
+    select: {
+      sortOrder: true,
+      voiceoverDuration: true,
+      pauseAfterMs: true,
+    },
+  });
+  const sceneByOrder = new Map(scenes.map((scene) => [scene.sortOrder, scene]));
 
-    if (words.length === 0) {
+  for (const segment of segments) {
+    const displayText = segment.voiceoverSegment?.text ?? "";
+    const pacedText = segment.voiceoverSegment?.pacedTextUsed ?? "";
+    if (
+      isSilentSubtitleVoiceoverText(
+        spokenTextForSubtitlePreserve(displayText, pacedText),
+      )
+    ) {
+      await prisma.subtitleSegment.update({
+        where: { id: segment.id },
+        data: {
+          provider: "silent_skip",
+          rawAlignmentJson: Prisma.JsonNull,
+          localCuesJson: [],
+          localSrt: "",
+          localVtt: "",
+          status: "ready",
+          error: null,
+        },
+      });
       continue;
     }
+
+    const spokenWords = normalizeElevenLabsAlignment(segment.rawAlignmentJson);
+
+    if (spokenWords.length === 0) {
+      continue;
+    }
+
+    const scene = sceneByOrder.get(
+      segment.voiceoverSegment?.sceneStartOrder ?? -1,
+    );
+    const audioDurationSec =
+      scene?.voiceoverDuration ??
+      Math.max(
+        0,
+        (segment.voiceoverSegment?.durationSec ?? 0) -
+          Math.max(0, (scene?.pauseAfterMs ?? 0) / 1000),
+      );
+
+    const speech = prepareVoiceoverSpeechText(displayText);
+    const remapped = remapSpeechWordsToDisplay(spokenWords, speech.replacements);
+    const words = prepareAlignedWordsForCaptionStyle(
+      fitAlignedWordsToAudioDuration(remapped, audioDurationSec),
+      stylePreset,
+      displayText,
+    );
 
     const localCues = buildActiveWordCaptionCuesFromWords(words, stylePreset);
     await prisma.subtitleSegment.update({
@@ -3515,11 +6412,14 @@ async function combineSegmentSubtitlesForVideo(
   const missingSubtitleSegment = voiceoverSegments.find((segment) => {
     const subtitleSegment = segment.subtitleSegment;
     const cues = parseSubtitleCuesJson(subtitleSegment?.localCuesJson);
+    const silent = isSilentSubtitleVoiceoverText(
+      segment.pacedTextUsed || segment.text,
+    );
 
     return (
       !segment.audioPath ||
       !subtitleSegment ||
-      cues.length === 0 ||
+      (!silent && cues.length === 0) ||
       !["formatted", "ready"].includes(subtitleSegment.status)
     );
   });
@@ -3566,11 +6466,13 @@ async function combineSegmentSubtitlesForVideo(
     combinedCues.push(...globalCues);
     nextCueIndex += globalCues.length;
     const scene = sceneByOrder.get(segment.sceneStartOrder);
-    const sceneTimelineDuration =
-      scene?.voiceoverDuration !== null && scene?.voiceoverDuration !== undefined
+    // Prefer segment.durationSec — it already subtracts music-bed crossfade overlap.
+    offset +=
+      segment.durationSec ??
+      (scene?.voiceoverDuration !== null && scene?.voiceoverDuration !== undefined
         ? scene.voiceoverDuration + Math.max(0, (scene.pauseAfterMs ?? 0) / 1000)
-        : scene?.duration ?? null;
-    offset += sceneTimelineDuration ?? segment.durationSec ?? localMaxEnd;
+        : scene?.duration ?? null) ??
+      localMaxEnd;
   }
 
   const combinedExport = {
@@ -3602,7 +6504,21 @@ async function combineSegmentSubtitlesForVideo(
   return combinedCues;
 }
 
-async function generateSubtitlesForVoiceoverSegment(segmentId: string) {
+async function resolveSubtitleAlignmentProvider(
+  videoId: string,
+  preferred?: AlignmentProvider | null,
+): Promise<AlignmentProvider> {
+  if (preferred) {
+    return preferred;
+  }
+  const settings = await resolvePipelineSettings(videoId);
+  return settings.voiceover.alignmentProvider;
+}
+
+async function generateSubtitlesForVoiceoverSegment(
+  segmentId: string,
+  options?: { alignmentProvider?: AlignmentProvider | null },
+) {
   const segment = await prisma.voiceoverSegment.findUnique({
     where: { id: segmentId },
   });
@@ -3613,6 +6529,54 @@ async function generateSubtitlesForVoiceoverSegment(segmentId: string) {
 
   if (!["generated", "ready"].includes(segment.status) || !segment.audioPath) {
     throw new Error("Generate and review segment audio before subtitles.");
+  }
+
+  const alignmentText =
+    segment.pacedTextUsed?.trim() || segment.text.trim();
+  const alignmentProvider = await resolveSubtitleAlignmentProvider(
+    segment.videoId,
+    options?.alignmentProvider,
+  );
+
+  // SECTION_CLIP / music beds / other empty-script scenes: no captions,
+  // but keep a ready subtitle job so global offsets stay in sync.
+  if (isSilentSubtitleVoiceoverText(alignmentText)) {
+    await prisma.subtitleSegment.upsert({
+      where: { voiceoverSegmentId: segment.id },
+      create: {
+        videoId: segment.videoId,
+        voiceoverSegmentId: segment.id,
+        index: segment.index,
+        sceneStartOrder: segment.sceneStartOrder,
+        sceneEndOrder: segment.sceneEndOrder,
+        provider: "silent_skip",
+        rawAlignmentJson: Prisma.JsonNull,
+        localCuesJson: [],
+        localSrt: "",
+        localVtt: "",
+        status: "ready",
+        error: null,
+      },
+      update: {
+        index: segment.index,
+        sceneStartOrder: segment.sceneStartOrder,
+        sceneEndOrder: segment.sceneEndOrder,
+        provider: "silent_skip",
+        rawAlignmentJson: Prisma.JsonNull,
+        localCuesJson: [],
+        localSrt: "",
+        localVtt: "",
+        status: "ready",
+        error: null,
+      },
+    });
+
+    return {
+      videoId: segment.videoId,
+      segmentIndex: segment.index,
+      cueCount: 0,
+      silent: true as const,
+    };
   }
 
   await prisma.subtitleSegment.upsert({
@@ -3640,29 +6604,51 @@ async function generateSubtitlesForVoiceoverSegment(segmentId: string) {
       where: { id: segment.videoId },
       select: { channelKey: true, captionStylePreset: true },
     });
-    const rawAlignmentJson = await alignElevenLabsAudioWithText({
-      audioFilePath: resolveStoredAudioPath(segment.audioPath),
-      text: segment.text,
-    });
-    const words = normalizeElevenLabsAlignment(rawAlignmentJson);
+    const audioFilePath = resolveStoredAudioPath(segment.audioPath);
+    const rawAlignmentJson =
+      alignmentProvider === "whisperx"
+        ? await alignWhisperXAudioWithText({
+            audioFilePath,
+            text: alignmentText,
+          })
+        : await alignElevenLabsAudioWithText({
+            audioFilePath,
+            text: alignmentText,
+          });
+    const spokenWords =
+      alignmentProvider === "whisperx"
+        ? normalizeWhisperXAlignment(rawAlignmentJson)
+        : normalizeElevenLabsAlignment(rawAlignmentJson);
 
-    if (words.length === 0) {
+    if (spokenWords.length === 0) {
       throw new Error("Forced alignment did not return word timestamps.");
     }
+
+    const speech = prepareVoiceoverSpeechText(segment.text);
+    const remapped = remapSpeechWordsToDisplay(spokenWords, speech.replacements);
 
     const stylePreset = getCaptionStylePreset(
       video
         ? defaultCaptionPresetForVideo(video)
         : "active_word_highlight",
     );
+    const words = prepareAlignedWordsForCaptionStyle(
+      remapped,
+      stylePreset,
+      segment.text,
+    );
     const localCues = buildActiveWordCaptionCuesFromWords(words, stylePreset);
     const localSrt = exportCuesToSrt(localCues);
     const localVtt = exportCuesToVtt(localCues);
+    const providerLabel =
+      alignmentProvider === "whisperx"
+        ? WHISPERX_SUBTITLE_PROVIDER
+        : "elevenlabs_forced_alignment";
 
     await prisma.subtitleSegment.update({
       where: { voiceoverSegmentId: segment.id },
       data: {
-        provider: "elevenlabs_forced_alignment",
+        provider: providerLabel,
         rawAlignmentJson: rawAlignmentJson as Prisma.InputJsonValue,
         localCuesJson: localCues,
         localSrt,
@@ -3676,6 +6662,7 @@ async function generateSubtitlesForVoiceoverSegment(segmentId: string) {
       videoId: segment.videoId,
       segmentIndex: segment.index,
       cueCount: localCues.length,
+      silent: false as const,
     };
   } catch (error) {
     const message =
@@ -3829,16 +6816,21 @@ function sceneDurationFromVoiceover(scene: {
   duration: number | null;
   voiceoverDuration: number | null;
   pauseAfterMs: number | null;
+  isMusicBed?: boolean;
+  introSec?: number;
 }) {
-  if (scene.voiceoverDuration === null || scene.voiceoverDuration === undefined) {
+  const visualDuration = sceneVisualDurationSec({
+    voiceoverDuration: scene.voiceoverDuration,
+    pauseAfterMs: scene.pauseAfterMs,
+    isMusicBed: scene.isMusicBed,
+    introSec: scene.introSec,
+  });
+
+  if (visualDuration == null) {
     return scene.duration;
   }
 
-  return Math.max(
-    Math.ceil(scene.voiceoverDuration + Math.max(0, (scene.pauseAfterMs ?? 0) / 1000)),
-    Math.ceil(scene.voiceoverDuration),
-    1,
-  );
+  return Math.max(1, Math.ceil(visualDuration));
 }
 
 export async function updateSceneDurationFromVoiceover(
@@ -3876,23 +6868,56 @@ export async function updateAllSceneDurationsFromVoiceover(videoId: string) {
       videoId,
       voiceoverDuration: { not: null },
     },
+    orderBy: { sortOrder: "asc" },
     select: {
       id: true,
+      sortOrder: true,
       duration: true,
       voiceoverDuration: true,
       pauseAfterMs: true,
+      voiceoverProvider: true,
+      visualIdea: true,
     },
   });
 
+  const introByBedOrder = new Map<number, number>();
+  const stitchPlan = planMusicBedStitch(
+    scenes.map((scene) => ({
+      isMusicBed:
+        scene.voiceoverProvider === MUSIC_BED_PROVIDER || isMusicBedScene(scene),
+      pauseAfterMs: scene.pauseAfterMs,
+      durationSec: scene.voiceoverDuration ?? 0,
+    })),
+  );
+  for (const overlap of musicBedOverlapsFromSteps(stitchPlan)) {
+    const bed = scenes[overlap.bedIndex];
+    if (bed) {
+      introByBedOrder.set(bed.sortOrder, overlap.introSec);
+    }
+  }
+
   await prisma.$transaction(
-    scenes.map((scene) =>
-      prisma.scene.update({
+    scenes.map((scene) => {
+      const isMusicBed =
+        scene.voiceoverProvider === MUSIC_BED_PROVIDER || isMusicBedScene(scene);
+      const pauseAfterMs = effectiveScenePauseAfterMs({
+        isMusicBed,
+        pauseAfterMs: scene.pauseAfterMs,
+      });
+
+      return prisma.scene.update({
         where: { id: scene.id },
         data: {
-          duration: sceneDurationFromVoiceover(scene),
+          pauseAfterMs,
+          duration: sceneDurationFromVoiceover({
+            ...scene,
+            pauseAfterMs,
+            isMusicBed,
+            introSec: introByBedOrder.get(scene.sortOrder),
+          }),
         },
-      }),
-    ),
+      });
+    }),
   );
 
   revalidatePath(`/videos/${videoId}`);
@@ -4325,11 +7350,52 @@ export async function markSegmentedVoiceoverReady(videoId: string) {
   redirectToVoiceover(videoId, "success", "Segmented voiceover marked ready.");
 }
 
-export async function generateSubtitlesForSegment(voiceoverSegmentId: string) {
+function alignmentProviderFromFormData(formData?: FormData) {
+  if (!formData) {
+    return null;
+  }
+  const raw = formData.get("alignmentProvider");
+  if (typeof raw !== "string" || !raw.trim()) {
+    return null;
+  }
+  return parseAlignmentProvider(raw);
+}
+
+async function persistAlignmentProviderPreference(
+  videoId: string,
+  alignmentProvider: AlignmentProvider,
+) {
+  const settings = await resolvePipelineSettings(videoId);
+  if (settings.voiceover.alignmentProvider === alignmentProvider) {
+    return;
+  }
+  await saveVideoPipelineSettings(videoId, {
+    ...settings,
+    voiceover: {
+      ...settings.voiceover,
+      alignmentProvider,
+    },
+  });
+}
+
+export async function generateSubtitlesForSegment(
+  voiceoverSegmentId: string,
+  formData?: FormData,
+) {
   let result: { videoId: string; segmentIndex: number; cueCount: number };
+  const preferred = alignmentProviderFromFormData(formData);
 
   try {
-    result = await generateSubtitlesForVoiceoverSegment(voiceoverSegmentId);
+    const segment = await prisma.voiceoverSegment.findUnique({
+      where: { id: voiceoverSegmentId },
+      select: { videoId: true },
+    });
+    if (segment && preferred) {
+      await persistAlignmentProviderPreference(segment.videoId, preferred);
+    }
+    result = await generateSubtitlesForVoiceoverSegment(voiceoverSegmentId, {
+      alignmentProvider: preferred,
+    });
   } catch (error) {
     const segment = await prisma.voiceoverSegment.findUnique({
       where: { id: voiceoverSegmentId },
@@ -4353,17 +7419,31 @@ export async function generateSubtitlesForSegment(voiceoverSegmentId: string) {
   );
 }
 
-export async function regenerateSubtitlesForSegment(voiceoverSegmentId: string) {
-  await generateSubtitlesForSegment(voiceoverSegmentId);
+export async function regenerateSubtitlesForSegment(
+  voiceoverSegmentId: string,
+  formData?: FormData,
+) {
+  await generateSubtitlesForSegment(voiceoverSegmentId, formData);
 }
 
-export async function generateSubtitlesForAllReadySegments(videoId: string) {
+export async function generateSubtitlesForAllReadySegments(
+  videoId: string,
+  formData?: FormData,
+) {
+  const preferred = alignmentProviderFromFormData(formData);
+  if (preferred) {
+    await persistAlignmentProviderPreference(videoId, preferred);
+  }
+  const alignmentProvider =
+    preferred ??
+    (await resolvePipelineSettings(videoId)).voiceover.alignmentProvider;
+
   const segmentCount = await prisma.voiceoverSegment.count({ where: { videoId } });
   const processId = await startProcess({
     type: "subtitle_generation",
     videoId,
     title: "Generating scene subtitles",
-    description: `${segmentCount} subtitle jobs queued.`,
+    description: `${segmentCount} subtitle jobs queued (${alignmentProvider}).`,
     totalSteps: Math.max(segmentCount + 2, 3),
     currentStep: "Checking voiceover readiness",
   });
@@ -4414,13 +7494,17 @@ export async function generateSubtitlesForAllReadySegments(videoId: string) {
         currentStep: `Aligning scene ${segment.sceneStartOrder}`,
         stepIndex: generatedCount + 2,
         totalSteps: segments.length + 2,
-        logMessage: `Generating subtitles for scene ${segment.sceneStartOrder}.`,
+        logMessage: `Generating subtitles for scene ${segment.sceneStartOrder} (${alignmentProvider}).`,
       });
       try {
-        await generateSubtitlesForVoiceoverSegment(segment.id);
+        const result = await generateSubtitlesForVoiceoverSegment(segment.id, {
+          alignmentProvider,
+        });
         generatedCount += 1;
         await updateProcess(processId, {
-          logMessage: `Scene ${segment.sceneStartOrder} subtitles generated.`,
+          logMessage: result.silent
+            ? `Scene ${segment.sceneStartOrder}: silent / no captions (timeline offset kept).`
+            : `Scene ${segment.sceneStartOrder} subtitles generated.`,
           logLevel: "success",
         });
       } catch (error) {
@@ -4438,17 +7522,48 @@ export async function generateSubtitlesForAllReadySegments(videoId: string) {
       stepIndex: segments.length + 2,
       totalSteps: segments.length + 2,
     });
-    await combineSegmentSubtitlesForVideo(videoId, "formatted");
+
+    // Same outcome as "Mark Subtitles Ready": all local jobs ready + video.subtitleStatus ready.
+    const subtitleSegments = await prisma.subtitleSegment.findMany({
+      where: { videoId },
+      select: {
+        id: true,
+        localCuesJson: true,
+        voiceoverSegment: {
+          select: { text: true, pacedTextUsed: true },
+        },
+      },
+    });
+    const readySegmentIds = subtitleSegments
+      .filter((segment) => {
+        const silent = isSilentSubtitleVoiceoverText(
+          segment.voiceoverSegment?.pacedTextUsed ||
+            segment.voiceoverSegment?.text,
+        );
+        return (
+          silent || parseSubtitleCuesJson(segment.localCuesJson).length > 0
+        );
+      })
+      .map((segment) => segment.id);
+
+    if (readySegmentIds.length > 0) {
+      await prisma.subtitleSegment.updateMany({
+        where: { id: { in: readySegmentIds } },
+        data: { status: "ready" },
+      });
+    }
+
+    const cues = await combineSegmentSubtitlesForVideo(videoId, "ready");
     await finishProcess(processId, {
-      result: { generatedCount },
-      logMessage: `Generated and combined subtitles for ${generatedCount} scene(s).`,
+      result: { generatedCount, cueCount: cues.length },
+      logMessage: `Generated, combined, and marked ready ${generatedCount} scene subtitle(s) (${cues.length} cues).`,
     });
 
     revalidatePath(`/videos/${videoId}`);
     redirectToVoiceover(
       videoId,
       "success",
-      `Generated subtitles for ${generatedCount} segment(s) and combined them.`,
+      `Generated subtitles for ${generatedCount} segment(s), combined them, and marked subtitles ready (${cues.length} cues).`,
     );
   } catch (error) {
     if (isRedirectError(error)) {
@@ -4480,14 +7595,28 @@ export async function combineSegmentSubtitles(videoId: string) {
 export async function markSubtitleSegmentReady(subtitleSegmentId: string) {
   const subtitleSegment = await prisma.subtitleSegment.findUnique({
     where: { id: subtitleSegmentId },
-    select: { videoId: true, localCuesJson: true },
+    select: {
+      videoId: true,
+      localCuesJson: true,
+      voiceoverSegment: {
+        select: { text: true, pacedTextUsed: true },
+      },
+    },
   });
 
   if (!subtitleSegment) {
     throw new Error("Subtitle segment not found.");
   }
 
-  if (parseSubtitleCuesJson(subtitleSegment.localCuesJson).length === 0) {
+  const silent = isSilentSubtitleVoiceoverText(
+    subtitleSegment.voiceoverSegment?.pacedTextUsed ||
+      subtitleSegment.voiceoverSegment?.text,
+  );
+
+  if (
+    !silent &&
+    parseSubtitleCuesJson(subtitleSegment.localCuesJson).length === 0
+  ) {
     redirectToVoiceover(
       subtitleSegment.videoId,
       "error",
@@ -4497,7 +7626,7 @@ export async function markSubtitleSegmentReady(subtitleSegmentId: string) {
 
   await prisma.subtitleSegment.update({
     where: { id: subtitleSegmentId },
-    data: { status: "ready" },
+    data: { status: "ready", error: null },
   });
 
   revalidatePath(`/videos/${subtitleSegment.videoId}`);
@@ -4507,10 +7636,24 @@ export async function markSubtitleSegmentReady(subtitleSegmentId: string) {
 export async function markAllSubtitleSegmentsReady(videoId: string) {
   const subtitleSegments = await prisma.subtitleSegment.findMany({
     where: { videoId },
-    select: { id: true, localCuesJson: true },
+    select: {
+      id: true,
+      localCuesJson: true,
+      voiceoverSegment: {
+        select: { text: true, pacedTextUsed: true },
+      },
+    },
   });
   const readySegmentIds = subtitleSegments
-    .filter((segment) => parseSubtitleCuesJson(segment.localCuesJson).length > 0)
+    .filter((segment) => {
+      const silent = isSilentSubtitleVoiceoverText(
+        segment.voiceoverSegment?.pacedTextUsed ||
+          segment.voiceoverSegment?.text,
+      );
+      return (
+        silent || parseSubtitleCuesJson(segment.localCuesJson).length > 0
+      );
+    })
     .map((segment) => segment.id);
 
   if (readySegmentIds.length === 0) {
@@ -4537,7 +7680,11 @@ function parseRenderOptions(formData: FormData) {
     height: parsePositiveInt(formData.get("renderHeight"), 1080),
     fps: parsePositiveInt(formData.get("renderFps"), 30),
     imageFit,
-    burnCaptions: formData.get("burnCaptions") !== "off",
+    burnCaptions: formData.get("burnCaptions") === "on",
+    voiceSoundBars: formData.get("voiceSoundBars") === "on",
+    voiceSoundBarsStyle: parseVoiceSoundBarsStyle(
+      formData.get("voiceSoundBarsStyle")?.toString(),
+    ),
   };
 }
 
@@ -4549,6 +7696,15 @@ async function fileExists(filePath: string | null | undefined) {
   try {
     await access(filePath);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+async function isUsableSceneImage(filePath: string) {
+  try {
+    const fileStat = await stat(filePath);
+    return fileStat.isFile() && fileStat.size > 0;
   } catch {
     return false;
   }
@@ -4570,7 +7726,7 @@ async function resolveSceneImagePath(scene: {
   ].filter((candidate): candidate is string => Boolean(candidate));
 
   for (const candidate of candidates) {
-    if (await fileExists(candidate)) {
+    if (await isUsableSceneImage(candidate)) {
       return candidate;
     }
   }
@@ -4594,9 +7750,18 @@ function exactSceneRenderDuration(scene: {
   duration: number | null;
   voiceoverDuration: number | null;
   pauseAfterMs: number | null;
+  introSec?: number;
+  isMusicBed?: boolean;
 }) {
-  if (typeof scene.voiceoverDuration === "number" && Number.isFinite(scene.voiceoverDuration)) {
-    return scene.voiceoverDuration + Math.max(0, (scene.pauseAfterMs ?? 0) / 1000);
+  const visualDuration = sceneVisualDurationSec({
+    voiceoverDuration: scene.voiceoverDuration,
+    pauseAfterMs: scene.pauseAfterMs,
+    isMusicBed: scene.isMusicBed,
+    introSec: scene.introSec,
+  });
+
+  if (visualDuration != null) {
+    return visualDuration;
   }
 
   return scene.duration;
@@ -4624,21 +7789,35 @@ async function loadRenderReadiness(videoId: string, burnCaptions = true) {
   }
 
   const scenesWithImages = await Promise.all(
-    video.scenes.map(async (scene) => ({
-      ...scene,
-      renderImagePath: await resolveSceneImagePath(scene, video),
-    })),
+    video.scenes
+      .filter((scene) => !isSceneRejected(scene.status))
+      .map(async (scene) => {
+      const renderClipPath = await resolveSceneClipPath(scene, video.id);
+      const renderImagePath = await resolveSceneImagePath(scene, video);
+      return {
+        ...scene,
+        renderClipPath,
+        renderImagePath,
+        hasVisual: Boolean(renderClipPath || renderImagePath),
+      };
+    }),
   );
 
-  if (!scenesWithImages.some((scene) => scene.renderImagePath)) {
-    throw new Error("Cannot render: no scene images found.");
+  if (scenesWithImages.length === 0) {
+    throw new Error(
+      "Cannot render: no active scenes found (all scenes may be Rejected).",
+    );
   }
 
-  const missingImages = scenesWithImages.filter((scene) => !scene.renderImagePath);
+  if (!scenesWithImages.some((scene) => scene.hasVisual)) {
+    throw new Error("Cannot render: no scene images or clips found.");
+  }
 
-  if (missingImages.length > 0) {
+  const missingVisuals = scenesWithImages.filter((scene) => !scene.hasVisual);
+
+  if (missingVisuals.length > 0) {
     throw new Error(
-      `Cannot render: missing images for scenes ${missingImages
+      `Cannot render: missing images/clips for scenes ${missingVisuals
         .map((scene) => scene.sortOrder)
         .join(", ")}.`,
     );
@@ -4720,7 +7899,24 @@ export async function getRenderDiagnostics(videoId: string) {
   const paths = {
     assFile: path.join(directory, "draft_subtitles.ass"),
     combinedAudio: path.join(directory, "draft_audio.wav"),
-    finalVideo: path.join(directory, "draft.mp4"),
+    finalVideo: path.join(
+      directory,
+      (
+        await prisma.renderDraft.findFirst({
+          where: { videoId, fileName: { not: null } },
+          orderBy: { createdAt: "desc" },
+          select: { fileName: true },
+        })
+      )?.fileName ||
+        renderFinalVideoFileName(
+          (
+            await prisma.video.findUnique({
+              where: { id: videoId },
+              select: { title: true },
+            })
+          )?.title,
+        ),
+    ),
   };
   const [assFileExists, combinedAudioExists, finalVideoExists, logExists] =
     await Promise.all([
@@ -4753,6 +7949,11 @@ export async function getRenderDiagnostics(videoId: string) {
     renderCwd: directory,
     manifestPath,
     logPath: logExists ? logPath : null,
+    lastBurnCaptions:
+      isRecord(manifest?.captions) &&
+      typeof manifest.captions.burnCaptions === "boolean"
+        ? manifest.captions.burnCaptions
+        : null,
     files: {
       assFile: {
         path: paths.assFile,
@@ -4827,6 +8028,8 @@ export async function renderDraft(videoId: string, formData: FormData) {
       overlapWarnings: [],
       duplicateRisk: false,
     },
+    voiceSoundBars: options.voiceSoundBars,
+    voiceSoundBarsStyle: options.voiceSoundBarsStyle,
     sceneTimeline: [],
     manifestPath: renderManifestPath,
   };
@@ -4862,7 +8065,23 @@ export async function renderDraft(videoId: string, formData: FormData) {
       stepIndex: 1,
       totalSteps: 8,
     });
-    await cleanupRenderDraftFiles(directory);
+    const previousOutputs = await prisma.renderDraft.findMany({
+      where: { videoId, fileName: { not: null } },
+      select: { fileName: true },
+      take: 20,
+      orderBy: { createdAt: "desc" },
+    });
+    const videoForName = await prisma.video.findUnique({
+      where: { id: videoId },
+      select: { title: true },
+    });
+    const finalVideoFileName = renderFinalVideoFileName(videoForName?.title);
+    await cleanupRenderDraftFiles(directory, [
+      finalVideoFileName,
+      ...previousOutputs
+        .map((draft) => draft.fileName)
+        .filter((name): name is string => Boolean(name)),
+    ]);
     await writeManifest("rendering");
     await updateProcess(processId, {
       currentStep: "Checking FFmpeg",
@@ -4904,29 +8123,97 @@ export async function renderDraft(videoId: string, formData: FormData) {
     const masterAudioPath = usingSceneMaster
       ? resolveStoredAudioPathForRender(video.voiceoverAudioPath ?? "")
       : "";
-    const masterAudioProbe = usingSceneMaster
-      ? await validateAudioFile(
-          masterAudioPath,
-          "Cannot render: by-scene master voiceover is missing or invalid.",
-        )
-      : null;
+    const needsExclusiveClipRestitch =
+      usingSceneMaster &&
+      scenesWithImages.some((scene) => sceneUsesExclusiveClipAudio(scene));
+    const masterAudioProbe =
+      usingSceneMaster && !needsExclusiveClipRestitch
+        ? await validateAudioFile(
+            masterAudioPath,
+            "Cannot render: by-scene master voiceover is missing or invalid.",
+          )
+        : null;
     await updateProcess(processId, {
       currentStep: "Preparing voiceover audio",
       stepIndex: 4,
       totalSteps: 8,
-      logMessage: usingSceneMaster
-        ? "Using by-scene master voiceover."
-        : `Combining ${segmentsWithDurations.length} voiceover segments.`,
+      logMessage: needsExclusiveClipRestitch
+        ? "Rebuilding master audio with exclusive scene-clip audio (no music bed under those scenes)."
+        : usingSceneMaster
+          ? "Using by-scene master voiceover."
+          : `Combining ${segmentsWithDurations.length} voiceover segments.`,
     });
-    const combinedAudio = usingSceneMaster
-      ? {
-          outputPath: masterAudioPath,
-          durationSec: masterAudioProbe?.durationSec ?? 0,
-          draftAudioProbe: masterAudioProbe,
-          segmentAudioProbes: [],
-          audioConcatResult: null,
+
+    let combinedAudio;
+
+    if (needsExclusiveClipRestitch) {
+      const stitchClips = [];
+      for (const scene of scenesWithImages) {
+        const isMusicBed =
+          scene.voiceoverProvider === MUSIC_BED_PROVIDER ||
+          isMusicBedScene(scene);
+        if (sceneUsesExclusiveClipAudio(scene)) {
+          const targetDurationSec =
+            scene.voiceoverDuration && scene.voiceoverDuration > 0
+              ? scene.voiceoverDuration
+              : Math.max(0.5, scene.duration ?? 5);
+          const clipAudioPath = await prepareExclusiveClipAudioForScene({
+            videoId,
+            sceneId: scene.id,
+            clipLocalPath: scene.clipLocalPath,
+            clipFileName: scene.clipFileName,
+            targetDurationSec,
+          });
+          stitchClips.push({
+            sortOrder: scene.sortOrder,
+            audioPath: clipAudioPath,
+            pauseAfterMs: scene.pauseAfterMs,
+            isMusicBed: false,
+          });
+          continue;
         }
-      : await renderCombinedVoiceoverAudio(videoId, segmentsWithDurations);
+        if (!scene.voiceoverLocalPath) {
+          throw new Error(
+            `Cannot render: missing voiceover for scene ${scene.sortOrder}.`,
+          );
+        }
+        stitchClips.push({
+          sortOrder: scene.sortOrder,
+          audioPath: scene.voiceoverLocalPath,
+          pauseAfterMs: scene.pauseAfterMs,
+          isMusicBed,
+        });
+      }
+      const exclusiveMasterRelative = renderRelativePath(
+        videoId,
+        "draft_audio_exclusive.wav",
+      );
+      const stitched = await stitchSceneVoiceoverAudio(
+        videoId,
+        stitchClips,
+        exclusiveMasterRelative,
+      );
+      combinedAudio = {
+        outputPath: stitched.outputPath,
+        durationSec: stitched.durationSec,
+        draftAudioProbe: stitched.masterProbe,
+        segmentAudioProbes: [],
+        audioConcatResult: stitched.audioConcatResult,
+      };
+    } else if (usingSceneMaster) {
+      combinedAudio = {
+        outputPath: masterAudioPath,
+        durationSec: masterAudioProbe?.durationSec ?? 0,
+        draftAudioProbe: masterAudioProbe,
+        segmentAudioProbes: [],
+        audioConcatResult: null,
+      };
+    } else {
+      combinedAudio = await renderCombinedVoiceoverAudio(
+        videoId,
+        segmentsWithDurations,
+      );
+    }
 
     manifest.audioPath = combinedAudio.outputPath;
     manifest.combinedAudioPath = path.basename(combinedAudio.outputPath);
@@ -4955,20 +8242,65 @@ export async function renderDraft(videoId: string, formData: FormData) {
     };
     manifest.draftAudioProbe = getMediaSummary(combinedAudio.draftAudioProbe);
 
+    const overlapAwareDurations = usingSceneMaster
+      ? buildOverlapAwareSceneDurations(
+          scenesWithImages.map((scene) => {
+            const exclusiveClip = sceneUsesExclusiveClipAudio(scene);
+            return {
+              sortOrder: scene.sortOrder,
+              voiceoverDuration: scene.voiceoverDuration,
+              pauseAfterMs: scene.pauseAfterMs,
+              // Exclusive clip audio disables music-bed underlay timing.
+              isMusicBed:
+                !exclusiveClip &&
+                (scene.voiceoverProvider === MUSIC_BED_PROVIDER ||
+                  isMusicBedScene(scene)),
+            };
+          }),
+        )
+      : new Map<number, number>();
+
     const sceneTimeline = buildSceneTimelineFromSegments(
-      scenesWithImages.map((scene) => ({
-        sortOrder: scene.sortOrder,
-        scriptText: scene.scriptText,
-        duration: usingSceneMaster ? exactSceneRenderDuration(scene) : scene.duration,
-        imagePath: scene.renderImagePath,
-      })),
+      scenesWithImages.map((scene) => {
+        const exclusiveClip = sceneUsesExclusiveClipAudio(scene);
+        const isMusicBed =
+          !exclusiveClip &&
+          (scene.voiceoverProvider === MUSIC_BED_PROVIDER ||
+            isMusicBedScene(scene));
+        return {
+          sortOrder: scene.sortOrder,
+          scriptText: scene.scriptText,
+          duration: usingSceneMaster
+            ? (overlapAwareDurations.get(scene.sortOrder) ??
+              exactSceneRenderDuration({
+                ...scene,
+                isMusicBed,
+              }))
+            : scene.duration,
+          imagePath: scene.renderImagePath,
+          clipPath: scene.renderClipPath,
+          clipMuted: scene.clipMuted !== false,
+        };
+      }),
       usingSceneMaster
-        ? scenesWithImages.map((scene) => ({
-            index: scene.sortOrder,
-            sceneStartOrder: scene.sortOrder,
-            sceneEndOrder: scene.sortOrder,
-            durationSec: exactSceneRenderDuration(scene),
-          }))
+        ? scenesWithImages.map((scene) => {
+            const exclusiveClip = sceneUsesExclusiveClipAudio(scene);
+            const isMusicBed =
+              !exclusiveClip &&
+              (scene.voiceoverProvider === MUSIC_BED_PROVIDER ||
+                isMusicBedScene(scene));
+            return {
+              index: scene.sortOrder,
+              sceneStartOrder: scene.sortOrder,
+              sceneEndOrder: scene.sortOrder,
+              durationSec:
+                overlapAwareDurations.get(scene.sortOrder) ??
+                exactSceneRenderDuration({
+                  ...scene,
+                  isMusicBed,
+                }),
+            };
+          })
         : segmentsWithDurations.map((segment) => ({
             index: segment.index,
             sceneStartOrder: segment.sceneStartOrder,
@@ -4981,8 +8313,43 @@ export async function renderDraft(videoId: string, formData: FormData) {
       currentStep: "Rendering scene video",
       stepIndex: 5,
       totalSteps: 8,
-      logMessage: `Rendering ${sceneTimeline.length} timeline items.`,
+      logMessage: `Rendering ${sceneTimeline.length} timeline items${
+        options.voiceSoundBars ? " (voice sound bars on stills)" : ""
+      }.`,
     });
+
+    const voiceDriveSourceByOrder = new Map<number, string>();
+    if (options.voiceSoundBars) {
+      const sceneByOrder = new Map(
+        scenesWithImages.map((scene) => [scene.sortOrder, scene]),
+      );
+      for (const item of sceneTimeline) {
+        const scene = sceneByOrder.get(item.sceneOrder);
+        if (!scene) {
+          continue;
+        }
+        const isMusicBed =
+          scene.voiceoverProvider === MUSIC_BED_PROVIDER ||
+          isMusicBedScene(scene);
+        if (
+          !shouldAttachVoiceSoundBars({
+            voiceSoundBarsEnabled: true,
+            mediaKind: item.mediaKind,
+            scriptText: scene.scriptText,
+            voiceoverLocalPath: scene.voiceoverLocalPath,
+            isMusicBed,
+            isPartCover: isPartCoverVisualIdea(scene.visualIdea),
+          })
+        ) {
+          continue;
+        }
+        voiceDriveSourceByOrder.set(
+          item.sceneOrder,
+          resolveStoredAudioPathForRender(scene.voiceoverLocalPath!),
+        );
+      }
+    }
+
     const sceneVideo = await renderImageSequenceVideo({
       videoId,
       sceneTimeline,
@@ -4990,7 +8357,51 @@ export async function renderDraft(videoId: string, formData: FormData) {
       height: options.height,
       fps: options.fps,
       imageFit: options.imageFit,
+      voiceSoundBars: options.voiceSoundBars,
+      voiceSoundBarsStyle: options.voiceSoundBarsStyle,
+      voiceDriveSourceByOrder,
     });
+
+    // Exclusive clip audio is already in the master when we re-stitched above.
+    // Only splice into segment-based masters (no by-scene stitch).
+    let draftAudioPath = combinedAudio.outputPath;
+    const unmutedClips = sceneVideo.unmutedClipItems ?? [];
+    if (!needsExclusiveClipRestitch && unmutedClips.length > 0) {
+      await updateProcess(processId, {
+        currentStep: "Inserting exclusive scene clip audio",
+        stepIndex: 5,
+        totalSteps: 8,
+        logMessage: `Replacing master audio with ${unmutedClips.length} scene clip(s) (no music bed under those windows).`,
+      });
+      const renderDirectory = path.dirname(combinedAudio.outputPath);
+      let workingAudio = combinedAudio.outputPath;
+      for (let index = 0; index < unmutedClips.length; index += 1) {
+        const item = unmutedClips[index]!;
+        const clipAudioPath = path.join(
+          renderDirectory,
+          `clip-audio-${item.sceneOrder}.m4a`,
+        );
+        await extractFittedClipAudio({
+          sourcePath: item.clipPath!,
+          outputPath: clipAudioPath,
+          targetDurationSec: item.duration,
+        });
+        const replacedPath = path.join(
+          renderDirectory,
+          `draft-audio-clip-exclusive-${index + 1}.m4a`,
+        );
+        await replaceMasterAudioSegment({
+          masterAudioPath: workingAudio,
+          clipAudioPath,
+          startSec: item.start,
+          durationSec: item.duration,
+          outputPath: replacedPath,
+        });
+        workingAudio = replacedPath;
+      }
+      draftAudioPath = workingAudio;
+    }
+
     manifest.commands = {
       ...(isRecord(manifest.commands) ? manifest.commands : {}),
       imageVideo: {
@@ -5005,28 +8416,52 @@ export async function renderDraft(videoId: string, formData: FormData) {
     };
 
     await updateProcess(processId, {
-      currentStep: "Preparing subtitles",
+      currentStep: options.burnCaptions
+        ? "Preparing subtitles"
+        : "Skipping subtitles",
       stepIndex: 6,
       totalSteps: 8,
+      logMessage: options.burnCaptions
+        ? "Writing ASS captions for burn-in."
+        : "Rendering without on-screen subtitles.",
     });
-    const activeWordCues = activeWordCuesFromJson(video.styledSubtitleJson);
-    const renderSubtitleAss =
-      activeWordCues.length > 0
-        ? exportActiveWordCaptionsToAss(activeWordCues)
-        : video.styledSubtitleAss ?? "";
+    const activeWordCues = options.burnCaptions
+      ? activeWordCuesFromJson(video.styledSubtitleJson)
+      : [];
+    const captionStylePreset = getCaptionStylePreset(video.captionStylePreset);
+    // Always re-export with the video's saved preset. Omitting the preset used to
+    // fall back to active_word_highlight and ignore GodsWord / other styles.
+    const renderSubtitleAss = options.burnCaptions
+      ? activeWordCues.length > 0
+        ? exportActiveWordCaptionsToAss(activeWordCues, captionStylePreset)
+        : (video.styledSubtitleAss ?? "")
+      : "";
     const subtitlePath = options.burnCaptions
       ? await writeRenderSubtitles(videoId, renderSubtitleAss)
       : null;
-    const captionAudit = analyzeActiveWordAssEvents(
-      activeWordCues,
-      renderSubtitleAss,
-    );
+    const captionAudit = options.burnCaptions
+      ? analyzeActiveWordAssEvents(
+          activeWordCues,
+          renderSubtitleAss,
+          captionStylePreset,
+        )
+      : {
+          assDialogueEventsCount: 0,
+          eventCount: 0,
+          minEventDurationSec: 0,
+          maxEventDurationSec: 0,
+          totalCaptionCoveredDurationSec: 0,
+          gapWarnings: [],
+          overlapWarnings: [],
+          duplicateRisk: false,
+        };
     manifest.subtitlePath = subtitlePath;
     manifest.captions = {
       burnCaptions: options.burnCaptions,
       assPath: subtitlePath,
-      captionRenderMode: "active_word_highlight",
-      renderMode: "active_word_highlight",
+      captionRenderMode: captionStylePreset.id,
+      renderMode: captionStylePreset.id,
+      stylePreset: captionStylePreset.id,
       timingModel: ACTIVE_WORD_ASS_TIMING_MODEL,
       overlapEnabled: false,
       assDialogueEventsCount:
@@ -5053,8 +8488,9 @@ export async function renderDraft(videoId: string, formData: FormData) {
     });
     const finalRender = await renderFinalDraftVideo({
       videoId,
+      videoTitle: video.title,
       sceneVideoPath: sceneVideo.outputPath,
-      audioPath: combinedAudio.outputPath,
+      audioPath: draftAudioPath,
       subtitlePath,
       width: options.width,
       height: options.height,
@@ -5062,6 +8498,7 @@ export async function renderDraft(videoId: string, formData: FormData) {
       burnCaptions: options.burnCaptions,
     });
     manifest.outputPath = finalRender.outputPath;
+    manifest.outputFileName = finalRender.fileName;
     manifest.finalRenderArgs = finalRender.finalFfmpegArgs;
     manifest.warnings = finalRender.warnings;
     manifest.commands = {
@@ -5092,7 +8529,7 @@ export async function renderDraft(videoId: string, formData: FormData) {
     manifest.assDialogueEventsCount =
       captionAudit.assDialogueEventsCount ||
       countAssDialogueEvents(renderSubtitleAss);
-    manifest.captionRenderMode = "active_word_highlight";
+    manifest.captionRenderMode = captionStylePreset.id;
     manifest.timingModel = ACTIVE_WORD_ASS_TIMING_MODEL;
     manifest.overlapEnabled = false;
     manifest.duplicateRisk = captionAudit.duplicateRisk;
@@ -5107,8 +8544,8 @@ export async function renderDraft(videoId: string, formData: FormData) {
     renderDraftRow = await prisma.renderDraft.update({
       where: { id: renderDraftRow.id },
       data: {
-        outputPath: renderRelativePath(videoId, "draft.mp4"),
-        fileName: "draft.mp4",
+        outputPath: renderRelativePath(videoId, finalRender.fileName),
+        fileName: finalRender.fileName,
         durationSec: finalRender.durationSec,
         status: "rendered",
         error: null,
@@ -5120,15 +8557,26 @@ export async function renderDraft(videoId: string, formData: FormData) {
     });
     await finishProcess(processId, {
       result: {
-        outputPath: renderRelativePath(videoId, "draft.mp4"),
+        outputPath: renderRelativePath(videoId, finalRender.fileName),
+        fileName: finalRender.fileName,
         durationSec: finalRender.durationSec,
       },
-      logMessage: `Render draft generated (${finalRender.durationSec.toFixed(1)}s).`,
+      logMessage: `Render generated (${finalRender.fileName}, ${finalRender.durationSec.toFixed(1)}s).`,
     });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Render draft failed.";
-    const finalVideoPath = path.join(directory, "draft.mp4");
+    const finalVideoPath = path.join(
+      directory,
+      renderFinalVideoFileName(
+        (
+          await prisma.video.findUnique({
+            where: { id: videoId },
+            select: { title: true },
+          })
+        )?.title,
+      ),
+    );
     const draftAudioPath = path.join(directory, "draft_audio.wav");
 
     if (error instanceof FinalRenderValidationError) {
@@ -5342,13 +8790,25 @@ export async function prepareImageBatch(videoId: string, formData: FormData) {
   const sceneIds = parseSelectedSceneIds(formData.get("selectedSceneIds"));
 
   try {
+    const savedPrompts = await applyScenePromptOverridesFromForm(
+      formData,
+      sceneIds,
+    );
     await updateProcess(processId, {
       currentStep: "Preparing image prompts",
       stepIndex: 2,
       totalSteps: 3,
-      logMessage: `${sceneIds.length} selected scenes.`,
+      logMessage:
+        savedPrompts > 0
+          ? `${sceneIds.length} selected scenes; saved ${savedPrompts} prompt edit(s) from Assets.`
+          : `${sceneIds.length} selected scenes.`,
     });
-    await prepareImageBatchPayload(videoId, sceneIds, imageBatchOptionsFromForm(formData));
+    await persistImageOutputFolderFromForm(videoId, formData);
+    const options = imageBatchOptionsFromForm(formData);
+    if (!options.outputFolder) {
+      options.outputFolder = await resolveVideoImageOutputFolderAbsolute(videoId);
+    }
+    await prepareImageBatchPayload(videoId, sceneIds, options);
     await finishProcess(processId, { logMessage: "Image batch payload prepared." });
   } catch (error) {
     if (error instanceof ImageBatchWorkflowError) {
@@ -5365,6 +8825,188 @@ export async function prepareImageBatch(videoId: string, formData: FormData) {
 
   revalidatePath("/");
   revalidatePath(`/videos/${videoId}`);
+}
+
+export async function assignPodcastImageLibrary(
+  videoId: string,
+  formData: FormData,
+) {
+  const overwrite =
+    String(formData.get("overwrite") ?? "1").trim() !== "0";
+  const minGap = parsePositiveInt(formData.get("minGap"), 3);
+  const selectedIds = parseSelectedSceneIds(formData.get("selectedSceneIds"));
+  const scenarioRaw = String(formData.get("scenario") ?? "all").trim();
+
+  try {
+    const result = await assignPodcastImageLibraryToVideo(videoId, {
+      overwrite,
+      minGap,
+      scenario: scenarioRaw,
+      ...(selectedIds.length > 0 ? { sceneIds: selectedIds } : {}),
+    });
+    const scenarioLabel =
+      result.scenario === "all"
+        ? "all scenarios"
+        : result.scenario === "default"
+          ? "default pool"
+          : result.scenario;
+    const message = [
+      `Library assigned to ${result.assigned} scene(s) (${scenarioLabel}).`,
+      result.prunedMissingAssets > 0
+        ? `Pruned ${result.prunedMissingAssets} deleted library file(s) from manifest.`
+        : null,
+      `Skipped Flow-only covers: ${result.skippedFlowOnly}.`,
+      overwrite
+        ? null
+        : `Skipped already attached: ${result.skippedAlreadyAttached}.`,
+      result.skippedNoPool > 0
+        ? `No pool match: ${result.skippedNoPool}.`
+        : null,
+      `Scenario pool Emma ${result.scenarioCounts.emma} / Leo ${result.scenarioCounts.leo} / Music ${result.scenarioCounts.music}.`,
+      `Library total Emma ${result.libraryCounts.emma} / Leo ${result.libraryCounts.leo} / Music ${result.libraryCounts.music}.`,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    revalidatePath("/");
+    revalidatePath(`/videos/${videoId}`);
+    redirectToAssets(videoId, "success", message);
+  } catch (error) {
+    redirectToAssets(
+      videoId,
+      "error",
+      errorMessage(error, "Library assign failed."),
+    );
+  }
+}
+
+export async function importPodcastImageLibraryFromSourceVideo(
+  videoId: string,
+  formData: FormData,
+) {
+  const sourceVideoId =
+    String(formData.get("sourceVideoId") ?? videoId).trim() || videoId;
+  const maxOrder = parsePositiveInt(formData.get("maxOrder"), 150);
+
+  try {
+    const result = await importPodcastImageLibraryFromVideo({
+      videoId: sourceVideoId,
+      maxOrder,
+      includeExtraMusicBeds: true,
+    });
+    revalidatePath("/");
+    revalidatePath(`/videos/${videoId}`);
+    redirectToAssets(
+      videoId,
+      "success",
+      `Imported ${result.imported} library assets (Emma ${result.counts.emma}, Leo ${result.counts.leo}, Music ${result.counts.music}). Skipped ${result.skipped}.`,
+    );
+  } catch (error) {
+    redirectToAssets(
+      videoId,
+      "error",
+      errorMessage(error, "Library import failed."),
+    );
+  }
+}
+
+/** Read-only helper for Assets UI. Syncs disk scenario folders into the manifest. */
+export async function getPodcastImageLibrarySummary() {
+  const synced = await syncPodcastImageLibraryManifest();
+  return summarizePodcastImageLibrary(synced.manifest);
+}
+
+export async function insertMissingPodcastPartCovers(videoId: string) {
+  try {
+    const result = await insertPodcastPartCoversFromScript(videoId);
+    // Even when covers already exist, strip PART headings glued onto avatar turns.
+    const cleanedLeakedHeadings =
+      result.cleanedLeakedHeadings ??
+      (await stripLeakedPartHeadingsFromScenes(videoId));
+    await invalidateSceneStructureArtifacts(videoId);
+    await persistComputedVideoStatus(videoId);
+    revalidatePath("/");
+    revalidatePath(`/videos/${videoId}`);
+
+    if (result.inserted === 0) {
+      const details = [
+        result.plan.skippedExisting.length > 0
+          ? `already present: ${result.plan.skippedExisting.length}`
+          : null,
+        result.plan.unmatched.length > 0
+          ? `unmatched: ${result.plan.unmatched.join("; ")}`
+          : null,
+        cleanedLeakedHeadings > 0
+          ? `cleaned PART heading leak(s) from ${cleanedLeakedHeadings} scene(s)`
+          : null,
+      ]
+        .filter(Boolean)
+        .join("; ");
+      redirectToAssets(
+        videoId,
+        details ? "success" : "success",
+        details
+          ? `No new PART covers inserted (${details}).`
+          : "No missing PART covers to insert.",
+      );
+    }
+
+    redirectToAssets(
+      videoId,
+      "success",
+      `Inserted ${result.inserted} PART cover scene(s) at orders ${result.createdOrders.join(", ")}. Generate them with Flow (Flow-only covers).${
+        cleanedLeakedHeadings > 0
+          ? ` Also removed PART heading text from ${cleanedLeakedHeadings} prior avatar scene(s).`
+          : ""
+      }${
+        result.plan.unmatched.length > 0
+          ? ` Unmatched: ${result.plan.unmatched.join("; ")}.`
+          : ""
+      }`,
+    );
+  } catch (error) {
+    redirectToAssets(
+      videoId,
+      "error",
+      errorMessage(error, "PART cover insert failed."),
+    );
+  }
+}
+
+/** Attach INTRO/LESSON/CLOSING/FINAL clips from video-library onto SECTION_CLIP scenes. */
+export async function attachPodcastSectionVideoLibrary(videoId: string) {
+  try {
+    const result = await attachPodcastSectionClipsFromVisualIdeas(videoId);
+    await invalidateSceneStructureArtifacts(videoId);
+    await persistComputedVideoStatus(videoId);
+    revalidatePath("/");
+    revalidatePath(`/videos/${videoId}`);
+
+    if (result.attached.length === 0) {
+      redirectToAssets(
+        videoId,
+        result.skipped.length > 0 ? "error" : "success",
+        result.skipped.length > 0
+          ? `No section clips attached. ${result.skipped.join("; ")}`
+          : "No SECTION_CLIP scenes found to attach.",
+      );
+    }
+
+    redirectToAssets(
+      videoId,
+      "success",
+      `Attached ${result.attached.length} section clip(s): ${result.attached
+        .map((item) => `${item.tag}@${item.sortOrder}`)
+        .join(", ")} (exclusive audio).${
+        result.skipped.length > 0 ? ` Skipped: ${result.skipped.join("; ")}.` : ""
+      }`,
+    );
+  } catch (error) {
+    redirectToAssets(
+      videoId,
+      "error",
+      errorMessage(error, "Section video-library attach failed."),
+    );
+  }
 }
 
 export async function generateSelectedImageBatch(
@@ -5389,11 +9031,24 @@ export async function generateSelectedImageBatch(
       totalSteps: 4,
       logMessage: `${sceneIds.length} selected scenes.`,
     });
-    const batch = await prepareImageBatchPayload(
-      videoId,
+    const savedPrompts = await applyScenePromptOverridesFromForm(
+      formData,
       sceneIds,
-      imageBatchOptionsFromForm(formData),
     );
+    if (savedPrompts > 0) {
+      await updateProcess(processId, {
+        currentStep: "Preparing prompts",
+        stepIndex: 1,
+        totalSteps: 4,
+        logMessage: `Saved ${savedPrompts} prompt edit(s) from Assets before Flow.`,
+      });
+    }
+    await persistImageOutputFolderFromForm(videoId, formData);
+    const options = imageBatchOptionsFromForm(formData);
+    if (!options.outputFolder) {
+      options.outputFolder = await resolveVideoImageOutputFolderAbsolute(videoId);
+    }
+    const batch = await prepareImageBatchPayload(videoId, sceneIds, options);
     batchId = batch.batchId;
     await updateProcess(processId, {
       currentStep: "Running Google Flow batch",
@@ -5415,7 +9070,19 @@ export async function generateSelectedImageBatch(
   }
 
   try {
-    await runGoogleFlowBatch(batchId);
+    const flowResult = await runGoogleFlowBatch(batchId);
+
+    if (flowResult.canceled) {
+      await cancelProcess(processId);
+      revalidatePath("/");
+      revalidatePath(`/videos/${videoId}`);
+      redirectToAssets(
+        videoId,
+        "success",
+        flowResult.message || "Image batch canceled.",
+      );
+    }
+
     await updateProcess(processId, {
       currentStep: "Saving image batch results",
       stepIndex: 4,
@@ -5455,7 +9122,19 @@ export async function runImageBatch(videoId: string, formData: FormData) {
       totalSteps: 2,
       logMessage: `Running batch ${batchId}.`,
     });
-    await runGoogleFlowBatch(batchId);
+    const flowResult = await runGoogleFlowBatch(batchId);
+
+    if (flowResult.canceled) {
+      await cancelProcess(processId);
+      revalidatePath("/");
+      revalidatePath(`/videos/${videoId}`);
+      redirectToAssets(
+        videoId,
+        "success",
+        flowResult.message || "Image batch canceled.",
+      );
+    }
+
     await finishProcess(processId, { logMessage: "Image batch completed." });
   } catch (error) {
     await failProcess(processId, {
@@ -5476,72 +9155,32 @@ export async function cancelImageBatch(videoId: string, formData: FormData) {
     redirectToAssets(videoId, "error", "Batch ID is required.");
   }
 
-  await prisma.imageBatch.update({
-    where: { id: batchId },
-    data: { status: "canceled" },
-  });
-  const resetResult = await prisma.scene.updateMany({
-    where: {
-      imageBatchId: batchId,
-      ...stuckUnattachedSceneWhere(videoId),
-    },
-    data: {
-      imageStatus: "pending",
-      imageError: null,
-      imageBatchId: null,
-      imageFileName: null,
-    },
-  });
-  await appendImageBatchLog(
+  const result = await requestImageBatchCancel({
+    videoId,
     batchId,
-    `Canceled batch and reset ${resetResult.count} queued/generating scenes`,
-  );
+    selectedSceneIds,
+  });
 
-  let selectedOrphanResetCount = 0;
-
-  if (resetResult.count === 0 && selectedSceneIds.length > 0) {
-    const selectedStuckScenes = await prisma.scene.findMany({
-      where: {
-        id: { in: selectedSceneIds },
-        ...stuckUnattachedSceneWhere(videoId),
-      },
-      select: { id: true, sortOrder: true },
-      orderBy: { sortOrder: "asc" },
-    });
-
-    if (selectedStuckScenes.length > 0) {
-      const sceneNumbers = selectedStuckScenes
-        .map((scene) => scene.sortOrder)
-        .join(", ");
-      const selectedOrphanReset = await prisma.scene.updateMany({
-        where: {
-          id: { in: selectedStuckScenes.map((scene) => scene.id) },
-          ...stuckUnattachedSceneWhere(videoId),
-        },
-        data: {
-          imageStatus: "pending",
-          imageError: null,
-          imageBatchId: null,
-          imageFileName: null,
-        },
-      });
-      selectedOrphanResetCount = selectedOrphanReset.count;
-      const message = `Canceled batch and reset ${selectedOrphanReset.count} selected stuck scenes from old batches. Scenes: ${sceneNumbers}`;
-
-      await appendImageBatchLog(batchId, message);
-    }
+  if (!result.ok) {
+    redirectToAssets(videoId, "error", result.error);
   }
 
   revalidatePath("/");
   revalidatePath(`/videos/${videoId}`);
 
-  if (selectedOrphanResetCount > 0) {
+  if (result.selectedOrphanResetCount > 0) {
     redirectToAssets(
       videoId,
       "success",
-      `Canceled batch and reset ${selectedOrphanResetCount} selected stuck scenes from old batches.`,
+      `Canceled batch and reset ${result.selectedOrphanResetCount} selected stuck scenes from old batches.`,
     );
   }
+
+  redirectToAssets(
+    videoId,
+    "success",
+    `Canceled batch. Reset ${result.resetCount} scene(s). The running Flow automation will stop at the next prompt/download checkpoint.`,
+  );
 }
 
 export async function resetSelectedImageScenes(videoId: string, formData: FormData) {
@@ -5685,10 +9324,18 @@ export async function retryFailedScenes(videoId: string, formData: FormData) {
     },
   );
 
-  await runGoogleFlowBatch(retryBatch.batchId);
+  const retryResult = await runGoogleFlowBatch(retryBatch.batchId);
 
   revalidatePath("/");
   revalidatePath(`/videos/${videoId}`);
+
+  if (retryResult.canceled) {
+    redirectToAssets(
+      videoId,
+      "success",
+      retryResult.message || "Retry batch canceled.",
+    );
+  }
 }
 
 export async function retrySelectedImageScenes(videoId: string, formData: FormData) {
@@ -5703,10 +9350,18 @@ export async function retrySelectedImageScenes(videoId: string, formData: FormDa
     name: `Retry selected scenes ${new Date().toLocaleString("en")}`,
   });
 
-  await runGoogleFlowBatch(retryBatch.batchId);
+  const retryResult = await runGoogleFlowBatch(retryBatch.batchId);
 
   revalidatePath("/");
   revalidatePath(`/videos/${videoId}`);
+
+  if (retryResult.canceled) {
+    redirectToAssets(
+      videoId,
+      "success",
+      retryResult.message || "Retry batch canceled.",
+    );
+  }
 }
 
 export async function importDownloadedImages(videoId: string, formData: FormData) {
@@ -5795,14 +9450,33 @@ export async function updateScene(
   videoId: string,
   formData: FormData,
 ) {
+  const data = sceneDataFromForm(formData);
+  const previous = await prisma.scene.findUnique({
+    where: { id: sceneId },
+    select: { status: true, sortOrder: true },
+  });
+
   await prisma.scene.update({
     where: { id: sceneId },
-    data: sceneDataFromForm(formData),
+    data,
   });
   await persistComputedVideoStatus(videoId);
 
+  const becameRejected =
+    previous &&
+    !isSceneRejected(previous.status) &&
+    isSceneRejected(String(data.status ?? ""));
+
   revalidatePath("/");
   revalidatePath(`/videos/${videoId}`);
+
+  if (becameRejected) {
+    redirectToAssets(
+      videoId,
+      "success",
+      `Scene ${previous.sortOrder} marked Rejected — skipped in voiceover, stitch, and render. Re-stitch the master if it was already built.`,
+    );
+  }
 }
 
 export async function deleteScene(sceneId: string, videoId: string) {

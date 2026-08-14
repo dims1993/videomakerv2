@@ -46,10 +46,18 @@ export function RenderDiagnosticsCard({
   diagnostics,
   burnCaptionsEnabled,
   assCaptionSourceAvailable,
+  timelineAlignment,
 }: {
   diagnostics: RenderDiagnostics;
   burnCaptionsEnabled: boolean;
   assCaptionSourceAvailable: boolean;
+  timelineAlignment?: {
+    status: "aligned" | "misaligned" | "unknown";
+    message: string;
+    masterSec: number | null;
+    subtitleTimelineSec: number | null;
+    deltaSec: number | null;
+  } | null;
 }) {
   const ffmpegMessage = !diagnostics.ffmpeg.available
     ? "FFmpeg is required to render drafts."
@@ -64,6 +72,26 @@ export function RenderDiagnosticsCard({
         <CardDescription>{ffmpegMessage}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {timelineAlignment ? (
+          <div
+            className={
+              timelineAlignment.status === "aligned"
+                ? "rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200"
+                : timelineAlignment.status === "misaligned"
+                  ? "rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                  : "rounded-md border bg-muted/30 px-4 py-3 text-sm text-muted-foreground"
+            }
+          >
+            <p className="font-medium">
+              {timelineAlignment.status === "aligned"
+                ? "Timeline aligned"
+                : timelineAlignment.status === "misaligned"
+                  ? "Timeline misaligned"
+                  : "Timeline alignment"}
+            </p>
+            <p className="mt-1">{timelineAlignment.message}</p>
+          </div>
+        ) : null}
         {diagnostics.files.finalVideo.available &&
         !diagnostics.files.finalVideo.hasAudioStream ? (
           <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
@@ -87,6 +115,16 @@ export function RenderDiagnosticsCard({
             value={diagnostics.ffmpeg.hasAssFilter ? "Supported" : "Not supported"}
           />
           <DiagnosticItem
+            label="Timeline sync"
+            value={
+              timelineAlignment?.status === "aligned"
+                ? "Aligned"
+                : timelineAlignment?.status === "misaligned"
+                  ? `Off by ${Math.abs(timelineAlignment.deltaSec ?? 0).toFixed(1)}s`
+                  : "Unknown"
+            }
+          />
+          <DiagnosticItem
             label="FFprobe binary"
             value={diagnostics.ffprobe.binary}
           />
@@ -95,8 +133,8 @@ export function RenderDiagnosticsCard({
             value={yesNo(diagnostics.ffprobe.available)}
           />
           <DiagnosticItem
-            label="Burn captions"
-            value={burnCaptionsEnabled ? "Enabled" : "Disabled"}
+            label="Subtitles in last render"
+            value={burnCaptionsEnabled ? "Included" : "Excluded"}
           />
           <DiagnosticItem
             label="ASS file"

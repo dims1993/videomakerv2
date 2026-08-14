@@ -194,10 +194,66 @@ export async function ensureVoiceoverSegmentsDir(videoId: string) {
   return directory;
 }
 
-export function generatedAudioUrl(audioPath: string | null | undefined) {
+export function generatedAudioUrl(
+  audioPath: string | null | undefined,
+  cacheKey?: string | number | Date | null,
+) {
   if (!audioPath?.startsWith("storage/voiceovers/")) {
     return null;
   }
 
-  return `/api/generated-audio/${audioPath.slice("storage/voiceovers/".length)}`;
+  const url = `/api/generated-audio/${audioPath.slice("storage/voiceovers/".length)}`;
+  if (cacheKey == null || cacheKey === "") {
+    return url;
+  }
+
+  const token =
+    cacheKey instanceof Date ? String(cacheKey.getTime()) : String(cacheKey);
+  return `${url}?v=${encodeURIComponent(token)}`;
+}
+
+export function sceneClipMediaUrl(
+  clipPath: string | null | undefined,
+  cacheKey?: string | number | Date | null,
+) {
+  if (!clipPath?.startsWith("storage/scene-clips/")) {
+    return null;
+  }
+
+  const url = `/api/scene-clips/${clipPath.slice("storage/scene-clips/".length)}`;
+  if (cacheKey == null || cacheKey === "") {
+    return url;
+  }
+
+  const token =
+    cacheKey instanceof Date ? String(cacheKey.getTime()) : String(cacheKey);
+  return `${url}?v=${encodeURIComponent(token)}`;
+}
+
+/** Preview URL for Voiceover By Scene: exclusive clip audio wins over music-bed VO. */
+export function sceneAudioPreview({
+  clipLocalPath,
+  clipMuted,
+  voiceoverLocalPath,
+  updatedAt,
+}: {
+  clipLocalPath?: string | null;
+  clipMuted?: boolean | null;
+  voiceoverLocalPath?: string | null;
+  updatedAt?: string | number | Date | null;
+}) {
+  const exclusive =
+    Boolean(clipLocalPath?.trim()) && clipMuted === false;
+  if (exclusive) {
+    return {
+      url: sceneClipMediaUrl(clipLocalPath, updatedAt),
+      pathLabel: clipLocalPath,
+      source: "exclusive_clip" as const,
+    };
+  }
+  return {
+    url: generatedAudioUrl(voiceoverLocalPath, updatedAt),
+    pathLabel: voiceoverLocalPath,
+    source: "voiceover" as const,
+  };
 }

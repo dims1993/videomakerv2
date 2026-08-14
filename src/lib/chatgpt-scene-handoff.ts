@@ -1,3 +1,20 @@
+import {
+  foldPauseCardScenesIntoPauseAfterMs,
+  isNonSpokenCueVisualIdea,
+  normalizePauseAfterMs,
+} from "@/lib/podcast-pause-cues";
+import {
+  isPartCoverVisualIdea,
+  sanitizePodcastAvatarScriptText,
+} from "@/lib/podcast-part-covers";
+import {
+  clampSceneDurationSeconds,
+  findStructuralMarkersInScriptText,
+  stripStructuralMarkers,
+  validateScriptCoverage,
+  validateVisualIdeaPrefixes,
+} from "@/lib/visual-plan-script";
+
 export type ChatGptGenerationMode =
   | "FULL_VIDEO"
   | "TEN_SCENE_TEST"
@@ -19,6 +36,8 @@ export type ParsedHandoffScene = {
   duration: number;
   imagePrompt: string;
   status: string;
+  /** Silence after this scene when stitching voiceover (milliseconds). */
+  pauseAfterMs?: number | null;
   sourceSection?: string;
 };
 
@@ -68,6 +87,9 @@ const sceneFields = new Set([
   "image_prompt",
   "status",
   "section",
+  "pauseAfterMs",
+  "pause_after_ms",
+  "pauseAfter",
 ]);
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -118,6 +140,61 @@ function summarizeScenes(scenes: ParsedHandoffScene[]) {
     ).length,
     sectionCounts,
   };
+}
+
+function isLikelyJsonStringTerminator(text: string, quoteIndex: number) {
+  const match = text.slice(quoteIndex + 1).match(/^\s*(.)/);
+  const next = match?.[1];
+  return next == null || next === "," || next === "}" || next === "]" || next === ":";
+}
+
+/**
+ * ChatGPT visual plans often emit unescaped quotes inside imagePrompt, e.g.
+ * `"imagePrompt":"Voiceover context:\n"The truck..."\n..."`.
+ * Escape those interior quotes so JSON.parse can succeed.
+ */
+export function repairUnescapedJsonStringQuotes(raw: string) {
+  let result = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < raw.length; index += 1) {
+    const character = raw[index];
+
+    if (!inString) {
+      result += character;
+      if (character === '"') {
+        inString = true;
+      }
+      continue;
+    }
+
+    if (escaped) {
+      result += character;
+      escaped = false;
+      continue;
+    }
+
+    if (character === "\\") {
+      result += character;
+      escaped = true;
+      continue;
+    }
+
+    if (character === '"') {
+      if (isLikelyJsonStringTerminator(raw, index)) {
+        result += character;
+        inString = false;
+      } else {
+        result += '\\"';
+      }
+      continue;
+    }
+
+    result += character;
+  }
+
+  return result;
 }
 
 function matchingJsonEnd(text: string, startIndex: number) {
@@ -178,38 +255,54 @@ function scenesFromParsedResponse(parsed: unknown) {
   );
 }
 
-export function extractScenesFromHandoffResponse(rawResponse: string) {
-  const text = rawResponse.trim();
-
+function tryParseScenesJson(candidate: string) {
   try {
-    return scenesFromParsedResponse(JSON.parse(text));
+    return scenesFromParsedResponse(JSON.parse(candidate));
   } catch {
-    // Continue with extraction below. ChatGPT often wraps JSON in prose or fences.
+    // Common ChatGPT defect: unescaped " inside imagePrompt / visualIdea strings.
   }
 
-  for (let index = 0; index < text.length; index += 1) {
-    if (text[index] !== "[" && text[index] !== "{") {
-      continue;
-    }
+  try {
+    return scenesFromParsedResponse(
+      JSON.parse(repairUnescapedJsonStringQuotes(candidate)),
+    );
+  } catch {
+    return null;
+  }
+}
 
-    const endIndex = matchingJsonEnd(text, index);
+export function extractScenesFromHandoffResponse(rawResponse: string) {
+  const text = rawResponse.trim();
+  const repairedText = repairUnescapedJsonStringQuotes(text);
 
-    if (endIndex === -1) {
-      continue;
-    }
+  const direct = tryParseScenesJson(text) ?? tryParseScenesJson(repairedText);
+  if (direct) {
+    return direct;
+  }
 
-    const candidate = text.slice(index, endIndex + 1);
+  // ChatGPT often wraps JSON in prose or fences.
+  for (const source of [repairedText, text]) {
+    for (let index = 0; index < source.length; index += 1) {
+      if (source[index] !== "[" && source[index] !== "{") {
+        continue;
+      }
 
-    try {
-      const parsed = JSON.parse(candidate);
-      return scenesFromParsedResponse(parsed);
-    } catch {
-      continue;
+      const endIndex = matchingJsonEnd(source, index);
+
+      if (endIndex === -1) {
+        continue;
+      }
+
+      const candidate = source.slice(index, endIndex + 1);
+      const parsed = tryParseScenesJson(candidate);
+      if (parsed) {
+        return parsed;
+      }
     }
   }
 
   throw new Error(
-    'Could not find valid scenes JSON in the pasted response. Paste a JSON array or an object with a "scenes" array.',
+    'Could not find valid scenes JSON. If imagePrompt quotes voiceover with ", those inner quotes must be escaped as \\", or re-paste after regenerating. Paste a JSON array or an object with a "scenes" array.',
   );
 }
 
@@ -238,35 +331,87 @@ function firstFiniteNumber(...values: unknown[]) {
 }
 
 function normalizeSceneType(value: string) {
-  const normalized = value.trim().toLowerCase();
+  const normalized = value.trim().toLowerCase().replace(/[\s_-]+/g, "");
 
-  return sceneTypes.has(normalized) ? normalized : "";
+  if (sceneTypes.has(normalized)) {
+    return normalized;
+  }
+
+  // Keep taxonomy locked to avatar/insert/space, but map common ChatGPT inventions.
+  const aliases: Record<string, "avatar" | "insert" | "space"> = {
+    character: "avatar",
+    characters: "avatar",
+    host: "avatar",
+    person: "avatar",
+    people: "avatar",
+    human: "avatar",
+    presenter: "avatar",
+    talkinghead: "avatar",
+    object: "insert",
+    objects: "insert",
+    detail: "insert",
+    closeup: "insert",
+    closeups: "insert",
+    card: "insert",
+    cards: "insert",
+    symbol: "insert",
+    graphic: "insert",
+    broll: "insert",
+    cover: "insert",
+    chaptercover: "insert",
+    landscape: "space",
+    establishing: "space",
+    environment: "space",
+    location: "space",
+    place: "space",
+    transition: "space",
+    atmosphere: "space",
+    wide: "space",
+    establishingshot: "space",
+  };
+
+  return aliases[normalized] ?? "";
 }
 
 function normalizeRawHandoffScene(rawScene: Record<string, unknown>, index: number) {
   const sceneType = normalizeSceneType(
     firstTextValue(rawScene.sceneType, rawScene.scene_type),
   );
+  const rawScriptText = firstTextValue(
+    rawScene.scriptText,
+    rawScene.voiceover_context,
+    rawScene.voiceoverContext,
+    rawScene.narration,
+    rawScene.voiceover,
+  );
+  const markers = findStructuralMarkersInScriptText(rawScriptText);
+  const visualIdea = firstTextValue(
+    rawScene.visualIdea,
+    rawScene.visual_idea,
+  );
+  let scriptText = stripStructuralMarkers(rawScriptText);
+  let strippedTrailingPartHeading = false;
+  // PART N — TITLE / CLOSING / COLD OPEN belong to structure or dedicated inserts —
+  // never stay glued onto avatar turns (would be spoken by TTS).
+  if (!isPartCoverVisualIdea(visualIdea)) {
+    const cleaned = sanitizePodcastAvatarScriptText(scriptText);
+    strippedTrailingPartHeading = cleaned !== scriptText;
+    scriptText = cleaned;
+  }
 
   return {
     sourceOrder: firstFiniteNumber(rawScene.order, rawScene.scene),
-    scriptText: firstTextValue(
-      rawScene.scriptText,
-      rawScene.voiceover_context,
-      rawScene.voiceoverContext,
-      rawScene.narration,
-      rawScene.voiceover,
-    ),
+    rawScriptText,
+    markers,
+    scriptText,
+    strippedTrailingPartHeading,
     sceneType,
     visualPurpose: firstTextValue(
       rawScene.visualPurpose,
       rawScene.narrative_meaning,
       rawScene.narrativeMeaning,
     ),
-    visualIdea: firstTextValue(
-      rawScene.visualIdea,
-      rawScene.visual_idea,
-    ),
+    visualIdea,
     duration: firstFiniteNumber(
       rawScene.duration,
       rawScene.estimated_seconds,
@@ -279,6 +424,9 @@ function normalizeRawHandoffScene(rawScene: Record<string, unknown>, index: numb
     ),
     status: firstTextValue(rawScene.status) || "planned",
     section: firstTextValue(rawScene.section),
+    pauseAfterMs: normalizePauseAfterMs(
+      rawScene.pauseAfterMs ?? rawScene.pause_after_ms ?? rawScene.pauseAfter,
+    ),
     fallbackOrder: index + 1,
   };
 }
@@ -329,8 +477,50 @@ export function validateHandoffScenes(rawScenes: unknown[]): SceneHandoffValidat
       seenOrders.add(orderValue);
     }
 
-    if (!normalizedScene.scriptText) {
-      errors.push(`${sceneLabel}.scriptText: must be a non-empty string. Supported aliases: scriptText, voiceover_context.`);
+    if (normalizedScene.markers.length > 0) {
+      warnings.push(
+        `${sceneLabel}.scriptText: removed structural marker(s) ${normalizedScene.markers.join(", ")} — labels are for covers/segmentation only and must not go to voiceover.`,
+      );
+    }
+    if (normalizedScene.strippedTrailingPartHeading) {
+      warnings.push(
+        `${sceneLabel}.scriptText: removed trailing structural label (PART N — TITLE / CLOSING / COLD OPEN). Those are not spoken on avatar turns — PART covers use spoken "Part N. …"; CLOSING is followed by a MUSIC_BED insert with empty scriptText.`,
+      );
+    }
+
+    const isNonSpokenCue = isNonSpokenCueVisualIdea(normalizedScene.visualIdea);
+    const isVisualOnlyCover =
+      !normalizedScene.scriptText &&
+      (normalizedScene.visualIdea.trim().startsWith("Chapter cover:") ||
+        /cover|title card|portada|introduction|reflection|prayer|closing/i.test(
+          normalizedScene.visualPurpose,
+        ) ||
+        normalizedScene.markers.some((marker) =>
+          /INTRODUCTION|CHAPTER COVER|REFLECTION AND PRAYER|CLOSING|CHAPTER\s+\d+|FINAL\s*[—\-:.]/i.test(
+            marker,
+          ),
+        ));
+
+    if (!normalizedScene.scriptText && !isVisualOnlyCover && !isNonSpokenCue) {
+      errors.push(`${sceneLabel}.scriptText: must be a non-empty string after removing structural markers. Supported aliases: scriptText, voiceover_context.`);
+    } else if (!normalizedScene.scriptText && isVisualOnlyCover) {
+      warnings.push(
+        `${sceneLabel}.scriptText: empty after removing markers — prefer pairing the cover with the spoken title/announcement (cover + voiceover), not a silent scene.`,
+      );
+    } else if (!normalizedScene.scriptText && isNonSpokenCue) {
+      warnings.push(
+        `${sceneLabel}.scriptText: empty non-spoken cue (${normalizedScene.visualIdea.split(":")[0] || "cue"}). PAUSE_CARD scenes fold into the previous scene pauseAfterMs on import; MUSIC_BED keeps an empty scriptText.`,
+      );
+    }
+
+    if (
+      normalizedScene.pauseAfterMs != null &&
+      (!Number.isFinite(normalizedScene.pauseAfterMs) ||
+        normalizedScene.pauseAfterMs < 0)
+    ) {
+      errors.push(
+        `${sceneLabel}.pauseAfterMs: must be a non-negative number in milliseconds (e.g. 2000 for a 2s pause).`,
+      );
     }
 
     if (!sceneType) {
@@ -347,6 +537,8 @@ export function validateHandoffScenes(rawScenes: unknown[]): SceneHandoffValidat
 
     if (!Number.isFinite(durationValue) || durationValue <= 0) {
       errors.push(`${sceneLabel}.duration: must be a number greater than 0. Supported aliases: duration, estimated_seconds.`);
+    } else if (durationValue < 2) {
+      warnings.push(`${sceneLabel}.duration: values below 2 seconds are clamped to 2 on import.`);
     }
 
     if (!normalizedScene.imagePrompt) {
@@ -365,9 +557,13 @@ export function validateHandoffScenes(rawScenes: unknown[]): SceneHandoffValidat
         : "avatar",
       visualPurpose: normalizedScene.visualPurpose,
       visualIdea: normalizedScene.visualIdea,
-      duration: Number.isFinite(durationValue) && durationValue > 0 ? durationValue : 4,
+      duration:
+        Number.isFinite(durationValue) && durationValue > 0
+          ? clampSceneDurationSeconds(durationValue)
+          : 4,
       imagePrompt: normalizedScene.imagePrompt,
       status: "planned",
+      pauseAfterMs: normalizedScene.pauseAfterMs,
       sourceSection: normalizedScene.section || undefined,
     });
   });
@@ -384,23 +580,65 @@ export function validateHandoffScenes(rawScenes: unknown[]): SceneHandoffValidat
     warnings.push("Scene orders will be normalized to sequential order on import.");
   }
 
+  for (const message of validateVisualIdeaPrefixes(normalizedScenes)) {
+    if (!warnings.includes(message)) {
+      warnings.push(message);
+    }
+  }
+
+  const folded = foldPauseCardScenesIntoPauseAfterMs(normalizedScenes);
+  if (folded.foldedCount > 0) {
+    warnings.push(
+      `Folded ${folded.foldedCount} PAUSE_CARD scene(s) into the previous scene pauseAfterMs (milliseconds).`,
+    );
+  }
+  const scenes = folded.scenes.map((scene, index) => ({
+    ...scene,
+    order: index + 1,
+  }));
+
   return {
-    scenes: normalizedScenes,
+    scenes,
     errors,
     warnings,
-    summary: summarizeScenes(normalizedScenes),
+    summary: summarizeScenes(scenes),
   };
 }
 
-export function parseAndValidateHandoffResponse(response: string) {
-  return validateHandoffScenes(extractScenesFromHandoffResponse(response));
+export function parseAndValidateHandoffResponse(
+  response: string,
+  options?: {
+    expectedScript?: string;
+    requireVisualIdeaPrefixes?: boolean;
+  },
+) {
+  const validation = validateHandoffScenes(extractScenesFromHandoffResponse(response));
+
+  if (options?.requireVisualIdeaPrefixes) {
+    validation.errors.push(...validateVisualIdeaPrefixes(validation.scenes));
+  }
+
+  if (options?.expectedScript?.trim()) {
+    const coverage = validateScriptCoverage(
+      options.expectedScript,
+      validation.scenes.map((scene) => scene.scriptText),
+    );
+    if (!coverage.ok) {
+      validation.errors.push(`Script coverage: ${coverage.reason}`);
+    }
+  }
+
+  return validation;
 }
 
 export function scenesToImportJson(scenes: ParsedHandoffScene[]) {
   return JSON.stringify(
     scenes.map(({ sourceSection: _sourceSection, ...scene }) => ({
       ...scene,
-      duration: Math.max(1, Math.round(scene.duration)),
+      duration: clampSceneDurationSeconds(scene.duration),
+      ...(scene.pauseAfterMs != null
+        ? { pauseAfterMs: scene.pauseAfterMs }
+        : {}),
     })),
     null,
     2,

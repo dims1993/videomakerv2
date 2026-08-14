@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getChannelProfile, getChannelTopicCategory } from "@/lib/channels";
+import { getChannelProfile, getChannelTopicCategory } from "@/lib/channels-server";
 import { getComputedVideoStatus } from "@/lib/status";
 import {
   exportCuesToSrt,
@@ -10,6 +10,7 @@ import {
   exportActiveWordCaptionsToAss,
   exportActiveWordCaptionsToJson,
 } from "@/lib/subtitle-alignment";
+import { getCaptionStylePreset } from "@/lib/caption-styles";
 
 function parseJsonForExport(value: string | null) {
   if (!value?.trim()) {
@@ -87,7 +88,11 @@ export async function getVideoExportPackage(videoId: string) {
   const topicCategory = getChannelTopicCategory(channel.key, video.topicCategory);
   const subtitleCues = parseFormattedSubtitleCues(video.formattedSubtitleJson);
   const subtitleAss =
-    video.styledSubtitleAss ?? exportActiveWordCaptionsToAss(subtitleCues);
+    video.styledSubtitleAss ??
+    exportActiveWordCaptionsToAss(
+      subtitleCues,
+      getCaptionStylePreset(video.captionStylePreset),
+    );
   const activeWordJson =
     video.styledSubtitleJson ?? exportActiveWordCaptionsToJson(subtitleCues);
   const segmentedVoiceoverReady =
@@ -166,6 +171,10 @@ export async function getVideoExportPackage(videoId: string) {
           topic: topicIdea.topic,
           angle: topicIdea.angle,
           uniqueMechanism: topicIdea.uniqueMechanism,
+          scriptureAnchor: topicIdea.scriptureAnchor,
+          centralQuestion: topicIdea.centralQuestion,
+          commonMisunderstanding: topicIdea.commonMisunderstanding,
+          spiritualTurn: topicIdea.spiritualTurn,
           trigger: topicIdea.trigger,
           promise: topicIdea.promise,
           visualHook: topicIdea.visualHook,

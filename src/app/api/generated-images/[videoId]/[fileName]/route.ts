@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { NextResponse } from "next/server";
 
-import { generatedImagesDir } from "@/lib/image-batches";
+import { generatedImagesDir } from "@/lib/generated-images-path";
 import { prisma } from "@/lib/prisma";
 
 type GeneratedImageRouteProps = {
@@ -16,6 +16,11 @@ const contentTypes: Record<string, string> = {
   ".png": "image/png",
   ".webp": "image/webp",
 };
+
+function isPathInside(root: string, candidate: string) {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
 
 export async function GET(_request: Request, { params }: GeneratedImageRouteProps) {
   const { videoId, fileName } = await params;
@@ -35,17 +40,31 @@ export async function GET(_request: Request, { params }: GeneratedImageRouteProp
         where: { id: decodedVideoId },
         select: { title: true },
       });
-  const candidatePaths = scene?.imageLocalPath
-    ? [path.resolve(process.cwd(), scene.imageLocalPath)]
-    : [
-        path.join(generatedImagesDir(decodedVideoId, video?.title), safeFileName),
-        path.join(generatedImagesDir(decodedVideoId), safeFileName),
-      ];
+
+  const cwd = process.cwd();
+  const candidatePaths: string[] = [];
+
+  if (scene?.imageLocalPath?.trim()) {
+    const resolved = path.resolve(cwd, scene.imageLocalPath.trim());
+    // Allow video storage images and the shared podcast image library.
+    if (
+      isPathInside(path.join(cwd, "storage"), resolved) ||
+      isPathInside(path.join(cwd, "data", "image-library"), resolved)
+    ) {
+      candidatePaths.push(resolved);
+    }
+  } else {
+    candidatePaths.push(
+      path.join(generatedImagesDir(decodedVideoId, video?.title), safeFileName),
+      path.join(generatedImagesDir(decodedVideoId), safeFileName),
+    );
+  }
 
   for (const filePath of candidatePaths) {
     try {
       const image = await readFile(filePath);
       const contentType =
+        contentTypes[path.extname(filePath).toLowerCase()] ??
         contentTypes[path.extname(safeFileName).toLowerCase()] ??
         "application/octet-stream";
 

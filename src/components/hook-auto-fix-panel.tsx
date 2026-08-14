@@ -2,53 +2,46 @@
 
 import type React from "react";
 import { useMemo, useState } from "react";
-import { Check, Download, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
 
 import {
-  buildHookReplacementPreview,
-  HOOK_PACING_PRESETS,
-  type HookPacingPresetId,
-  type HookReplacementPreview,
-} from "@/lib/hook-replacement-patch";
+  buildScenePatchPreview,
+  summarizePatchItemPreview,
+  type ScenePatchPreview,
+} from "@/lib/scene-patch";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-type HookAutoFixPanelProps = {
+type ScenePatcherPanelProps = {
   action: (formData: FormData) => void | Promise<void>;
   videoId: string;
-  selectedFromOrder: number;
-  selectedToOrder: number;
-  currentScenes: {
-    order: number;
+  channelKey: string;
+  scenes: {
+    id: string;
+    sortOrder: number;
     scriptText: string;
-    duration: number | null;
+    visualIdea: string | null;
+    imagePrompt: string | null;
+    hasGeneratedImage: boolean;
   }[];
-  optimizationPacks: Record<HookPacingPresetId, string>;
-  defaultPacing: HookPacingPresetId;
 };
 
 export function HookAutoFixPanel({
   action,
   videoId,
-  selectedFromOrder,
-  selectedToOrder,
-  currentScenes,
-  optimizationPacks,
-  defaultPacing,
-}: HookAutoFixPanelProps) {
-  const [targetPacing, setTargetPacing] =
-    useState<HookPacingPresetId>(defaultPacing);
+  channelKey,
+  scenes,
+}: ScenePatcherPanelProps) {
   const [rawText, setRawText] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [allowScriptTextChanges, setAllowScriptTextChanges] = useState(false);
   const [confirmPreview, setConfirmPreview] = useState(false);
-  const [confirmNarrationMismatch, setConfirmNarrationMismatch] = useState(false);
-  const [confirmNarrationOverlap, setConfirmNarrationOverlap] = useState(false);
-
-  const selectedPack = optimizationPacks[targetPacing];
+  const [confirmLargePatch, setConfirmLargePatch] = useState(false);
+  const [confirmDuplicateTargets, setConfirmDuplicateTargets] = useState(false);
+  const [confirmClearImages, setConfirmClearImages] = useState(false);
 
   const { preview, parseError } = useMemo<{
-    preview: HookReplacementPreview | null;
+    preview: ScenePatchPreview | null;
     parseError: string;
   }>(() => {
     if (!rawText.trim()) {
@@ -57,12 +50,19 @@ export function HookAutoFixPanel({
 
     try {
       return {
-        preview: buildHookReplacementPreview({
+        preview: buildScenePatchPreview({
           rawText,
+          scenes: scenes.map((scene) => ({
+            id: scene.id,
+            order: scene.sortOrder,
+            scriptText: scene.scriptText,
+            visualIdea: scene.visualIdea,
+            imagePrompt: scene.imagePrompt,
+            hasGeneratedImage: scene.hasGeneratedImage,
+          })),
+          channelKey,
           currentVideoId: videoId,
-          selectedFromOrder,
-          selectedToOrder,
-          currentScenes,
+          allowScriptTextChanges,
         }),
         parseError: "",
       };
@@ -70,18 +70,10 @@ export function HookAutoFixPanel({
       return {
         preview: null,
         parseError:
-          error instanceof Error
-            ? error.message
-            : "Could not parse hook replacement patch.",
+          error instanceof Error ? error.message : "Could not parse patch JSON.",
       };
     }
-  }, [currentScenes, rawText, selectedFromOrder, selectedToOrder, videoId]);
-
-  async function copyOptimizationPack() {
-    await navigator.clipboard.writeText(selectedPack);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
-  }
+  }, [allowScriptTextChanges, channelKey, rawText, scenes, videoId]);
 
   async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -92,65 +84,37 @@ export function HookAutoFixPanel({
 
     setRawText(await file.text());
     setConfirmPreview(false);
-    setConfirmNarrationMismatch(false);
-    setConfirmNarrationOverlap(false);
+    setConfirmLargePatch(false);
+    setConfirmDuplicateTargets(false);
+    setConfirmClearImages(false);
   }
 
+  const requiresLargePatchConfirmation = (preview?.totalCount ?? 0) > 50;
+  const requiresDuplicateConfirmation = (preview?.duplicateTargetCount ?? 0) > 0;
+  const requiresClearImageConfirmation = (preview?.clearImageCount ?? 0) > 0;
   const canSubmit =
     Boolean(preview) &&
     !parseError &&
+    (preview?.validCount ?? 0) > 0 &&
     confirmPreview &&
-    (preview?.narrationMatches || confirmNarrationMismatch) &&
-    ((preview?.duplicateAfterRangeCount ?? 0) === 0 || confirmNarrationOverlap);
+    (!requiresLargePatchConfirmation || confirmLargePatch) &&
+    (!requiresDuplicateConfirmation || confirmDuplicateTargets) &&
+    (!requiresClearImageConfirmation || confirmClearImages);
 
   return (
     <div className="rounded-md border bg-muted/20 p-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-1">
-          <h3 className="text-base font-medium">Hook Auto-Fix</h3>
-          <p className="text-sm text-muted-foreground">
-            Export the selected hook range, optimize it externally, then import a replacement patch for that range only.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Label htmlFor="hook-target-pacing" className="sr-only">
-            Target pacing
-          </Label>
-          <select
-            id="hook-target-pacing"
-            value={targetPacing}
-            onChange={(event) => {
-              setTargetPacing(event.target.value as HookPacingPresetId);
-              setCopied(false);
-            }}
-            className="h-9 rounded-md border border-input bg-background px-3 py-2 text-sm"
-          >
-            {(Object.keys(HOOK_PACING_PRESETS) as HookPacingPresetId[]).map(
-              (presetId) => {
-                const preset = HOOK_PACING_PRESETS[presetId];
-
-                return (
-                  <option key={presetId} value={presetId}>
-                    {preset.label}: target {preset.targetRange}, max{" "}
-                    {preset.maxSceneDurationSeconds}s
-                  </option>
-                );
-              },
-            )}
-          </select>
-          <Button type="button" variant="outline" onClick={copyOptimizationPack}>
-            {copied ? <Check /> : <Download />}
-            {copied ? "Copied" : "Export Hook Optimization Pack"}
-          </Button>
-        </div>
+      <div className="space-y-1">
+        <h3 className="text-base font-medium">Scene Patcher</h3>
+        <p className="text-sm text-muted-foreground">
+          Paste or upload a JSON patch for specific scenes by <code>order</code>{" "}
+          or <code>id</code>. Only those scenes are overwritten. Untouched scenes
+          keep their images, order, and Flow file mapping.
+        </p>
       </div>
 
       <div className="mt-4 grid gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Label htmlFor="hookReplacementPatchJson">
-            Import Hook Replacement Patch
-          </Label>
+          <Label htmlFor="scenePatcherJson">Patch JSON</Label>
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
             <Upload className="size-4" />
             <input
@@ -161,17 +125,39 @@ export function HookAutoFixPanel({
           </label>
         </div>
         <Textarea
-          id="hookReplacementPatchJson"
+          id="scenePatcherJson"
           value={rawText}
           onChange={(event) => {
             setRawText(event.target.value);
             setConfirmPreview(false);
-            setConfirmNarrationMismatch(false);
-            setConfirmNarrationOverlap(false);
+            setConfirmLargePatch(false);
+            setConfirmDuplicateTargets(false);
+            setConfirmClearImages(false);
           }}
-          className="min-h-48 font-mono text-sm"
-          placeholder='{"task":"hook_replacement_patch","videoId":"...","replace":{"fromOrder":1,"toOrder":28},"scenes":[...]}'
+          className="min-h-56 font-mono text-sm"
+          placeholder='[{"order":42,"visualIdea":"...","imagePrompt":"..."}]'
         />
+        <p className="text-xs text-muted-foreground">
+          Accepted formats: scene array, {"{"}&quot;patch&quot;: [...]{"}"}, or a
+          same-length hook_replacement_patch (converted to in-place updates).
+          Structural replacements that change scene count are blocked to protect
+          existing images.
+        </p>
+      </div>
+
+      <div className="mt-3">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={allowScriptTextChanges}
+            onChange={(event) => {
+              setAllowScriptTextChanges(event.target.checked);
+              setConfirmPreview(false);
+            }}
+            className="size-4"
+          />
+          Allow scriptText changes (also clears that scene&apos;s voiceover only)
+        </label>
       </div>
 
       {parseError ? (
@@ -180,27 +166,13 @@ export function HookAutoFixPanel({
 
       {preview ? (
         <div className="mt-4 space-y-4">
-          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <PreviewMetric label="Scenes removed" value={preview.removedScenes} />
-            <PreviewMetric label="Scenes inserted" value={preview.insertedScenes} />
-            <PreviewMetric
-              label="Old hook duration"
-              value={`${preview.oldHookDurationSeconds.toFixed(1)}s`}
-            />
-            <PreviewMetric
-              label="New hook duration"
-              value={`${preview.newHookDurationSeconds.toFixed(1)}s`}
-            />
-            <PreviewMetric label="Old scene count" value={preview.oldSceneCount} />
-            <PreviewMetric label="New scene count" value={preview.newSceneCount} />
-            <PreviewMetric
-              label="New average"
-              value={`${preview.newAverageDurationSeconds.toFixed(1)}s`}
-            />
-            <PreviewMetric
-              label="Warnings remaining"
-              value={preview.warningsRemaining}
-            />
+          <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-6">
+            <PreviewMetric label="Patch items" value={preview.totalCount} />
+            <PreviewMetric label="Valid matches" value={preview.validCount} />
+            <PreviewMetric label="Prepend inserts" value={preview.prependCount} />
+            <PreviewMetric label="Will clear images" value={preview.clearImageCount} />
+            <PreviewMetric label="Warnings" value={preview.warningCount} />
+            <PreviewMetric label="Invalid / missing" value={preview.invalidCount} />
           </div>
 
           {preview.globalWarnings.length > 0 ? (
@@ -211,45 +183,57 @@ export function HookAutoFixPanel({
             </div>
           ) : null}
 
-          {preview.narrationWarning ? (
-            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-              <p>{preview.narrationWarning}</p>
-              <p className="mt-1">
-                Cancel is recommended unless this wording change is intentional.
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-              Replacement narration exactly matches the selected hook text.
-            </div>
-          )}
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            {preview.prependCount > 0
+              ? "Negative-order items are prepended and existing scenes shift, but keep their images by scene id. Positive-order updates apply first against current orders."
+              : "Untouched scenes are not renumbered, deleted, or modified. Their generated images stay attached for Flow batches."}
+          </div>
 
-          {preview.duplicateAfterRangeWarning ? (
-            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-              <p>{preview.duplicateAfterRangeWarning}</p>
-            </div>
-          ) : null}
-
-          <div className="max-h-[320px] overflow-auto rounded-md border">
+          <div className="max-h-[420px] overflow-auto rounded-md border">
             <table className="min-w-full text-left text-sm">
               <thead className="sticky top-0 bg-background">
                 <tr className="border-b">
-                  <th className="px-3 py-2 font-medium">New order</th>
-                  <th className="px-3 py-2 font-medium">Duration</th>
-                  <th className="px-3 py-2 font-medium">Script text</th>
+                  <th className="px-3 py-2 font-medium">Target</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Fields</th>
+                  <th className="px-3 py-2 font-medium">Image</th>
+                  <th className="px-3 py-2 font-medium">Visual idea</th>
                   <th className="px-3 py-2 font-medium">Warnings</th>
                 </tr>
               </thead>
               <tbody>
-                {preview.replacementScenes.map((scene, index) => (
-                  <tr key={`${scene.order}-${index}`} className="border-b align-top">
-                    <td className="px-3 py-2">{scene.order}</td>
+                {preview.rows.map((row) => (
+                  <tr key={row.key} className="border-b align-top">
                     <td className="px-3 py-2">
-                      {scene.duration !== null ? `${scene.duration}s` : "Default"}
+                      {row.matchStatus === "insert_prepend"
+                        ? `Prepend ${row.targetOrder}`
+                        : row.targetOrder != null
+                          ? `Scene ${row.targetOrder}`
+                          : "Unknown scene"}
                     </td>
-                    <td className="px-3 py-2">{scene.scriptText}</td>
+                    <td className="px-3 py-2">{row.matchStatus}</td>
                     <td className="px-3 py-2">
-                      {scene.warnings.length > 0 ? scene.warnings.join(", ") : "OK"}
+                      {row.fieldsToUpdate.join(", ") || "None"}
+                    </td>
+                    <td className="px-3 py-2">
+                      {row.willClearImage && row.hasExistingImage
+                        ? "Will clear"
+                        : row.hasExistingImage
+                          ? "Keep"
+                          : "None"}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="space-y-1">
+                        <p className="text-muted-foreground">
+                          {summarizePatchItemPreview(row.oldVisualIdea) || "Empty"}
+                        </p>
+                        <p>
+                          {summarizePatchItemPreview(row.newVisualIdea) || "Empty"}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      {row.warnings.length > 0 ? row.warnings.join(" ") : "OK"}
                     </td>
                   </tr>
                 ))}
@@ -259,21 +243,11 @@ export function HookAutoFixPanel({
 
           <form action={action} className="space-y-3">
             <input type="hidden" name="patchJson" value={rawText} />
+            <input type="hidden" name="channelKey" value={channelKey} />
             <input
               type="hidden"
-              name="selectedFromOrder"
-              value={selectedFromOrder}
-            />
-            <input type="hidden" name="selectedToOrder" value={selectedToOrder} />
-            <input
-              type="hidden"
-              name="confirmNarrationMismatch"
-              value={confirmNarrationMismatch ? "on" : ""}
-            />
-            <input
-              type="hidden"
-              name="confirmNarrationOverlap"
-              value={confirmNarrationOverlap ? "on" : ""}
+              name="allowScriptTextChanges"
+              value={allowScriptTextChanges ? "on" : ""}
             />
 
             <label className="flex items-center gap-2 text-sm">
@@ -283,39 +257,59 @@ export function HookAutoFixPanel({
                 onChange={(event) => setConfirmPreview(event.target.checked)}
                 className="size-4"
               />
-              I reviewed the dry-run preview and want to replace the range declared by this patch.
+              I reviewed the dry-run preview. Only the listed scenes will be
+              overwritten.
             </label>
 
-            {preview.narrationWarning ? (
+            {requiresClearImageConfirmation ? (
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  checked={confirmNarrationMismatch}
-                  onChange={(event) =>
-                    setConfirmNarrationMismatch(event.target.checked)
-                  }
+                  name="confirmClearImages"
+                  checked={confirmClearImages}
+                  onChange={(event) => setConfirmClearImages(event.target.checked)}
                   className="size-4"
                 />
-                Apply anyway even though the hook narration differs.
+                Clear generated images on {preview.clearImageCount} patched
+                scene(s) so they can be regenerated
               </label>
             ) : null}
 
-            {preview.duplicateAfterRangeWarning ? (
+            {requiresLargePatchConfirmation ? (
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  checked={confirmNarrationOverlap}
+                  name="confirmLargePatch"
+                  checked={confirmLargePatch}
+                  onChange={(event) => setConfirmLargePatch(event.target.checked)}
+                  className="size-4"
+                />
+                Confirm applying a patch with more than 50 items
+              </label>
+            ) : (
+              <input type="hidden" name="confirmLargePatch" value="" />
+            )}
+
+            {requiresDuplicateConfirmation ? (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="confirmDuplicateTargets"
+                  checked={confirmDuplicateTargets}
                   onChange={(event) =>
-                    setConfirmNarrationOverlap(event.target.checked)
+                    setConfirmDuplicateTargets(event.target.checked)
                   }
                   className="size-4"
                 />
-                Apply anyway even though replacement narration still exists after the patch range.
+                Confirm duplicate targets and use the last patch item for each
+                repeated scene
               </label>
-            ) : null}
+            ) : (
+              <input type="hidden" name="confirmDuplicateTargets" value="" />
+            )}
 
             <Button type="submit" disabled={!canSubmit}>
-              Apply Hook Replacement Patch
+              Apply scene patch
             </Button>
           </form>
         </div>

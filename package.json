@@ -10,7 +10,10 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "test:the-gods-word-brief": "tsx --tsconfig tsconfig.json src/lib/the-gods-word-visual-brief.test.ts",
+    "test:scene-prepend": "tsx --tsconfig tsconfig.json src/lib/scene-prepend.test.ts",
+    "prisma:migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

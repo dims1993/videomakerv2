@@ -5,10 +5,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckSquare, Copy, ImagePlus, Square } from "lucide-react";
 
 import {
-  cancelImageBatch,
+  assignPodcastImageLibrary,
   forceResetSelectedImageScenes,
   generateSelectedImageBatch,
   importDownloadedImages,
+  importPodcastImageLibraryFromSourceVideo,
+  insertMissingPodcastPartCovers,
+  attachPodcastSectionVideoLibrary,
   prepareImageBatch,
   resetSelectedImageScenes,
   retryFailedScenes,
@@ -28,9 +31,14 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  isPodcastFlowOnlyScene,
+  PODCAST_ENGLISH_LESSONS_CHANNEL_KEY,
+} from "@/lib/podcast-image-library-shared";
 import { Textarea } from "@/components/ui/textarea";
 import { formatSceneTypeShare } from "@/lib/format";
-import { sceneStatuses, statusLabel } from "@/lib/status";
+import { groupScenesBySelectableStructure } from "@/lib/scene-structure-selection";
+import { isSceneRejected, sceneStatuses, statusLabel } from "@/lib/status";
 
 type AssetScene = {
   id: string;
@@ -72,7 +80,8 @@ type FilterValue =
   | "attached"
   | "failed"
   | "missing-images"
-  | "missing-prompts";
+  | "missing-prompts"
+  | "rejected";
 
 const VISIBLE_LOG_LIMIT = 50;
 
@@ -184,16 +193,31 @@ export function mapImageBatchForClient(batch: {
 
 export function AssetsWorkflow({
   videoId,
+  channelKey,
+  script,
   defaultOutputFolder,
   notice,
   scenes,
   batches,
+  podcastLibrarySummary,
 }: {
   videoId: string;
+  channelKey?: string | null;
+  script?: string | null;
   defaultOutputFolder: string;
   notice?: { type: "error" | "success"; message: string } | null;
   scenes: AssetScene[];
   batches: AssetBatch[];
+  podcastLibrarySummary?: {
+    total: number;
+    counts: { emma: number; leo: number; music: number };
+    scenarios?: Array<{
+      id: string;
+      label: string;
+      total: number;
+      counts: { emma: number; leo: number; music: number };
+    }>;
+  } | null;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filter, setFilter] = useState<FilterValue>("all");
@@ -201,6 +225,7 @@ export function AssetsWorkflow({
   const [rangeEnd, setRangeEnd] = useState("");
   const [outputFolder, setOutputFolder] = useState(defaultOutputFolder);
   const [hiddenLogKeys, setHiddenLogKeys] = useState<string[]>([]);
+  const [isBatchCancelling, setIsBatchCancelling] = useState(false);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
 
   const selectedIdValue = selectedIds.join(",");
@@ -216,11 +241,27 @@ export function AssetsWorkflow({
           return !hasText(scene.imageUrl) && !hasText(scene.imageLocalPath);
         }
         if (filter === "missing-prompts") return !hasText(scene.imagePrompt);
+        if (filter === "rejected") return isSceneRejected(scene.status);
 
         return scene.imageStatus === filter;
       }),
     [filter, scenes],
   );
+
+  const structureGroups = useMemo(() => {
+    if (!script?.trim()) {
+      return [];
+    }
+    return groupScenesBySelectableStructure({
+      script,
+      scenes: scenes.map((scene) => ({
+        id: scene.id,
+        sortOrder: scene.sortOrder,
+        scriptText: scene.scriptText,
+        visualIdea: scene.visualIdea,
+      })),
+    }).groups;
+  }, [script, scenes]);
 
   const selectedScenes = scenes.filter((scene) => selectedIds.includes(scene.id));
   const promptReadyCount = scenes.filter((scene) => hasText(scene.imagePrompt)).length;
@@ -229,6 +270,9 @@ export function AssetsWorkflow({
   ).length;
   const failedCount = scenes.filter((scene) =>
     ["failed", "needs_retry"].includes(scene.imageStatus),
+  ).length;
+  const rejectedCount = scenes.filter((scene) =>
+    isSceneRejected(scene.status),
   ).length;
   const avatarCount = scenes.filter((scene) => isSceneType(scene, "avatar")).length;
   const insertCount = scenes.filter((scene) => isSceneType(scene, "insert")).length;
@@ -297,6 +341,53 @@ export function AssetsWorkflow({
     setSelectedIds(scenes.filter(predicate).map((scene) => scene.id));
   }
 
+  function selectStructureGroup(sceneIds: string[]) {
+    setSelectedIds((current) => {
+      const groupSet = new Set(sceneIds);
+      const allSelected =
+        sceneIds.length > 0 && sceneIds.every((id) => current.includes(id));
+      if (allSelected) {
+        return current.filter((id) => !groupSet.has(id));
+      }
+      const next = new Set(current);
+      for (const id of sceneIds) {
+        next.add(id);
+      }
+      return [...next];
+    });
+  }
+
+  function isStructureGroupSelected(sceneIds: string[]) {
+    return (
+      sceneIds.length > 0 && sceneIds.every((id) => selectedIds.includes(id))
+    );
+  }
+
+  function cancelRunningBatch() {
+    if (!latestBatch || isBatchCancelling) {
+      return;
+    }
+
+    setIsBatchCancelling(true);
+    // Route Handler (not Server Action): Cancel must not queue behind the long
+    // Run Batch POST, or Flow keeps submitting prompts until that finishes.
+    void fetch(`/api/videos/${videoId}/cancel-batch?kind=image-batch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        batchId: latestBatch.id,
+        selectedSceneIds: selectedIds,
+      }),
+      keepalive: true,
+    }).finally(() => {
+      window.location.assign(
+        `/videos/${videoId}?tab=assets&assetNoticeType=success&assetNotice=${encodeURIComponent(
+          "Cancel requested. Flow stops at the next prompt/wait/download checkpoint.",
+        )}`,
+      );
+    });
+  }
+
   function selectRange() {
     const start = Number(rangeStart);
     const end = Number(rangeEnd);
@@ -330,6 +421,14 @@ export function AssetsWorkflow({
     event.target.value = "";
   }
 
+  const isPodcastChannel = channelKey === PODCAST_ENGLISH_LESSONS_CHANNEL_KEY;
+  const flowOnlyCount = isPodcastChannel
+    ? scenes.filter((scene) => isPodcastFlowOnlyScene(scene)).length
+    : 0;
+  const libraryEligibleCount = isPodcastChannel
+    ? scenes.length - flowOnlyCount
+    : 0;
+
   return (
     <div className="grid gap-4">
       {notice ? (
@@ -343,6 +442,152 @@ export function AssetsWorkflow({
         >
           {notice.message}
         </div>
+      ) : null}
+
+      {isPodcastChannel ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Podcast image library</CardTitle>
+            <CardDescription>
+              Reuse curated Emma / Leo / music stills for dialogue scenes. Google Flow
+              is only for episode start covers (`EPISODE_COVER`) and `PART N` title cards.
+              Optional scenario subfolders (e.g. `emma/shopping-mall/`) let you assign a
+              location pool to the current scene selection.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
+              <SummaryTile
+                label="Library total"
+                value={podcastLibrarySummary?.total ?? 0}
+              />
+              <SummaryTile
+                label="Emma pool"
+                value={podcastLibrarySummary?.counts.emma ?? 0}
+              />
+              <SummaryTile
+                label="Leo pool"
+                value={podcastLibrarySummary?.counts.leo ?? 0}
+              />
+              <SummaryTile
+                label="Music pool"
+                value={podcastLibrarySummary?.counts.music ?? 0}
+              />
+              <SummaryTile
+                label="Flow-only scenes"
+                value={`${flowOnlyCount} / ${scenes.length}`}
+              />
+            </div>
+
+            {(podcastLibrarySummary?.scenarios?.length ?? 0) > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {podcastLibrarySummary?.scenarios?.map((scenario) => (
+                  <Badge key={scenario.id} variant="outline" className="font-normal">
+                    {scenario.label}: E{scenario.counts.emma} / L
+                    {scenario.counts.leo} / M{scenario.counts.music}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+
+            <form
+              action={assignPodcastImageLibrary.bind(null, videoId)}
+              className="flex flex-wrap items-end gap-3"
+            >
+              <input type="hidden" name="selectedSceneIds" value={selectedIdValue} />
+              <input type="hidden" name="overwrite" value="1" />
+              <div className="grid gap-2">
+                <Label htmlFor="libraryScenario">Scenario pool</Label>
+                <select
+                  id="libraryScenario"
+                  name="scenario"
+                  defaultValue="all"
+                  className="flex h-10 w-56 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="all">All scenarios</option>
+                  <option value="default">Default (root pool)</option>
+                  {(podcastLibrarySummary?.scenarios ?? [])
+                    .filter((scenario) => scenario.id !== "default")
+                    .map((scenario) => (
+                      <option key={scenario.id} value={scenario.id}>
+                        {scenario.label} ({scenario.total})
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="libraryMinGap">Min gap (no consecutive reuse)</Label>
+                <Input
+                  id="libraryMinGap"
+                  name="minGap"
+                  type="number"
+                  min="1"
+                  max="10"
+                  defaultValue={3}
+                  className="w-28"
+                />
+              </div>
+              <Button type="submit" disabled={(podcastLibrarySummary?.total ?? 0) === 0}>
+                Assign from library
+                {selectedIds.length > 0
+                  ? ` (${selectedIds.length} selected)`
+                  : ` (${libraryEligibleCount} eligible)`}
+              </Button>
+              <Button
+                type="submit"
+                variant="outline"
+                formAction={insertMissingPodcastPartCovers.bind(null, videoId)}
+              >
+                Insert missing PART covers
+              </Button>
+              <Button
+                type="submit"
+                variant="outline"
+                formAction={attachPodcastSectionVideoLibrary.bind(null, videoId)}
+              >
+                Attach section videos
+              </Button>
+              <p className="w-full text-xs text-muted-foreground">
+                Select a script structure block (e.g. PART 1), choose a scenario pool
+                (e.g. Shopping Mall), then Assign — Emma/Leo/music stills come from that
+                scenario with the same role + min-gap logic. Folder layout:
+                `data/image-library/podcast-english-lessons/emma/shopping-mall/*.png`
+                (and the same under `leo/` / `music/`). With no selection, all eligible
+                scenes are assigned. Flow-only covers are skipped. “Insert missing PART
+                covers” adds narrated title cards from the script. “Attach section videos”
+                links INTRO/LESSON/CLOSING/FINAL bumps from `data/.../video-library/`.
+              </p>
+            </form>
+
+            {(podcastLibrarySummary?.total ?? 0) === 0 ? (
+              <form
+                action={importPodcastImageLibraryFromSourceVideo.bind(null, videoId)}
+                className="flex flex-wrap items-end gap-3 rounded-md border border-dashed p-3"
+              >
+                <input type="hidden" name="sourceVideoId" value={videoId} />
+                <div className="grid gap-2">
+                  <Label htmlFor="libraryMaxOrder">Import first N scenes</Label>
+                  <Input
+                    id="libraryMaxOrder"
+                    name="maxOrder"
+                    type="number"
+                    min="1"
+                    defaultValue={150}
+                    className="w-28"
+                  />
+                </div>
+                <Button type="submit" variant="outline">
+                  Import curated stills into library
+                </Button>
+                <p className="w-full text-xs text-muted-foreground">
+                  Copies tagged Emma / Leo / music images from this video into
+                  `data/image-library/podcast-english-lessons/`. Also pulls extra music
+                  beds beyond N when the music pool is thin.
+                </p>
+              </form>
+            ) : null}
+          </CardContent>
+        </Card>
       ) : null}
 
       <Card>
@@ -366,6 +611,7 @@ export function AssetsWorkflow({
             />
             <SummaryTile label="Missing images" value={scenes.length - attachedCount} />
             <SummaryTile label="Failed" value={failedCount} />
+            <SummaryTile label="Rejected" value={rejectedCount} />
             <SummaryTile
               label="Avatars"
               value={formatSceneTypeShare(avatarCount, scenes.length)}
@@ -406,14 +652,43 @@ export function AssetsWorkflow({
           <form
             action={prepareImageBatch.bind(null, videoId)}
             className="grid gap-4 lg:grid-cols-[1fr_1fr_140px_140px_140px]"
+            onSubmit={(event) => {
+              const form = event.currentTarget;
+              const overrides: Record<string, string> = {};
+
+              for (const sceneId of selectedIds) {
+                const field = document.getElementById(
+                  `asset-prompt-${sceneId}`,
+                ) as HTMLTextAreaElement | null;
+                if (field?.value.trim()) {
+                  overrides[sceneId] = field.value;
+                }
+              }
+
+              let hidden = form.querySelector(
+                'input[name="promptOverrides"]',
+              ) as HTMLInputElement | null;
+              if (!hidden) {
+                hidden = document.createElement("input");
+                hidden.type = "hidden";
+                hidden.name = "promptOverrides";
+                form.appendChild(hidden);
+              }
+              hidden.value = JSON.stringify(overrides);
+            }}
           >
             <input type="hidden" name="selectedSceneIds" value={selectedIdValue} />
+            <input type="hidden" name="promptOverrides" defaultValue="{}" />
             <div className="grid gap-2">
               <Label htmlFor="batchName">Batch name</Label>
               <Input id="batchName" name="batchName" placeholder="Scenes 1-20" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="outputFolder">Output folder</Label>
+              <p className="text-xs text-muted-foreground">
+                Defaults from Visual Plan. Changing it here updates this video’s
+                folder when you prepare/generate.
+              </p>
               <div className="flex gap-2">
                 <Input
                   id="outputFolder"
@@ -518,13 +793,20 @@ export function AssetsWorkflow({
                       Retry Failed Scenes
                     </Button>
                   </form>
-                  <form action={cancelImageBatch.bind(null, videoId)}>
-                    <input type="hidden" name="batchId" value={latestBatch.id} />
-                    <input type="hidden" name="selectedSceneIds" value={selectedIdValue} />
-                    <Button type="submit" size="sm" variant="outline">
-                      Cancel Running Batch
-                    </Button>
-                  </form>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    data-process-guard="off"
+                    disabled={isBatchCancelling}
+                    onClick={cancelRunningBatch}
+                  >
+                    {isBatchCancelling ? "Cancelling…" : "Cancel Running Batch"}
+                  </Button>
+                  <p className="basis-full text-xs text-muted-foreground">
+                    Cancel marks the batch stopped immediately; Flow exits at the next
+                    prompt, wait, or download checkpoint (not mid-network call).
+                  </p>
                   {latestBatch.payloadPath ? (
                     <>
                       <CopyPromptButton label="Copy payload path" prompt={latestBatch.payloadPath} />
@@ -582,13 +864,67 @@ export function AssetsWorkflow({
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Scene Selection</CardTitle>
+          <CardHeader>
+          <div className="flex flex-wrap items-center gap-2">
+            <CardTitle>Scene Selection</CardTitle>
+            <Badge variant="secondary">
+              {selectedIds.length} selected
+              {scenes.length > 0 ? ` / ${scenes.length}` : ""}
+            </Badge>
+          </div>
           <CardDescription>
-            Work in small batches for Google Flow, then import the downloaded files.
+            {isPodcastChannel
+              ? "For podcast: assign the image library first. Use Google Flow only for EPISODE_COVER / PART covers (select Flow-only covers)."
+              : "Work in small batches for Google Flow, then import the downloaded files."}
+            {structureGroups.length > 0
+              ? " You can also select every scene that belongs to a script structure block ([INTRO], [PART N], [CHAPTER…], [CLOSING], …)."
+              : ""}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {structureGroups.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                By script structure
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {structureGroups.map((group) => {
+                  const active = isStructureGroupSelected(group.sceneIds);
+                  return (
+                    <Button
+                      key={group.id}
+                      type="button"
+                      variant={active ? "default" : "outline"}
+                      size="sm"
+                      aria-pressed={active}
+                      className={
+                        active
+                          ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-600/90 hover:text-white"
+                          : undefined
+                      }
+                      onClick={() => selectStructureGroup(group.sceneIds)}
+                      title={
+                        active
+                          ? `Deselect ${group.count} scene${group.count === 1 ? "" : "s"} in [${group.label}]`
+                          : `Select ${group.count} scene${group.count === 1 ? "" : "s"} in [${group.label}]`
+                      }
+                    >
+                      [{group.label}]
+                      <span
+                        className={
+                          active
+                            ? "ml-1 text-white/80"
+                            : "ml-1 text-muted-foreground"
+                        }
+                      >
+                        ({group.count})
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => selectWhere(() => true)}>
               Select all
@@ -626,6 +962,18 @@ export function AssetsWorkflow({
             >
               With prompts
             </Button>
+            {isPodcastChannel ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  selectWhere((scene) => isPodcastFlowOnlyScene(scene))
+                }
+              >
+                Flow-only covers
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -687,6 +1035,7 @@ export function AssetsWorkflow({
                 <option value="downloaded">Downloaded</option>
                 <option value="attached">Attached</option>
                 <option value="failed">Failed</option>
+                <option value="rejected">Rejected (skipped downstream)</option>
                 <option value="missing-images">Missing images</option>
                 <option value="missing-prompts">Missing prompts</option>
               </select>
@@ -713,8 +1062,13 @@ export function AssetsWorkflow({
           </CardContent>
         </Card>
       ) : (
-        filteredScenes.map((scene) => (
-          <Card key={scene.id}>
+        filteredScenes.map((scene) => {
+          const rejected = isSceneRejected(scene.status);
+          return (
+          <Card
+            key={scene.id}
+            className={rejected ? "border-destructive/40 opacity-75" : undefined}
+          >
             <CardHeader>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex gap-3">
@@ -731,11 +1085,25 @@ export function AssetsWorkflow({
                     <CardDescription>
                       {scene.sceneType} - {preview(scene.scriptText)}
                     </CardDescription>
+                    {rejected ? (
+                      <p className="mt-1 text-xs font-medium text-destructive">
+                        Rejected — skipped in image batch, voiceover, stitch, and render.
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="muted">{statusLabel(scene.imageStatus)}</Badge>
-                  <Badge variant="outline">{statusLabel(scene.status)}</Badge>
+                  <Badge
+                    variant="outline"
+                    className={
+                      rejected
+                        ? "border-destructive/40 bg-destructive/10 text-destructive"
+                        : undefined
+                    }
+                  >
+                    {statusLabel(scene.status)}
+                  </Badge>
                 </div>
               </div>
             </CardHeader>
@@ -748,6 +1116,7 @@ export function AssetsWorkflow({
                       src={scene.imageUrl}
                       alt={`Scene ${scene.sortOrder}`}
                       className="h-full w-full object-cover"
+                      loading="lazy"
                     />
                   ) : (
                     <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
@@ -803,6 +1172,10 @@ export function AssetsWorkflow({
                       defaultValue={scene.imagePrompt ?? ""}
                       placeholder="Prompt for the scene image..."
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Edits here are sent with Prepare / Generate Selected even if you
+                      skip Save. Use Save asset info to keep them without generating.
+                    </p>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor={`asset-url-${scene.id}`}>Image URL</Label>
@@ -840,6 +1213,10 @@ export function AssetsWorkflow({
                         </option>
                       ))}
                     </select>
+                    <p className="text-xs text-muted-foreground">
+                      Rejected scenes are skipped in image batches, voiceover, stitch,
+                      and render. Re-stitch after rejecting if a master already exists.
+                    </p>
                   </div>
                 </div>
 
@@ -847,7 +1224,8 @@ export function AssetsWorkflow({
               </form>
             </CardContent>
           </Card>
-        ))
+          );
+        })
       )}
     </div>
   );

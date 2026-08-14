@@ -1,195 +1,42 @@
 "use client";
 
-import { Check, Copy } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Check, Copy, Loader2, Play } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { isBibleOneYearCategory } from "@/lib/the-bible-in-one-year-shared";
+import {
+  BIBLE_ONE_YEAR_SECTION_MAX_DAYS,
+  BIBLE_ONE_YEAR_TOTAL_DAYS,
+  bibleOneYearSectionDayCount,
+  buildBibleOneYearSectionPresets,
+  normalizeBibleOneYearSectionRange,
+  suggestNextBibleOneYearSection,
+} from "@/lib/the-bible-in-one-year-topic-batch";
+import type { TopicAngleLane } from "@/lib/channels";
+import {
+  buildTopicBatchPrompt,
+  type RecentTopicContext,
+  type TopicCategoryOption,
+  type TopicEditorialInstructions,
+} from "@/lib/topic-batch-prompt";
 
-type TopicCategoryOption = {
-  id: string;
-  label: string;
-  description: string;
-};
-
-type EditorialInstructions = {
-  role: string;
-  audience: string;
-  niche: string;
-  style: string[];
-  originalityRules: string[];
-  overusedAngles: string[];
-  requiredTopicFields: string[];
-};
-
-type RecentTopicContext = {
-  category: string | null;
-  title: string;
-  angle: string | null;
-  uniqueMechanism: string | null;
-  visualHook: string | null;
-  thumbnailIdea: string | null;
-};
-
-type WealthTopicQueueToolsProps = {
+type TopicQueueToolsProps = {
+  channelKey: string;
+  channelName: string;
   categories: TopicCategoryOption[];
-  editorialInstructions: EditorialInstructions;
+  editorialInstructions: TopicEditorialInstructions;
   recentTopics: RecentTopicContext[];
+  outlierAngleLanes?: TopicAngleLane[];
   selectedCategoryId?: string;
+  coveredBibleOneYearDays?: number[];
   importAction: (formData: FormData) => void | Promise<void>;
+  runBatchAction: (formData: FormData) => void | Promise<void>;
+  initialTopicBatchJson?: string;
 };
-
-function buildTopicBatchPrompt({
-  count,
-  selectedCategoryId,
-  categories,
-  editorialInstructions,
-  recentTopics,
-}: {
-  count: string;
-  selectedCategoryId?: string;
-  categories: TopicCategoryOption[];
-  editorialInstructions: EditorialInstructions;
-  recentTopics: RecentTopicContext[];
-}) {
-  const selectedCategory = categories.find((item) => item.id === selectedCategoryId);
-  const rotation = categories
-    .map((item) => `${item.id}: ${item.label} - ${item.description}`)
-    .join("\n");
-  const categoryInstruction =
-    selectedCategory
-      ? `Selected category:
-${selectedCategory.id}
-
-Category label:
-${selectedCategory.label}
-
-Category description:
-${selectedCategory.description}
-
-Important:
-Generate topic ideas only for this Wealth Insights category:
-${selectedCategory.label}.
-
-Every generated topic must use this exact category key: ${selectedCategory.id}.
-Every generated topic must clearly fit this selected category.
-Do not drift into other categories unless the connection to the selected category is direct and central.
-Cross-category references are allowed only when they support the selected category.`
-      : `Use this balanced category rotation and spread topics across all Wealth Insights categories as evenly as possible:\n${rotation}`;
-  const recentAcceptedTopics = recentTopics
-    .map((topic) => ({
-      category: topic.category,
-      title: topic.title,
-      angle: topic.angle,
-      uniqueMechanism: topic.uniqueMechanism,
-      visualHook: topic.visualHook,
-      thumbnailIdea: topic.thumbnailIdea,
-    }));
-  const recentMechanisms = recentTopics
-    .flatMap((topic) => [topic.uniqueMechanism, topic.visualHook, topic.thumbnailIdea])
-    .filter((item): item is string => Boolean(item?.trim()))
-    .slice(0, 15);
-
-  return `Generate ${count} YouTube topic ideas for Wealth Insights.
-
-Channel:
-Wealth Insights
-
-Your role:
-${editorialInstructions.role}
-
-Audience:
-${editorialInstructions.audience}
-
-Niche:
-${editorialInstructions.niche}
-
-Style:
-${editorialInstructions.style.map((item) => `- ${item}`).join("\n")}
-
-Number of topics requested:
-${count}
-
-Goal: CTR-friendly but varied topics for daily publishing.
-
-${categoryInstruction}
-
-Editorial originality rules:
-${editorialInstructions.originalityRules.map((item) => `- ${item}`).join("\n")}
-
-Originality mix:
-- About 30% may be safe clickable ideas.
-- About 40% should use fresher, less obvious mechanisms.
-- About 30% should be riskier high-upside ideas that feel unusual but still clear.
-${count === "7" ? "- For exactly 7 topics: 2 can be safe clickable ideas, 3 should use fresher original mechanisms, and 2 should be riskier high-upside ideas." : ""}
-- Even safe ideas must include a unique mechanism and visual hook.
-- Do not add an originality-level field. Keep the output JSON shape unchanged.
-
-Overused angles to avoid unless you have a genuinely fresh mechanism:
-${editorialInstructions.overusedAngles.map((item) => `- ${item}`).join("\n")}
-
-Recent accepted/used topics to avoid repeating:
-${JSON.stringify(recentAcceptedTopics, null, 2)}
-
-Recent mechanisms/visual hooks to avoid:
-${recentMechanisms.length > 0 ? recentMechanisms.map((item) => `- ${item}`).join("\n") : "- None yet"}
-
-Specific mechanism requirement:
-- The title should not just sound dramatic.
-- The topic must reveal a specific mechanism the viewer has probably felt but not clearly understood.
-- Bad: "Inflation Is Hurting Everyone"
-- Better: "Your Grocery Store Is Training You to Spend Faster"
-- The better version identifies a specific behavioral or retail mechanism that can be visualized.
-- Each topic must answer: "What is the actual mechanism this video explains?"
-- Store that answer in uniqueMechanism.
-
-Rules:
-- Do not simply generate the safest obvious personal finance topics.
-- First avoid repeating the recent topics and mechanisms listed above.
-- Each idea must have a different mechanism, not just a different title.
-- Prefer fresher mechanisms over common finance content.
-- Reject or avoid angles that are too close to recent topics.
-- Make the visualHook and thumbnailIdea distinct from previous videos.
-- Avoid making every topic about a rigged system, hidden trap, villain, or conspiracy-style framing.
-- Some ideas should come from behavior, timing, incentives, tradeoffs, habits, emotional decisions, everyday routines, quiet compounding effects, or misunderstood financial mechanics.
-- The channel can discuss traps and incentives, but not every topic should sound like the same "system keeps you poor" story.
-- Avoid repetition and make each topic meaningfully different from the others.
-- Use strong YouTube titles.
-- Make the finance topic clear.
-- Include an emotional trigger and a visual hook.
-- Keep each idea simple enough for animated explanation.
-- Do not make get-rich-quick claims.
-- Do not guarantee returns.
-- Do not use financial advice phrasing.
-- Avoid repeating the same angle.
-- repetitionRisk must be one of: low, medium, high.
-
-Required topic fields:
-${editorialInstructions.requiredTopicFields.map((field) => `- ${field}`).join("\n")}
-
-Return valid JSON only. Do not include markdown, prose, comments, or code fences.
-
-Return exactly this JSON shape:
-{
-  "topics": [
-    {
-      "category": "psychology",
-      "title": "The Money Habit That Feels Responsible But Keeps You Stuck",
-      "topic": "How fear-based financial decisions can look responsible while limiting progress",
-      "angle": "Some money habits feel safe because they reduce short-term anxiety, but they can quietly prevent long-term improvement.",
-      "uniqueMechanism": "A habit that reduces emotional discomfort today can become a financial cage tomorrow.",
-      "trigger": "self-recognition + discomfort",
-      "promise": "Help viewers recognize when a safe-looking money habit is actually keeping them stuck.",
-      "visualHook": "Main host polishing a small safe labeled SECURITY while the safe slowly turns into a locked cage around him.",
-      "thumbnailIdea": "Host trapped inside a shiny safe with huge text SAFE OR STUCK?",
-      "repetitionRisk": "low"
-    }
-  ]
-}
-
-The example above demonstrates the JSON shape only. In focused category mode, every generated topic must use the selected category key instead of copying the example category.`;
-}
 
 function parseTopicBatch(value: string) {
   const data = JSON.parse(value) as unknown;
@@ -215,29 +62,93 @@ function parseTopicBatch(value: string) {
   return topics.length;
 }
 
-export function WealthTopicQueueTools({
+export function TopicQueueTools({
+  channelKey,
+  channelName,
   categories,
   editorialInstructions,
   recentTopics,
+  outlierAngleLanes = [],
   selectedCategoryId = "",
+  coveredBibleOneYearDays = [],
   importAction,
-}: WealthTopicQueueToolsProps) {
+  runBatchAction,
+  initialTopicBatchJson = "",
+}: TopicQueueToolsProps) {
+  const isBibleOneYear = isBibleOneYearCategory(selectedCategoryId);
+  const sectionPresets = useMemo(() => buildBibleOneYearSectionPresets(), []);
+  const suggestedSection = useMemo(
+    () => suggestNextBibleOneYearSection(coveredBibleOneYearDays),
+    [coveredBibleOneYearDays],
+  );
+
   const [count, setCount] = useState("14");
+  const [startDay, setStartDay] = useState(String(suggestedSection.startDay));
+  const [endDay, setEndDay] = useState(String(suggestedSection.endDay));
   const [copied, setCopied] = useState(false);
-  const [jsonText, setJsonText] = useState("");
-  const [parseMessage, setParseMessage] = useState("");
+  const [jsonText, setJsonText] = useState(initialTopicBatchJson);
+  const [parseMessage, setParseMessage] = useState(
+    initialTopicBatchJson
+      ? "Loaded latest ChatGPT topic batch draft. Parse or Import Topics."
+      : "",
+  );
+  const [isRunning, startRunTransition] = useTransition();
   const selectedCategory = categories.find((item) => item.id === selectedCategoryId);
+
+  useEffect(() => {
+    if (!initialTopicBatchJson) {
+      return;
+    }
+
+    setJsonText(initialTopicBatchJson);
+    setParseMessage(
+      "Loaded latest ChatGPT topic batch draft. Parse or Import Topics.",
+    );
+  }, [initialTopicBatchJson]);
+
+  useEffect(() => {
+    if (!isBibleOneYear) {
+      return;
+    }
+    setStartDay(String(suggestedSection.startDay));
+    setEndDay(String(suggestedSection.endDay));
+  }, [isBibleOneYear, suggestedSection.endDay, suggestedSection.startDay]);
+
+  const bibleSection = useMemo(() => {
+    if (!isBibleOneYear) {
+      return null;
+    }
+    return normalizeBibleOneYearSectionRange(Number(startDay), Number(endDay));
+  }, [endDay, isBibleOneYear, startDay]);
+
+  const effectiveCount = bibleSection
+    ? String(bibleOneYearSectionDayCount(bibleSection))
+    : count;
 
   const prompt = useMemo(
     () =>
       buildTopicBatchPrompt({
-        count,
+        channelName,
+        count: effectiveCount,
         selectedCategoryId,
         categories,
         editorialInstructions,
         recentTopics,
+        outlierAngleLanes,
+        bibleOneYearSection: bibleSection,
+        coveredBibleOneYearDays,
       }),
-    [categories, count, editorialInstructions, recentTopics, selectedCategoryId],
+    [
+      bibleSection,
+      categories,
+      channelName,
+      coveredBibleOneYearDays,
+      editorialInstructions,
+      effectiveCount,
+      outlierAngleLanes,
+      recentTopics,
+      selectedCategoryId,
+    ],
   );
 
   async function copyPrompt() {
@@ -256,20 +167,38 @@ export function WealthTopicQueueTools({
         selectedCategoryId
           ? parsed.topics.filter((topic) => topic.category !== selectedCategoryId).length
           : 0;
-      const requiredFields = [
-        "category",
-        "title",
-        "topic",
-        "angle",
-        "uniqueMechanism",
-        "trigger",
-        "promise",
-        "visualHook",
-        "thumbnailIdea",
-        "repetitionRisk",
-      ];
+      const requiredFields = isBibleOneYear
+        ? [
+            "category",
+            "title",
+            "topic",
+            "dayNumber",
+            "todayReadingDisplay",
+            "chapters",
+          ]
+        : [
+            "category",
+            "title",
+            "topic",
+            "angle",
+            "uniqueMechanism",
+            "trigger",
+            "promise",
+            "visualHook",
+            "thumbnailIdea",
+            "repetitionRisk",
+          ];
       const missingNewFieldCount = parsed.topics.filter((topic) =>
-        requiredFields.some((field) => typeof topic[field] !== "string" || !String(topic[field]).trim()),
+        requiredFields.some((field) => {
+          const value = topic[field];
+          if (field === "dayNumber") {
+            return !(typeof value === "number" || typeof value === "string");
+          }
+          if (field === "chapters") {
+            return !Array.isArray(value) || value.length === 0;
+          }
+          return typeof value !== "string" || !String(value).trim();
+        }),
       ).length;
       const mismatchMessage =
         mismatchCount > 0
@@ -287,52 +216,198 @@ export function WealthTopicQueueTools({
     }
   }
 
+  function onRunBatch(formData: FormData) {
+    startRunTransition(async () => {
+      await runBatchAction(formData);
+    });
+  }
+
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <section className="space-y-4 rounded-md border bg-muted/20 p-4">
         <div>
           <h3 className="text-sm font-semibold">Topic Batch Generator</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Copy a structured request for manual ChatGPT topic generation.
+            {isBibleOneYear
+              ? "Generate ordered Bible-in-One-Year day sections (up to 30 days per batch, 365 total) into the Daily Topic Queue."
+              : "Copy for manual ChatGPT, or Run Batch to send the same request through Chrome CDP (Google-logged ChatGPT) and fill the Daily Topic Queue."}
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="grid gap-2">
-            <Label htmlFor="topicBatchCount">Number of topics</Label>
-            <select
-              id="topicBatchCount"
-              value={count}
-              onChange={(event) => setCount(event.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-            >
-              <option value="7">7</option>
-              <option value="14">14</option>
-              <option value="28">28</option>
-            </select>
-          </div>
+        {isBibleOneYear ? (
+          <div className="space-y-3">
+            <div className="grid gap-2">
+              <Label htmlFor="bibleOneYearSectionPreset">Year section</Label>
+              <select
+                id="bibleOneYearSectionPreset"
+                value={`${bibleSection?.startDay}-${bibleSection?.endDay}`}
+                onChange={(event) => {
+                  const preset = sectionPresets.find(
+                    (item) =>
+                      `${item.startDay}-${item.endDay}` === event.target.value,
+                  );
+                  if (!preset) {
+                    return;
+                  }
+                  setStartDay(String(preset.startDay));
+                  setEndDay(String(preset.endDay));
+                }}
+                className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                disabled={isRunning}
+              >
+                {sectionPresets.map((preset) => (
+                  <option
+                    key={preset.id}
+                    value={`${preset.startDay}-${preset.endDay}`}
+                  >
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="bibleOneYearStartDay">Start day</Label>
+                <Input
+                  id="bibleOneYearStartDay"
+                  type="number"
+                  min={1}
+                  max={BIBLE_ONE_YEAR_TOTAL_DAYS}
+                  value={startDay}
+                  onChange={(event) => setStartDay(event.target.value)}
+                  disabled={isRunning}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="bibleOneYearEndDay">End day</Label>
+                <Input
+                  id="bibleOneYearEndDay"
+                  type="number"
+                  min={1}
+                  max={BIBLE_ONE_YEAR_TOTAL_DAYS}
+                  value={endDay}
+                  onChange={(event) => setEndDay(event.target.value)}
+                  disabled={isRunning}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
+              <p>
+                This batch will request{" "}
+                <span className="font-medium text-foreground">
+                  {effectiveCount} days
+                </span>{" "}
+                ({bibleSection?.startDay}–{bibleSection?.endDay}). Max{" "}
+                {BIBLE_ONE_YEAR_SECTION_MAX_DAYS} days per section ·{" "}
+                {BIBLE_ONE_YEAR_TOTAL_DAYS} days in the full year.
+              </p>
+              <p className="mt-1">
+                Covered days already in queue:{" "}
+                {coveredBibleOneYearDays.length > 0
+                  ? coveredBibleOneYearDays.join(", ")
+                  : "none yet"}
+              </p>
+              <p className="mt-1">
+                Suggested next section: Days {suggestedSection.startDay}–
+                {suggestedSection.endDay}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="topicBatchCount">Number of topics</Label>
+              <Input
+                id="topicBatchCount"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={28}
+                step={1}
+                value={count}
+                onChange={(event) => setCount(event.target.value)}
+                onBlur={() => {
+                  const parsed = Number.parseInt(count, 10);
+                  if (!Number.isFinite(parsed)) {
+                    setCount("14");
+                    return;
+                  }
+                  setCount(String(Math.max(1, Math.min(28, parsed))));
+                }}
+                disabled={isRunning}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Topic request mode</Label>
+              <div className="flex min-h-9 items-center rounded-md border bg-background px-3 py-2 text-sm">
+                {selectedCategory
+                  ? `Focused: ${selectedCategory.label}`
+                  : `Balanced across all ${channelName} categories`}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!isBibleOneYear ? null : (
           <div className="grid gap-2">
             <Label>Topic request mode</Label>
             <div className="flex min-h-9 items-center rounded-md border bg-background px-3 py-2 text-sm">
-              {selectedCategory
-                ? `Focused: ${selectedCategory.label}`
-                : "Balanced across all Wealth Insights categories"}
+              Focused: {selectedCategory?.label ?? "The Bible in One Year"}
             </div>
           </div>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={copyPrompt} disabled={isRunning}>
+            {copied ? <Check /> : <Copy />}
+            {copied ? "Copied" : "Copy Topic Batch Request"}
+          </Button>
+
+          <form action={onRunBatch}>
+            <input type="hidden" name="channelKey" value={channelKey} />
+            <input type="hidden" name="selectedCategory" value={selectedCategoryId} />
+            <input type="hidden" name="topicBatchCount" value={effectiveCount} />
+            {bibleSection ? (
+              <>
+                <input
+                  type="hidden"
+                  name="bibleOneYearStartDay"
+                  value={bibleSection.startDay}
+                />
+                <input
+                  type="hidden"
+                  name="bibleOneYearEndDay"
+                  value={bibleSection.endDay}
+                />
+              </>
+            ) : null}
+            <Button type="submit" disabled={isRunning}>
+              {isRunning ? <Loader2 className="animate-spin" /> : <Play />}
+              {isRunning ? "Running Batch…" : "Run Batch"}
+            </Button>
+          </form>
         </div>
 
-        <Button type="button" variant="outline" onClick={copyPrompt}>
-          {copied ? <Check /> : <Copy />}
-          {copied ? "Copied" : "Copy Topic Batch Request"}
-        </Button>
         <div className="grid gap-1 rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground">
           <p>
             Prompt context: Category mode: {selectedCategory ? "Focused" : "Balanced"}
           </p>
           <p>Recent topics included: {recentTopics.length}</p>
-          <p>Editorial instructions: Included</p>
+          <p>
+            {isBibleOneYear
+              ? "Reading-plan continuity: Included"
+              : "Editorial instructions: Included"}
+          </p>
           <p>Anti-repetition context: Included</p>
+          <p>
+            Run Batch uses Chrome CDP at{" "}
+            <code className="rounded bg-muted px-1">CHATGPT_CDP_URL</code> /{" "}
+            <code className="rounded bg-muted px-1">9222</code> with ChatGPT logged
+            in via Google.
+          </p>
         </div>
       </section>
 
@@ -340,11 +415,13 @@ export function WealthTopicQueueTools({
         <div>
           <h3 className="text-sm font-semibold">Import Topic Batch</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Paste the JSON response, validate it, then save new topics.
+            Manual fallback: paste the JSON response, validate it, then save new
+            topics. Run Batch imports automatically when ChatGPT finishes.
           </p>
         </div>
 
         <form action={importAction} className="space-y-3">
+          <input type="hidden" name="channelKey" value={channelKey} />
           <input type="hidden" name="selectedCategory" value={selectedCategoryId} />
           <div className="grid gap-2">
             <Label htmlFor="topicBatchJson">Paste Topic Batch JSON</Label>
@@ -357,7 +434,12 @@ export function WealthTopicQueueTools({
                 setJsonText(event.target.value);
                 setParseMessage("");
               }}
-              placeholder='{"topics":[{"category":"housing","title":"","topic":""}]}'
+              placeholder={
+                isBibleOneYear
+                  ? '{"topics":[{"category":"the_bible_in_one_year","dayNumber":1,"title":"Day 1 — Genesis 1–2","topic":"Genesis 1–2","chapters":[]}]}'
+                  : '{"topics":[{"category":"category_id","title":"","topic":""}]}'
+              }
+              disabled={isRunning}
             />
           </div>
 
@@ -366,13 +448,18 @@ export function WealthTopicQueueTools({
           ) : null}
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={parseBatch}>
+            <Button type="button" variant="outline" onClick={parseBatch} disabled={isRunning}>
               Parse Topic Batch
             </Button>
-            <Button type="submit">Import Topics</Button>
+            <Button type="submit" disabled={isRunning}>
+              Import Topics
+            </Button>
           </div>
         </form>
       </section>
     </div>
   );
 }
+
+/** @deprecated Prefer TopicQueueTools */
+export const WealthTopicQueueTools = TopicQueueTools;

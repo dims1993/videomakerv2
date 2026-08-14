@@ -149,11 +149,27 @@ export async function startProcess({
   return process.id;
 }
 
+const TERMINAL_PROCESS_STATUSES = new Set(["success", "failed", "cancelled"]);
+
 export async function updateProcess(
   processId: string | null | undefined,
   input: UpdateProcessInput,
 ) {
   if (!processId) {
+    return;
+  }
+
+  const existing = await prisma.processRun.findUnique({
+    where: { id: processId },
+    select: { status: true },
+  });
+
+  // Never revive a finished/cancelled run (e.g. cancel API marked cancelled
+  // while a long loop still calls updateProcess with status: "running").
+  if (existing && TERMINAL_PROCESS_STATUSES.has(existing.status)) {
+    if (input.logMessage) {
+      await appendProcessLog(processId, input.logMessage, input.logLevel);
+    }
     return;
   }
 

@@ -23,6 +23,13 @@ export type FormattedSubtitleCue = ParsedSubtitleCue & {
   warnings?: string[];
 };
 
+/** No spoken dialogue → no captions; keep timeline offset via segment duration. */
+export function isSilentSubtitleVoiceoverText(
+  text: string | null | undefined,
+) {
+  return !text?.trim();
+}
+
 const timestampPattern =
   /((?:\d{1,2}:)?\d{1,2}:\d{2}[,.]\d{1,3})\s*-->\s*((?:\d{1,2}:)?\d{1,2}:\d{2}[,.]\d{1,3})/;
 

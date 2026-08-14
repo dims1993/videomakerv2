@@ -473,7 +473,19 @@ export async function checkFfmpegAssFilterAvailable(): Promise<FfmpegAssFilterAv
   };
 }
 
+const FFMPEG_DIAGNOSTICS_TTL_MS = 60_000;
+let cachedFfmpegDiagnostics:
+  | { at: number; value: RenderFfmpegDiagnostics }
+  | null = null;
+
 export async function getRenderFfmpegDiagnostics(): Promise<RenderFfmpegDiagnostics> {
+  if (
+    cachedFfmpegDiagnostics &&
+    Date.now() - cachedFfmpegDiagnostics.at < FFMPEG_DIAGNOSTICS_TTL_MS
+  ) {
+    return cachedFfmpegDiagnostics.value;
+  }
+
   const [ffmpegAvailability, assFilterAvailability, ffprobeAvailability] =
     await Promise.all([
       checkFfmpegAvailable(),
@@ -481,7 +493,7 @@ export async function getRenderFfmpegDiagnostics(): Promise<RenderFfmpegDiagnost
       checkFfprobeAvailable(),
     ]);
 
-  return {
+  const value: RenderFfmpegDiagnostics = {
     ffmpeg: {
       envPath: process.env.FFMPEG_PATH?.trim() || null,
       binary: ffmpegAvailability.binaryPath,
@@ -500,6 +512,9 @@ export async function getRenderFfmpegDiagnostics(): Promise<RenderFfmpegDiagnost
       error: ffprobeAvailability.error ?? null,
     },
   };
+
+  cachedFfmpegDiagnostics = { at: Date.now(), value };
+  return value;
 }
 
 export async function ensureFfmpegAssFilterAvailable() {

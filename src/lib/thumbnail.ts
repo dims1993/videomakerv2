@@ -1,3 +1,5 @@
+import { WEALTH_INSIGHTS_MAIN_HOST_DESCRIPTOR } from "@/lib/wealth-insights-visual-brief";
+
 export type ThumbnailConcept = {
   id: "A" | "B" | "C";
   name: string;
@@ -42,8 +44,8 @@ export const WEALTH_INSIGHTS_THUMBNAIL_STYLE = {
   ],
 };
 
-export const WEALTH_INSIGHTS_HOST_DESCRIPTOR =
-  "main recurring finance host from the shared Wealth Insights character universe, with an oversized cartoon head, narrow forehead area, broad lower face, cleft chin with a visible central crease, clean-shaven face, heavy jaw and cheek area, no visible neck, head directly attached to the shirt collar, simple rounded cartoon nose, wide white cartoon eyes with small black pupils, small rounded ears, short simple brown hair, thick eyebrows, slim small upright body, white collared shirt, navy blazer, dark trousers, clean black outlines, flat colors, light soft shading";
+/** Canonical Wealth Insights host look (single source: wealth-insights-visual-brief). */
+export const WEALTH_INSIGHTS_HOST_DESCRIPTOR = WEALTH_INSIGHTS_MAIN_HOST_DESCRIPTOR;
 
 export const THUMBNAIL_NEGATIVE_PROMPT =
   "photorealism, 3D, realistic human face, clutter, tiny details, long text, subtitles, paragraphs, watermarks, logos, copyrighted characters, copied channel style, busy background, small text";

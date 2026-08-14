@@ -3,11 +3,15 @@ import path from "node:path";
 
 import {
   appendImageBatchLog,
+  assertImageBatchNotCanceled,
   generatedImagesDir,
+  ImageBatchCanceledError,
+  isImageBatchCanceledStatus,
   localImageUrl,
   removePreviousGeneratedImage,
   stableSceneImageFileName,
 } from "@/lib/image-batches";
+import { resolveImageOutputFolderAbsolute } from "@/lib/image-output-folder";
 import { prisma } from "@/lib/prisma";
 
 type FlowPage = {
@@ -638,6 +642,7 @@ async function countNewStableFlowImages({
   );
 
   while (Date.now() - startedAt < flowConfig.responseTimeoutMs) {
+    await assertImageBatchNotCanceled(batchId);
     const elapsed = Date.now() - startedAt;
 
     if (elapsed - lastGalleryRefreshAt > 5000) {
@@ -687,6 +692,27 @@ async function refreshFlowGallery(page: FlowPage) {
     window.scrollTo(0, 0);
   }, null);
   await page.waitForTimeout(300);
+}
+
+async function harvestKnownFlowMediaIds(page: FlowPage, known: Set<string>) {
+  // Flow virtualizes the gallery, so a single snapshot only sees ~14 tiles.
+  // Sweep the page so previously generated ids stay excluded even if they
+  // scroll out of view and later reappear.
+  const scrollRatios = [0, 0.2, 0.4, 0.6, 0.8, 1, 0];
+
+  for (const ratio of scrollRatios) {
+    await page.evaluate<number, unknown>((value) => {
+      window.scrollTo(0, Math.floor(document.body.scrollHeight * value));
+    }, ratio);
+    await page.waitForTimeout(350);
+    mergeMediaIds(known, await snapshotFlowMediaIds(page));
+  }
+
+  await page.evaluate<null, unknown>(() => {
+    window.scrollTo(0, 0);
+  }, null);
+  await page.waitForTimeout(300);
+  mergeMediaIds(known, await snapshotFlowMediaIds(page));
 }
 
 async function submitPrompt(page: FlowPage) {
@@ -927,26 +953,37 @@ async function waitForNewMediaIds(
 function assignMediaIdsToBatchScenes(scenes: SceneForFlow[], mediaIds: string[]) {
   const scopedScenes = [...scenes].sort((a, b) => a.sortOrder - b.sortOrder);
   const expectedCount = scopedScenes.length;
-  // Flow renders the newest generated image first in the gallery/DOM. When the
-  // page exposes extra stale media ids, keep only the newest ids for this scope,
-  // then reverse those ids back to prompt submission order.
-  const discoveredMedia = [...mediaIds]
-    .filter(Boolean)
-    .slice(0, expectedCount)
-    .reverse();
+  const discoveredMedia = [...mediaIds].filter(Boolean);
+
+  // Never guess when the gallery is polluted with extras or incomplete. A wrong
+  // "newest N" pick reattaches stale Flow media from earlier runs.
+  if (discoveredMedia.length !== expectedCount) {
+    return new Map<string, string>();
+  }
+
+  // Flow renders the newest generated image first in the gallery/DOM. Reverse
+  // back to prompt submission order for this exact-size sub-batch.
+  const orderedMedia = [...discoveredMedia].reverse();
   const assignments = new Map<string, string>();
-  const count = Math.min(scopedScenes.length, discoveredMedia.length);
 
-  for (let index = 0; index < count; index += 1) {
+  for (let index = 0; index < expectedCount; index += 1) {
     const scene = scopedScenes[index];
-    const mediaItem = discoveredMedia[index];
+    const mediaItem = orderedMedia[index];
 
-    if (mediaItem) {
+    if (scene && mediaItem) {
       assignments.set(scene.id, mediaItem);
     }
   }
 
   return assignments;
+}
+
+function mergeMediaIds(target: Set<string>, ids: Iterable<string>) {
+  for (const id of ids) {
+    if (id) {
+      target.add(id);
+    }
+  }
 }
 
 function assignNewestMediaIdsFirst(scenes: SceneForFlow[], mediaIds: string[]) {
@@ -1182,35 +1219,77 @@ export async function processBatchWithGoogleFlow(batchId: string) {
   const batchSize = Math.min(Math.max(batch.parallelCount || flowConfig.batchSize, 1), 8);
   const batches = buildFlowBatches(queuedScenes, batchSize);
 
-  await prisma.imageBatch.update({
-    where: { id: batchId },
+  if (isImageBatchCanceledStatus(batch.status)) {
+    await appendImageBatchLog(batchId, "Flow batch run skipped: batch already canceled.");
+
+    return {
+      ok: false,
+      canceled: true,
+      message: "Batch already canceled.",
+    };
+  }
+
+  const started = await prisma.imageBatch.updateMany({
+    where: {
+      id: batchId,
+      status: { notIn: ["canceled", "cancelled"] },
+    },
     data: { status: "running" },
   });
+
+  if (started.count === 0) {
+    await appendImageBatchLog(batchId, "Flow batch run skipped: batch was canceled before start.");
+
+    return {
+      ok: false,
+      canceled: true,
+      message: "Batch canceled before start.",
+    };
+  }
+
   await appendImageBatchLog(
     batchId,
     `queued ${queuedScenes.length} scenes in ${batches.length} Flow batch(es), size ${batchSize}`,
   );
 
+  let session: FlowBrowserSession | null = null;
   try {
-    const session = await launchGoogleFlow(playwright, batchId);
+    session = await launchGoogleFlow(playwright, batchId);
     const page = await getFlowPage(session, batchId);
-    const outputFolder =
-      batch.outputFolder || generatedImagesDir(batch.videoId, batch.video.title);
+    // Prefer absolute paths for Flow downloads so relative batch.outputFolder still works.
+    const outputFolder = resolveImageOutputFolderAbsolute(
+      batch.outputFolder || null,
+      batch.videoId,
+      batch.video.title,
+    );
     let attached = 0;
     let failed = 0;
-    const runUsedMediaIds = new Set<string>();
+    // Flow's gallery only keeps a small visible window (~14). IDs that scroll
+    // out and later back in look "new" unless we remember every id already seen
+    // in this run (plus ids attached in earlier sub-batches).
+    const knownMediaIds = new Set<string>();
 
     await refreshFlowGallery(page);
+    await harvestKnownFlowMediaIds(page, knownMediaIds);
+    await appendImageBatchLog(
+      batchId,
+      `Seeded known Flow media ids from gallery: ${knownMediaIds.size}`,
+    );
 
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+      await assertImageBatchNotCanceled(batchId);
       const sceneBatch = batches[batchIndex];
+
+      await harvestKnownFlowMediaIds(page, knownMediaIds);
+      const baselineImageSignatures = await snapshotFlowImageSignatures(page);
 
       await appendImageBatchLog(
         batchId,
-        `Flow batch ${batchIndex + 1}/${batches.length}: submitting ${sceneBatch.length} prompt(s)`,
+        `Flow batch ${batchIndex + 1}/${batches.length}: submitting ${sceneBatch.length} prompt(s); known_media=${knownMediaIds.size}`,
       );
 
       for (const scene of sceneBatch) {
+        await assertImageBatchNotCanceled(batchId);
         await prisma.scene.update({
           where: { id: scene.id },
           data: { imageStatus: "generating", imageError: null },
@@ -1224,12 +1303,9 @@ export async function processBatchWithGoogleFlow(batchId: string) {
         await page.waitForTimeout(flowConfig.submitGapMs);
       }
 
-      // Snapshot after all prompts are submitted so gallery images visible during
-      // submission are excluded from the "new media" set for this sub-batch.
+      await assertImageBatchNotCanceled(batchId);
       await page.waitForTimeout(flowConfig.postReadyMs);
       await refreshFlowGallery(page);
-      const baselineIds = await snapshotFlowMediaIds(page);
-      const baselineImageSignatures = await snapshotFlowImageSignatures(page);
 
       const readyCount = await countNewStableFlowImages({
         page,
@@ -1249,11 +1325,14 @@ export async function processBatchWithGoogleFlow(batchId: string) {
       const savedSceneIds = new Set<string>();
       const classifyStartedAt = Date.now();
       let classifyAttempt = 0;
+      let exactMatchHits = 0;
+      let lastExactKey = "";
 
       while (
         savedSceneIds.size < sceneBatch.length &&
         Date.now() - classifyStartedAt < flowConfig.batchClassifyMs
       ) {
+        await assertImageBatchNotCanceled(batchId);
         classifyAttempt += 1;
         const pendingScenes = sceneBatch.filter((scene) => !savedSceneIds.has(scene.id));
 
@@ -1262,59 +1341,66 @@ export async function processBatchWithGoogleFlow(batchId: string) {
           `Classifying Flow batch ${batchIndex + 1}, attempt ${classifyAttempt}: ${savedSceneIds.size}/${sceneBatch.length} saved`,
         );
 
-        const newMediaIds = (await listNewFlowMediaIds(page, baselineIds)).filter(
-          (mediaId) => !runUsedMediaIds.has(mediaId),
-        );
+        const newMediaIds = await listNewFlowMediaIds(page, knownMediaIds);
 
-        if (newMediaIds.length < pendingScenes.length) {
+        if (newMediaIds.length !== pendingScenes.length) {
+          exactMatchHits = 0;
+          lastExactKey = "";
           await appendImageBatchLog(
             batchId,
-            `Flow batch ${batchIndex + 1}: waiting for media ids (${newMediaIds.length}/${pendingScenes.length} ready).`,
+            `Flow batch ${batchIndex + 1}: waiting for exact media id match (${newMediaIds.length}/${pendingScenes.length}); refusing ambiguous extras.`,
           );
           await page.waitForTimeout(3500);
           await refreshFlowGallery(page);
           continue;
         }
 
-        if (
-          newMediaIds.length > pendingScenes.length &&
-          classifyAttempt < 4 &&
-          Date.now() - classifyStartedAt < flowConfig.batchClassifyMs - 5000
-        ) {
+        const exactKey = newMediaIds.join("|");
+
+        if (exactKey === lastExactKey) {
+          exactMatchHits += 1;
+        } else {
+          lastExactKey = exactKey;
+          exactMatchHits = 1;
+        }
+
+        if (exactMatchHits < 2) {
           await appendImageBatchLog(
             batchId,
-            `Flow batch ${batchIndex + 1}: ${newMediaIds.length} new media id(s) for ${pendingScenes.length} scene(s); waiting for gallery to settle.`,
+            `Flow batch ${batchIndex + 1}: exact media id set seen once; confirming stability.`,
           );
-          await page.waitForTimeout(3500);
+          await page.waitForTimeout(1500);
           await refreshFlowGallery(page);
           continue;
         }
 
         const assignments = assignMediaIdsToBatchScenes(pendingScenes, newMediaIds);
 
-        if (assignments.size > 0) {
+        if (assignments.size !== pendingScenes.length) {
           await appendImageBatchLog(
             batchId,
-            `Google Flow batch assignment: batch ${batchId} expected ${pendingScenes.length} found ${newMediaIds.length}; ${pendingScenes
-              .map((scene) => {
-                const mediaId = assignments.get(scene.id);
-
-                return mediaId
-                  ? `scene ${scene.sortOrder.toString().padStart(3, "0")} -> media ${mediaId.slice(0, 8)} -> ${stableSceneImageFileName(scene.id)}`
-                  : `scene ${scene.sortOrder.toString().padStart(3, "0")} -> missing -> needs_retry`;
-              })
-              .join(", ")}`,
+            `Flow batch ${batchIndex + 1}: exact count matched but assignment incomplete; retrying.`,
           );
+          await page.waitForTimeout(2500);
+          await refreshFlowGallery(page);
+          continue;
         }
 
-        if (newMediaIds.length > pendingScenes.length) {
-          await appendImageBatchLog(
-            batchId,
-            `Google Flow returned ${newMediaIds.length} new media id(s) for ${pendingScenes.length} pending scene(s); using newest ${pendingScenes.length}, older extras ignored.`,
-          );
-        }
+        await appendImageBatchLog(
+          batchId,
+          `Google Flow batch assignment: batch ${batchId} expected ${pendingScenes.length} found ${newMediaIds.length}; ${pendingScenes
+            .map((scene) => {
+              const mediaId = assignments.get(scene.id);
+
+              return mediaId
+                ? `scene ${scene.sortOrder.toString().padStart(3, "0")} -> media ${mediaId.slice(0, 8)} -> ${stableSceneImageFileName(scene.id)}`
+                : `scene ${scene.sortOrder.toString().padStart(3, "0")} -> missing -> needs_retry`;
+            })
+            .join(", ")}`,
+        );
 
         for (const scene of pendingScenes) {
+          await assertImageBatchNotCanceled(batchId);
           const mediaId = assignments.get(scene.id);
 
           if (!mediaId) {
@@ -1330,10 +1416,14 @@ export async function processBatchWithGoogleFlow(batchId: string) {
               mediaId,
               outputFolder,
             });
-            runUsedMediaIds.add(mediaId);
+            knownMediaIds.add(mediaId);
             savedSceneIds.add(scene.id);
             attached += 1;
           } catch (error) {
+            if (error instanceof ImageBatchCanceledError) {
+              throw error;
+            }
+
             const message =
               error instanceof Error
                 ? `Scene ${scene.sortOrder} download failed: ${error.message}`
@@ -1351,12 +1441,15 @@ export async function processBatchWithGoogleFlow(batchId: string) {
         await refreshFlowGallery(page);
       }
 
+      await harvestKnownFlowMediaIds(page, knownMediaIds);
+
       for (const scene of sceneBatch) {
         if (savedSceneIds.has(scene.id)) {
           continue;
         }
 
-        const message = "No generated image was attached for this scene.";
+        const message =
+          "No generated image was attached for this scene (ambiguous or incomplete Flow gallery match).";
 
         failed += 1;
         await prisma.scene.update({
@@ -1368,6 +1461,24 @@ export async function processBatchWithGoogleFlow(batchId: string) {
           `scene ${scene.sortOrder.toString().padStart(3, "0")} -> missing -> needs_retry`,
         );
       }
+    }
+
+    const batchAfterRun = await prisma.imageBatch.findUnique({
+      where: { id: batchId },
+      select: { status: true },
+    });
+
+    if (isImageBatchCanceledStatus(batchAfterRun?.status)) {
+      await appendImageBatchLog(
+        batchId,
+        `Flow run stopped after cancel request: ${attached} attached before stop.`,
+      );
+
+      return {
+        ok: false,
+        canceled: true,
+        message: `Batch canceled after ${attached} attached image(s).`,
+      };
     }
 
     await prisma.imageBatch.update({
@@ -1388,9 +1499,39 @@ export async function processBatchWithGoogleFlow(batchId: string) {
 
     return {
       ok: attached > 0 && failed === 0,
+      canceled: false,
       message: `Flow run finished: ${attached} attached, ${failed} failed.`,
     };
   } catch (error) {
+    if (error instanceof ImageBatchCanceledError) {
+      await prisma.scene.updateMany({
+        where: {
+          imageBatchId: batchId,
+          imageStatus: { in: ["queued", "generating"] },
+        },
+        data: {
+          imageStatus: "pending",
+          imageError: null,
+          imageBatchId: null,
+          imageFileName: null,
+        },
+      });
+      await prisma.imageBatch.update({
+        where: { id: batchId },
+        data: { status: "canceled" },
+      });
+      await appendImageBatchLog(
+        batchId,
+        "Flow run stopped: Cancel Running Batch was activated. Remaining queued/generating scenes were reset.",
+      );
+
+      return {
+        ok: false,
+        canceled: true,
+        message: "Batch canceled. Flow automation stopped.",
+      };
+    }
+
     const message =
       error instanceof Error
         ? `Google Flow automation failed: ${error.message}`
@@ -1406,7 +1547,28 @@ export async function processBatchWithGoogleFlow(batchId: string) {
     });
     await appendImageBatchLog(batchId, message);
 
-    return { ok: false, message };
+    return { ok: false, canceled: false, message };
+  } finally {
+    if (session?.browser?.close) {
+      try {
+        // CDP: disconnect Playwright without requiring Chrome to exit.
+        // Pipeline Assets will quit Chrome afterward when moving to voiceover.
+        await session.browser.close();
+        await appendImageBatchLog(
+          batchId,
+          session.usesExistingChrome
+            ? "Disconnected Playwright from Chrome CDP."
+            : "Closed Flow Chromium browser.",
+        );
+      } catch (closeError) {
+        await appendImageBatchLog(
+          batchId,
+          `Chrome disconnect warning: ${
+            closeError instanceof Error ? closeError.message : String(closeError)
+          }`,
+        );
+      }
+    }
   }
 }
 

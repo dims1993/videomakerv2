@@ -1,11 +1,12 @@
-import { access, readFile, stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import Link from "next/link";
+import { Prisma } from "@prisma/client";
 import { notFound } from "next/navigation";
 import type React from "react";
-import { Fragment } from "react";
-import { ArrowLeft, ImageIcon, Mic2, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Fragment, Suspense } from "react";
+import { ArrowLeft, ImageIcon, ListPlus, Mic2, Plus, Sparkles, Trash2 } from "lucide-react";
 
 import {
   applyCleanSubtitlePunctuation,
@@ -16,12 +17,8 @@ import {
   deleteSceneRange,
   deleteSelectedScenes,
   deleteVideo,
-  generateThumbnailConcepts,
-  generateThumbnailImageWithFlow,
-  generateThumbnailPrompt,
   importScenes,
   importScenePatch,
-  importHookReplacementPatch,
   generateSceneVoiceovers,
   generateMissingSceneVoiceovers,
   generateSelectedSceneVoiceovers,
@@ -29,9 +26,6 @@ import {
   generateSubtitlesForAllReadySegments,
   generateSubtitlesForSegment,
   markSceneForPromptRegeneration,
-  markSceneVoiceoverNeedsReview,
-  markSceneVoiceoverQaOk,
-  markSubtitlesReady,
   markAllSubtitleSegmentsReady,
   markSubtitleSegmentReady,
   markVoiceoverReady,
@@ -40,58 +34,66 @@ import {
   mockGenerateIdea,
   mockGenerateMetadata,
   mockGenerateScript,
-  parseAndFormatSubtitles,
   regenerateSubtitlesForSegment,
   renderDraft,
   retryFailedSceneVoiceovers,
-  resetThumbnail,
   resetSelectedImageReferences,
-  saveRawSubtitles,
-  saveThumbnailBrief,
-  saveThumbnailFinal,
+  runScriptWriterBatch,
   saveVoiceoverInfo,
-  selectThumbnailConcept,
   splitHookScene,
   stitchSceneVoiceovers,
-  markThumbnailBriefReady,
-  markThumbnailPromptReady,
-  markThumbnailReady,
   updateRenderDraftStatus,
   updateScene,
-  updateAllSceneDurationsFromVoiceover,
-  updateSceneDurationFromVoiceover,
+  updateSelectedScenePauses,
+  attachMusicBedsToScenes,
+  attachSuggestedMusicBeds,
   updateSubtitleStylePreset,
   validateRenderDraftReadiness,
   updateVideoIdea,
   updateVideoMetadata,
   updateVideoScript,
+  clearVisualPlanHybridProgress,
+  buildPodcastScenesFromScript,
+  getPodcastImageLibrarySummary,
 } from "@/app/actions";
+import { addVideoToPipelineQueue } from "@/app/pipeline-actions";
+import { MusicBedAssignPanel } from "@/components/music-bed-assign-panel";
+import { ThumbnailMasterWorkflow } from "@/components/thumbnail-master-workflow";
+import { VoiceoverScenePausePanel } from "@/components/voiceover-scene-pause-panel";
+import { listMusicBedPresets } from "@/lib/music-beds";
+import { getFreesoundApiKey } from "@/lib/freesound";
+import { displayImageOutputFolder } from "@/lib/image-output-folder";
+import { isMusicBedVisualIdea } from "@/lib/podcast-pause-cues";
+import { resolvePipelineSettings } from "@/lib/pipeline-settings";
+import { getVisualPlanHybridCheckpointSummary } from "@/lib/visual-plan-checkpoint";
+import { getScriptWriterCheckpointSummary } from "@/lib/script-writer-checkpoint";
+import { parseVideoThumbnailMasterSelection } from "@/lib/thumbnail-batch-prompt";
+import { listThumbnailPromptMasters } from "@/lib/thumbnail-prompt-masters";
 import {
   getChannelOptions,
   getChannelProfile,
   getChannelTopicCategory,
-  getWealthInsightsSuggestedCategory,
-} from "@/lib/channels";
+  getSuggestedTopicCategory,
+} from "@/lib/channels-server";
 import {
   formatDate,
   formatDuration,
   formatSceneTypeShare,
   getSceneStats,
 } from "@/lib/format";
-import { generatedImagesDir } from "@/lib/image-batches";
+import { renderFinalVideoFileName } from "@/lib/render/output-name";
 import {
-  DEFAULT_ELEVENLABS_SPEED,
-  DEFAULT_ELEVENLABS_MODEL_ID,
-  DEFAULT_ELEVENLABS_OUTPUT_FORMAT,
-  getDefaultElevenLabsModelId,
-  getDefaultElevenLabsVoiceId,
-} from "@/lib/elevenlabs";
+  readElevenLabsPreferences,
+  resolveElevenLabsPreferenceSettings,
+  settingsFromVoiceoverJson,
+} from "@/lib/elevenlabs-preferences";
 import { prisma } from "@/lib/prisma";
-import { getComputedVideoStatus, sceneStatuses, statusLabel } from "@/lib/status";
+import { getComputedVideoStatus, isSceneRejected, sceneStatuses, statusLabel } from "@/lib/status";
 import {
   exportCuesToSrt,
   exportCuesToVtt,
   getCaptionStats,
+  isSilentSubtitleVoiceoverText,
   secondsToTimestamp,
   type FormattedSubtitleCue,
 } from "@/lib/subtitles";
@@ -99,18 +101,17 @@ import {
   exportActiveWordCaptionsToAss,
   exportActiveWordCaptionsToJson,
 } from "@/lib/subtitle-alignment";
-import { CAPTION_STYLE_PRESETS } from "@/lib/caption-styles";
+import { CaptionStylePicker } from "@/components/caption-style-picker";
+import { VoiceSoundBarsRenderFields } from "@/components/voice-sound-bars-render-fields";
+import { getCaptionStylePreset } from "@/lib/caption-styles";
+import { getChirp3HdUsageSummary } from "@/lib/google-tts-chirp-usage";
 import {
-  generatedAudioUrl,
-} from "@/lib/voiceover-segments";
-import {
-  conceptToBrief,
-  parseThumbnailConcept,
-  parseThumbnailConcepts,
-  THUMBNAIL_NEGATIVE_PROMPT,
-  WEALTH_INSIGHTS_HOST_DESCRIPTOR,
-} from "@/lib/thumbnail";
-import { ensureFfmpegAvailable, runFfmpeg } from "@/lib/render/ffmpeg";
+  assessVoiceoverSubtitleTimelineAlignment,
+  lastCueEndFromCues,
+  sumTrailingUncaptionedDurationSecs,
+} from "@/lib/timeline-alignment";
+import { TimelineAlignmentBanner } from "@/components/timeline-alignment-banner";
+import { sceneAudioPreview } from "@/lib/voiceover-segments";
 import { Badge } from "@/components/ui/badge";
 import { AssetsWorkflow } from "@/components/assets-workflow";
 import { Button } from "@/components/ui/button";
@@ -125,22 +126,47 @@ import { CopyPromptButton } from "@/components/copy-prompt-button";
 import { DraftVideoPlayer } from "@/components/draft-video-player";
 import { CopySubtitleButton } from "@/components/copy-subtitle-button";
 import { ClearQueryParams } from "@/components/clear-query-params";
+import { RefreshOnQueryNotice } from "@/components/refresh-on-query-notice";
+import { SceneVoiceoverAudioPlayer } from "@/components/scene-voiceover-audio-player";
+import { DownloadYoutubeChaptersButton } from "@/components/download-youtube-chapters-button";
+import { ChatterboxVoiceCloner } from "@/components/chatterbox-voice-cloner";
+import { GoogleChirp3HdUsageMeter } from "@/components/google-chirp3-hd-usage-meter";
+import { SubtitleAlignmentProviderPicker } from "@/components/subtitle-alignment-provider-picker";
+import { ElevenLabsSettingsFields } from "@/components/elevenlabs-settings-fields";
+import { BibleOneYearDayPanel } from "@/components/bible-one-year-day-panel";
+import { ScriptWriterBatchControls } from "@/components/script-writer-batch-controls";
+import { VoiceoverSectionVoicesPanel } from "@/components/voiceover-section-voices";
+import { CancelSceneVoiceoverButton } from "@/components/cancel-scene-voiceover-button";
 import { ExportVideoPackageButton } from "@/components/export-video-package-button";
 import { ImportScenesForm } from "@/components/import-scenes-form";
 import { ScenePatchImporter } from "@/components/scene-patch-importer";
 import { HookAutoFixPanel } from "@/components/hook-auto-fix-panel";
+import { CollapsibleCard } from "@/components/collapsible-card";
 import { ProcessFormGuard } from "@/components/process-form-guard";
 import { RenderDiagnosticsCard } from "@/components/render/render-diagnostics-card";
 import { Input } from "@/components/ui/input";
 import { JsonTextarea } from "@/components/json-textarea";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { VideoPageTabs } from "@/components/video-page-tabs";
+import { resolveVideoDetailTab } from "@/lib/video-detail-tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  VoiceoverQaPanel,
-  type VoiceoverQaRow,
-  type VoiceoverQaStatus,
-} from "@/components/voiceover-qa-panel";
+  extractBibleOneYearDayConfig,
+  isBibleOneYearCategory,
+} from "@/lib/the-bible-in-one-year-shared";
+import {
+  getBibleOneYearJourneyState,
+} from "@/lib/the-bible-in-one-year";
+import {
+  normalizeVoiceoverSectionVoices,
+} from "@/lib/voiceover-section-voices";
+import {
+  groupScenesByScriptSection,
+} from "@/lib/script-sections";
+import {
+  listPodcastActingCueMatches,
+} from "@/lib/podcast-acting-cues";
 import {
   HOOK_PACING_PRESETS,
   type HookPacingPresetId,
@@ -150,6 +176,7 @@ type VideoDetailPageProps = {
   params: Promise<{ id: string }>;
   searchParams?: Promise<{
     tab?: string;
+    saved?: string;
     assetNotice?: string;
     assetNoticeType?: string;
     voiceoverNotice?: string;
@@ -160,29 +187,13 @@ type VideoDetailPageProps = {
     thumbnailNoticeType?: string;
     selectedTopicIdeaId?: string;
     hookWindowSec?: string;
-    deepVoiceoverQa?: string;
+    scriptNotice?: string;
+    scriptNoticeType?: string;
   }>;
 };
 
 export const dynamic = "force-dynamic";
-
-function thumbnailBriefValue(value: unknown, key: string, fallback = "") {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return fallback;
-  }
-
-  const candidate = (value as Record<string, unknown>)[key];
-
-  if (typeof candidate === "string") {
-    return candidate;
-  }
-
-  if (Array.isArray(candidate)) {
-    return candidate.filter((item) => typeof item === "string").join("\n");
-  }
-
-  return fallback;
-}
+export const maxDuration = 300;
 
 function thumbnailPreviewUrl(videoId: string, imageUrl: string | null, imagePath: string | null) {
   const cleanUrl = imageUrl?.trim();
@@ -209,7 +220,6 @@ export default async function VideoDetailPage({
 }: VideoDetailPageProps) {
   const { id } = await params;
   const query = await searchParams;
-  const renderDiagnostics = await getRenderDiagnostics(id);
 
   const video = await prisma.video.findUnique({
     where: { id },
@@ -238,13 +248,68 @@ export default async function VideoDetailPage({
     notFound();
   }
 
+  const activeTab = resolveVideoDetailTab(query?.tab, video.channelKey);
+  const needsRenderDiagnostics = activeTab === "render-draft";
+  const needsHookOptimizationPacks = activeTab === "render-draft";
+  const needsVoiceoverTab = activeTab === "voiceover";
+  const needsIdeaTopicExtras = activeTab === "idea";
+  const needsScriptExtras = activeTab === "script";
+  const needsDraftPreview = activeTab === "render-draft";
+  const renderDiagnostics = needsRenderDiagnostics
+    ? await getRenderDiagnostics(id)
+    : null;
+
+  const scriptReferenceDocuments = needsScriptExtras
+    ? await prisma.referenceDocument.findMany({
+        where: {
+          channelKey: video.channelKey,
+          isActive: true,
+        },
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          sourceName: true,
+          wordCount: true,
+        },
+      })
+    : [];
+
   const computedStatus = getComputedVideoStatus(video);
   const sceneStats = getSceneStats(video.scenes);
   const channel = getChannelProfile(video.channelKey);
-  const duplicateSceneGroups = findDuplicateSceneGroups(video.scenes);
-  const duplicateImageGroups = findDuplicateImageGroups(video.scenes);
+  const pipelineSettings = await resolvePipelineSettings(video.id);
+  const imageOutputFolderDisplay = displayImageOutputFolder(
+    pipelineSettings.assets.imageOutputFolder,
+    video.id,
+    video.title,
+  );
+  const needsVisualPlanExtras =
+    activeTab === "visual-plan" || activeTab === "render-draft";
+  const hybridCheckpoint =
+    activeTab === "visual-plan" && video.script?.trim()
+      ? await getVisualPlanHybridCheckpointSummary({
+          videoId: video.id,
+          script: video.script,
+        })
+      : null;
+  const scriptWriterCheckpoint =
+    activeTab === "script"
+      ? await getScriptWriterCheckpointSummary({
+          videoId: video.id,
+          ideaJson: video.ideaJson,
+        })
+      : null;
+  const duplicateSceneGroups = needsVisualPlanExtras
+    ? findDuplicateSceneGroups(video.scenes)
+    : [];
+  const duplicateImageGroups = needsVisualPlanExtras
+    ? findDuplicateImageGroups(video.scenes)
+    : [];
   const hookWindowSec = resolveHookWindowSeconds(query?.hookWindowSec);
-  const hookReview = buildHookReviewData(video.scenes, hookWindowSec);
+  const hookReview = needsVisualPlanExtras
+    ? buildHookReviewData(video.scenes, hookWindowSec)
+    : buildHookReviewData([], hookWindowSec);
   const hookRange = {
     fromOrder: hookReview.scenes[0]?.sortOrder ?? 1,
     toOrder:
@@ -254,56 +319,60 @@ export default async function VideoDetailPage({
   };
   const defaultHookPacing: HookPacingPresetId =
     channel.key === "wealth-insights" ? "balanced" : "balanced";
-  const hookOptimizationPacks = await buildHookOptimizationPacks({
-    video,
-    channel,
-    hookReview,
-    hookRange,
-  });
-  const pendingPromptPatchJson = JSON.stringify(
-    {
-      videoId: video.id,
-      patch: video.scenes
-        .filter((scene) => !scene.imagePrompt?.trim())
-        .map((scene) => ({
-          id: scene.id,
-          order: scene.sortOrder,
-          visualIdea: scene.visualIdea ?? "",
-          imagePrompt: "",
-          status: scene.status,
-        })),
-    },
-    null,
-    2,
-  );
-  const wealthTopicSystem =
-    channel.key === "wealth-insights" && channel.topicSystem?.enabled
-      ? channel.topicSystem
-      : null;
+  const hookOptimizationPacks = needsHookOptimizationPacks
+    ? await buildHookOptimizationPacks({
+        video,
+        channel,
+        hookReview,
+        hookRange,
+      })
+    : null;
+  const pendingPromptPatchJson = needsVisualPlanExtras
+    ? JSON.stringify(
+        {
+          videoId: video.id,
+          patch: video.scenes
+            .filter((scene) => !scene.imagePrompt?.trim())
+            .map((scene) => ({
+              id: scene.id,
+              order: scene.sortOrder,
+              visualIdea: scene.visualIdea ?? "",
+              imagePrompt: "",
+              status: scene.status,
+            })),
+        },
+        null,
+        2,
+      )
+    : "[]";
+  const channelTopicSystem = channel.topicSystem?.enabled
+    ? channel.topicSystem
+    : null;
   const selectedTopicCategory = getChannelTopicCategory(
     channel.key,
     video.topicCategory,
   );
-  const suggestedTopicCategory = getWealthInsightsSuggestedCategory();
-  const recentWealthCategories = wealthTopicSystem
-    ? await prisma.video.findMany({
-        where: {
-          channelKey: "wealth-insights",
-          id: { not: video.id },
-          topicCategory: { not: null },
-        },
-        orderBy: { updatedAt: "desc" },
-        take: 5,
-        select: {
-          id: true,
-          title: true,
-          topicCategory: true,
-        },
-      })
-    : [];
+  const suggestedTopicCategory = getSuggestedTopicCategory(channel.key);
+  const recentChannelCategories =
+    channelTopicSystem && needsIdeaTopicExtras
+      ? await prisma.video.findMany({
+          where: {
+            channelKey: channel.key,
+            id: { not: video.id },
+            topicCategory: { not: null },
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 5,
+          select: {
+            id: true,
+            title: true,
+            topicCategory: true,
+          },
+        })
+      : [];
   let ideaJsonTopicIdeaId: string | null = null;
 
-  if (video.ideaJson) {
+  if (needsIdeaTopicExtras && video.ideaJson) {
     try {
       const parsedIdeaJson = JSON.parse(video.ideaJson) as unknown;
 
@@ -320,21 +389,81 @@ export default async function VideoDetailPage({
     }
   }
 
-  const sourceTopicIdea = wealthTopicSystem
-    ? await prisma.topicIdea.findFirst({
-        where: {
-          channelKey: "wealth-insights",
-          OR: [
-            { createdVideoId: video.id },
-            ...(query?.selectedTopicIdeaId ? [{ id: query.selectedTopicIdeaId }] : []),
-            ...(ideaJsonTopicIdeaId ? [{ id: ideaJsonTopicIdeaId }] : []),
-          ],
-        },
-        orderBy: { updatedAt: "desc" },
-      })
+  const sourceTopicIdea =
+    channelTopicSystem && needsIdeaTopicExtras
+      ? await prisma.topicIdea.findFirst({
+          where: {
+            channelKey: channel.key,
+            OR: [
+              { createdVideoId: video.id },
+              ...(query?.selectedTopicIdeaId ? [{ id: query.selectedTopicIdeaId }] : []),
+              ...(ideaJsonTopicIdeaId ? [{ id: ideaJsonTopicIdeaId }] : []),
+            ],
+          },
+          orderBy: { updatedAt: "desc" },
+        })
+      : null;
+  const savedElevenLabsPreferences = await readElevenLabsPreferences();
+  const lastSceneVoiceoverSettings = await prisma.scene.findFirst({
+    where: {
+      videoId: video.id,
+      voiceoverSettingsJson: { not: Prisma.DbNull },
+    },
+    orderBy: { updatedAt: "desc" },
+    select: { voiceoverSettingsJson: true },
+  });
+  const elevenLabsSettings = resolveElevenLabsPreferenceSettings({
+    saved: savedElevenLabsPreferences,
+    sceneSettings: settingsFromVoiceoverJson(
+      lastSceneVoiceoverSettings?.voiceoverSettingsJson,
+    ),
+    channelSpeedDefault: channel.voiceoverSpeedDefault,
+    channelVoiceId: channel.voiceoverDefaultVoiceId,
+    channelVoiceName: channel.voiceoverDefaultVoiceName,
+  });
+  const chirp3HdUsage = await getChirp3HdUsageSummary();
+  const isBibleOneYearVideo = isBibleOneYearCategory(video.topicCategory);
+  const parsedIdeaJson = (() => {
+    if (!video.ideaJson?.trim()) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(video.ideaJson) as unknown;
+    } catch {
+      return null;
+    }
+  })();
+  const bibleOneYearConfig = isBibleOneYearVideo
+    ? extractBibleOneYearDayConfig(parsedIdeaJson)
     : null;
-  const defaultVoiceoverSpeed =
-    channel.voiceoverSpeedDefault ?? DEFAULT_ELEVENLABS_SPEED;
+  const bibleOneYearJourney = isBibleOneYearVideo
+    ? await getBibleOneYearJourneyState(video.channelKey)
+    : null;
+  const voiceoverSectionVoices = normalizeVoiceoverSectionVoices(
+    video.voiceoverSectionVoicesJson,
+  );
+  const autoSceneSectionAssignments = video.script?.trim()
+    ? groupScenesByScriptSection({
+        script: video.script,
+        scenes: video.scenes.map((scene) => ({
+          sortOrder: scene.sortOrder,
+          scriptText: scene.scriptText,
+          visualIdea: scene.visualIdea,
+        })),
+      })
+    : [];
+  const actingCuesBySortOrder = new Map(
+    video.script?.trim()
+      ? listPodcastActingCueMatches({
+          script: video.script,
+          scenes: video.scenes.map((scene) => ({
+            sortOrder: scene.sortOrder,
+            scriptText: scene.scriptText,
+          })),
+        }).map((match) => [match.sortOrder, match.cues] as const)
+      : [],
+  );
   const channelOptions = getChannelOptions();
 
   if (video.status !== computedStatus) {
@@ -377,119 +506,183 @@ export default async function VideoDetailPage({
     video.scenes.length > 0
       ? Math.max(...video.scenes.map((scene) => scene.sortOrder)) + 1
       : 1;
-  const formattedSubtitleCues = parseFormattedSubtitleCues(
-    video.formattedSubtitleJson,
-  );
-  const formattedSrt = exportCuesToSrt(formattedSubtitleCues);
-  const formattedVtt = exportCuesToVtt(formattedSubtitleCues);
-  const formattedAss =
-    video.styledSubtitleAss ?? exportActiveWordCaptionsToAss(formattedSubtitleCues);
-  const activeWordCaptionJson = JSON.stringify(
-    video.styledSubtitleJson ??
-      exportActiveWordCaptionsToJson(formattedSubtitleCues),
-    null,
-    2,
-  );
-  const captionStats = getCaptionStats(formattedSubtitleCues);
-  const sceneTimeline = buildSceneTimeline(video.scenes);
+  const needsSubtitleExports =
+    activeTab === "voiceover" || activeTab === "render-draft";
+  const needsThumbnailExtras = activeTab === "thumbnail";
+  const formattedSubtitleCues = needsSubtitleExports
+    ? parseFormattedSubtitleCues(video.formattedSubtitleJson)
+    : [];
+  const formattedSrt = needsSubtitleExports
+    ? exportCuesToSrt(formattedSubtitleCues)
+    : "";
+  const formattedVtt = needsSubtitleExports
+    ? exportCuesToVtt(formattedSubtitleCues)
+    : "";
+  const formattedAss = needsSubtitleExports
+    ? video.styledSubtitleAss ??
+      exportActiveWordCaptionsToAss(
+        formattedSubtitleCues,
+        getCaptionStylePreset(video.captionStylePreset),
+      )
+    : "";
+  const activeWordCaptionJson = needsSubtitleExports
+    ? JSON.stringify(
+        video.styledSubtitleJson ??
+          exportActiveWordCaptionsToJson(formattedSubtitleCues),
+        null,
+        2,
+      )
+    : "[]";
+  const captionStats = needsSubtitleExports
+    ? getCaptionStats(formattedSubtitleCues)
+    : getCaptionStats([]);
+  const sceneTimeline = needsSubtitleExports
+    ? buildSceneTimeline(video.scenes)
+    : [];
   const previewSubtitleCues = formattedSubtitleCues.filter((cue) => cue.start < 60);
-  const defaultTab =
-    query?.tab === "assets"
-      ? "assets"
-      : query?.tab === "voiceover"
-      ? "voiceover"
-      : query?.tab === "render-draft"
-        ? "render-draft"
-        : query?.tab === "thumbnail"
-          ? "thumbnail"
-          : "idea";
+  const defaultTab = activeTab;
+  const savedNotice = query?.saved === "1";
+  const scriptNotice = query?.scriptNotice?.trim()
+    ? {
+        message: query.scriptNotice,
+        type: query.scriptNoticeType === "error" ? ("error" as const) : ("success" as const),
+      }
+    : null;
   const voiceoverAndSubtitlesReady =
     video.voiceoverStatus === "ready" && video.subtitleStatus === "ready";
   const elevenLabsSettingsFormId = `elevenlabs-settings-${video.id}`;
-  const defaultVoiceId = getDefaultElevenLabsVoiceId();
-  const defaultModelId = getDefaultElevenLabsModelId();
   const segmentSubtitlesFormId = `segment-subtitles-${video.id}`;
-  const thumbnailBriefFormId = `thumbnail-brief-${video.id}`;
-  const thumbnailConcepts = parseThumbnailConcepts(video.thumbnailVariationsJson);
-  const activeThumbnailConcept = parseThumbnailConcept(video.thumbnailConceptJson);
-  const thumbnailBriefSource =
-    activeThumbnailConcept ? conceptToBrief(activeThumbnailConcept) : video.thumbnailConceptJson;
-  const thumbnailAvoid =
-    thumbnailBriefValue(
-      thumbnailBriefSource,
-      "avoid",
-      "busy background\nsmall text\nphotorealism\n3D render\ntoo many objects\ncopyrighted characters\ncopied channel branding",
-    );
-  const thumbnailBriefJson = JSON.stringify(thumbnailBriefSource ?? {}, null, 2);
+  const thumbnailMasters = needsThumbnailExtras
+    ? await listThumbnailPromptMasters(channel.key)
+    : { defaultMasterId: null, masters: [] };
+  const thumbnailMasterSelection = needsThumbnailExtras
+    ? parseVideoThumbnailMasterSelection(video.thumbnailConceptJson)
+    : null;
   const thumbnailPreviewSrc = thumbnailPreviewUrl(
     video.id,
     video.thumbnailImageUrl,
     video.thumbnailImagePath,
   );
   const subtitleSegmentByVoiceoverId = new Map(
-    video.subtitleSegments.map((segment) => [segment.voiceoverSegmentId, segment]),
+    needsVoiceoverTab
+      ? video.subtitleSegments.map((segment) => [
+          segment.voiceoverSegmentId,
+          segment,
+        ])
+      : [],
   );
-  const missingSubtitleSegmentCount = video.voiceoverSegments.filter(
-    (segment) =>
-      !subtitleSegmentByVoiceoverId.has(segment.id) ||
-      parseFormattedSubtitleCues(
-        subtitleSegmentByVoiceoverId.get(segment.id)?.localCuesJson,
-      ).length === 0,
-  ).length;
-  const hasMissingSegmentDurations = video.voiceoverSegments.some(
-    (segment) => !segment.durationSec,
-  );
-  const hasOutdatedSubtitleSegments = video.voiceoverSegments.some((segment) => {
-    const subtitleSegment = subtitleSegmentByVoiceoverId.get(segment.id);
+  const missingSubtitleSegmentCount = needsVoiceoverTab
+    ? video.voiceoverSegments.filter((segment) => {
+        const silent = isSilentSubtitleVoiceoverText(
+          segment.pacedTextUsed || segment.text,
+        );
+        const subtitleSegment = subtitleSegmentByVoiceoverId.get(segment.id);
+        if (silent) {
+          return !(
+            subtitleSegment &&
+            ["formatted", "ready"].includes(subtitleSegment.status)
+          );
+        }
+        return (
+          !subtitleSegment ||
+          parseFormattedSubtitleCues(subtitleSegment.localCuesJson).length === 0
+        );
+      }).length
+    : 0;
+  const hasMissingSegmentDurations = needsVoiceoverTab
+    ? video.voiceoverSegments.some((segment) => !segment.durationSec)
+    : false;
+  const hasOutdatedSubtitleSegments = needsVoiceoverTab
+    ? video.voiceoverSegments.some((segment) => {
+        const subtitleSegment = subtitleSegmentByVoiceoverId.get(segment.id);
 
-    return Boolean(
-      subtitleSegment && subtitleSegment.updatedAt < segment.updatedAt,
-    );
-  });
-  const sceneVoiceoverGeneratedCount = video.scenes.filter((scene) =>
-    ["generated", "attached"].includes(scene.voiceoverStatus ?? "none"),
-  ).length;
-  const sceneVoiceoverFailedCount = video.scenes.filter((scene) =>
-    ["failed", "needs_retry"].includes(scene.voiceoverStatus ?? "none"),
-  ).length;
-  const sceneVoiceoverMissingCount = video.scenes.filter(
-    (scene) => !scene.voiceoverLocalPath?.trim(),
-  ).length;
-  const sceneVoiceoverTotalDuration = video.scenes.reduce(
-    (total, scene) => total + (scene.voiceoverDuration ?? 0),
-    0,
-  );
+        return Boolean(
+          subtitleSegment && subtitleSegment.updatedAt < segment.updatedAt,
+        );
+      })
+    : false;
+  const sceneVoiceoverGeneratedCount = needsVoiceoverTab
+    ? video.scenes.filter(
+        (scene) =>
+          !isSceneRejected(scene.status) &&
+          ["generated", "attached"].includes(scene.voiceoverStatus ?? "none"),
+      ).length
+    : 0;
+  const sceneVoiceoverFailedCount = needsVoiceoverTab
+    ? video.scenes.filter(
+        (scene) =>
+          !isSceneRejected(scene.status) &&
+          ["failed", "needs_retry"].includes(scene.voiceoverStatus ?? "none"),
+      ).length
+    : 0;
+  const sceneVoiceoverMissingCount = needsVoiceoverTab
+    ? video.scenes.filter(
+        (scene) =>
+          !isSceneRejected(scene.status) && !scene.voiceoverLocalPath?.trim(),
+      ).length
+    : 0;
+  const sceneVoiceoverRejectedCount = needsVoiceoverTab
+    ? video.scenes.filter((scene) => isSceneRejected(scene.status)).length
+    : 0;
+  const sceneVoiceoverTotalDuration = needsVoiceoverTab
+    ? video.scenes.reduce(
+        (total, scene) =>
+          isSceneRejected(scene.status)
+            ? total
+            : total + (scene.voiceoverDuration ?? 0),
+        0,
+      )
+    : 0;
   const hasSceneVoiceoverMaster =
     video.voiceoverAudioPath?.includes("voiceover_by_scene_master") ?? false;
-  const deepVoiceoverQaEnabled = query?.deepVoiceoverQa === "1";
-  const voiceoverQaRows = await buildVoiceoverQaRows(
-    video.scenes,
-    deepVoiceoverQaEnabled,
-  );
-  const voiceoverQaSummary = summarizeVoiceoverQa(voiceoverQaRows);
-  const masterVoiceoverAudioUrl = generatedAudioUrl(video.voiceoverAudioPath);
-  const deepVoiceoverQaUrl = `/videos/${video.id}?tab=voiceover&deepVoiceoverQa=1#voiceover-qa`;
   const latestRenderDraft = video.renderDrafts[0] ?? null;
-  const projectDraftPath = path.join("storage", "renders", video.id, "draft.mp4");
-  const projectDraftCacheKey = await renderFileCacheKey(projectDraftPath);
+  const projectDraftFileName =
+    latestRenderDraft?.fileName?.trim() ||
+    renderFinalVideoFileName(video.title);
+  const projectDraftPath = path.join(
+    "storage",
+    "renders",
+    video.id,
+    projectDraftFileName,
+  );
+  const projectDraftCacheKey = needsDraftPreview
+    ? await renderFileCacheKey(
+        latestRenderDraft?.outputPath?.startsWith("storage/renders/")
+          ? latestRenderDraft.outputPath
+          : projectDraftPath,
+      )
+    : null;
   const projectDraftUrl = projectDraftCacheKey
     ? `/api/videos/${encodeURIComponent(video.id)}/draft-preview?v=${encodeURIComponent(
         projectDraftCacheKey,
       )}`
     : null;
   const imageReadyCount = video.scenes.filter(
-    (scene) => scene.imageLocalPath || scene.imageFileName,
+    (scene) =>
+      !isSceneRejected(scene.status) &&
+      (scene.imageLocalPath || scene.imageFileName),
   ).length;
   const estimatedFinalDuration = video.voiceoverSegments.reduce(
     (total, segment) => total + (segment.durationSec ?? 0),
     0,
   );
+  const timelineAlignment = assessVoiceoverSubtitleTimelineAlignment({
+    masterDurationSec: video.voiceoverDurationSec,
+    segmentDurationSecs: video.voiceoverSegments.map(
+      (segment) => segment.durationSec,
+    ),
+    lastCueEndSec: lastCueEndFromCues(formattedSubtitleCues),
+    uncaptionedTailSec: sumTrailingUncaptionedDurationSecs(
+      video.voiceoverSegments,
+    ),
+  });
 
   return (
     <div className="space-y-6">
-      {assetNotice || voiceoverNotice || renderNotice || thumbnailNotice ? (
+      {assetNotice || voiceoverNotice || renderNotice || thumbnailNotice || savedNotice ? (
         <ClearQueryParams
           params={[
+            "saved",
             "assetNotice",
             "assetNoticeType",
             "voiceoverNotice",
@@ -501,6 +694,9 @@ export default async function VideoDetailPage({
           ]}
         />
       ) : null}
+      {/* Always mounted: latch notice from the redirect URL even after ClearQueryParams. */}
+      <RefreshOnQueryNotice param="voiceoverNotice" />
+      <RefreshOnQueryNotice param="renderNotice" />
 
       <div className="flex flex-col gap-4">
         <Button asChild variant="ghost" className="w-fit px-0">
@@ -531,24 +727,32 @@ export default async function VideoDetailPage({
             </div>
           </div>
 
-          <form
-            action={deleteVideo.bind(null, video.id)}
-            className="flex flex-col items-start gap-2"
-          >
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <input
-                name="confirmProjectDelete"
-                type="checkbox"
-                required
-                className="size-4 rounded border-input"
-              />
-              Delete files too
-            </label>
-            <Button type="submit" variant="destructive">
-              <Trash2 />
-              Delete project
-            </Button>
-          </form>
+          <div className="flex flex-col items-stretch gap-3 sm:items-end">
+            <form action={addVideoToPipelineQueue.bind(null, video.id)}>
+              <Button type="submit" variant="outline" className="w-full sm:w-auto">
+                <ListPlus />
+                Add to pipeline queue
+              </Button>
+            </form>
+            <form
+              action={deleteVideo.bind(null, video.id)}
+              className="flex flex-col items-start gap-2 sm:items-end"
+            >
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  name="confirmProjectDelete"
+                  type="checkbox"
+                  required
+                  className="size-4 rounded border-input"
+                />
+                Delete files too
+              </label>
+              <Button type="submit" variant="destructive" className="w-full sm:w-auto">
+                <Trash2 />
+                Delete project
+              </Button>
+            </form>
+          </div>
         </div>
 
         <Card>
@@ -574,7 +778,7 @@ export default async function VideoDetailPage({
         />
       </div>
 
-      <Tabs defaultValue={defaultTab} className="space-y-4">
+      <VideoPageTabs activeTab={defaultTab}>
         <TabsList className="flex h-auto w-full flex-wrap justify-start">
           <TabsTrigger value="idea">Idea</TabsTrigger>
           <TabsTrigger value="script">Script</TabsTrigger>
@@ -586,7 +790,13 @@ export default async function VideoDetailPage({
           <TabsTrigger value="metadata">Metadata</TabsTrigger>
         </TabsList>
 
+        {activeTab === "idea" ? (
         <TabsContent value="idea" className="space-y-4">
+          {savedNotice ? (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              Idea saved.
+            </div>
+          ) : null}
           <Card>
             <CardHeader>
               <CardTitle>Idea</CardTitle>
@@ -619,11 +829,11 @@ export default async function VideoDetailPage({
                   </p>
                 </div>
 
-                {wealthTopicSystem ? (
+                {channelTopicSystem ? (
                   <div className="grid gap-4 rounded-md border bg-muted/20 p-4 lg:grid-cols-[minmax(220px,320px)_1fr]">
                     <div className="grid gap-2">
                       <Label htmlFor="topicCategory">
-                        Wealth Insights Topic Category
+                        {channel.name} Topic Category
                       </Label>
                       <select
                         id="topicCategory"
@@ -632,7 +842,7 @@ export default async function VideoDetailPage({
                         className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                       >
                         <option value="">No category selected</option>
-                        {wealthTopicSystem.categories.map((category) => (
+                        {channelTopicSystem.categories.map((category) => (
                           <option key={category.id} value={category.id}>
                             {category.label}
                           </option>
@@ -651,19 +861,19 @@ export default async function VideoDetailPage({
                         </p>
                         <p className="mt-1 text-muted-foreground">
                           {selectedTopicCategory?.description ??
-                            "The weekly suggestion is optional. Override it whenever the topic calls for a different finance lane."}
+                            `The weekly suggestion is optional. Override it whenever the topic calls for a different ${channel.name} lane.`}
                         </p>
                       </div>
 
-                      {recentWealthCategories.length > 0 ? (
+                      {recentChannelCategories.length > 0 ? (
                         <div>
                           <p className="text-xs font-semibold uppercase text-muted-foreground">
-                            Recent Wealth Insights categories
+                            Recent {channel.name} categories
                           </p>
                           <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                            {recentWealthCategories.map((recentVideo) => {
+                            {recentChannelCategories.map((recentVideo) => {
                               const recentCategory = getChannelTopicCategory(
-                                "wealth-insights",
+                                channel.key,
                                 recentVideo.topicCategory,
                               );
 
@@ -805,16 +1015,36 @@ export default async function VideoDetailPage({
             </Card>
           ) : null}
         </TabsContent>
+        ) : null}
 
+        {activeTab === "script" ? (
         <TabsContent value="script">
+          {savedNotice ? (
+            <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              Script saved.
+            </div>
+          ) : null}
+          {scriptNotice ? (
+            <div
+              className={
+                scriptNotice.type === "error"
+                  ? "mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                  : "mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+              }
+            >
+              {scriptNotice.message}
+            </div>
+          ) : null}
           <Card>
             <CardHeader>
               <CardTitle>Script</CardTitle>
               <CardDescription>
-                Draft and revise the narration text locally.
+                {channel.key === "podcast-english-lessons"
+                  ? "Draft the narration locally, or Run Batch to generate one ChatGPT script, validate it, and save it here (no score/revision loop)."
+                  : "Draft and revise the narration text locally. Run Batch loops with ChatGPT: write → score → revise with its recommendation until the score is above 9.2, then saves the final narration here."}
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-5">
               <form
                 action={updateVideoScript.bind(null, video.id)}
                 className="space-y-5"
@@ -831,11 +1061,6 @@ export default async function VideoDetailPage({
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <CopyPromptButton
-                    label={`Copy Script Writer Request — ${channel.name}`}
-                    promptUrl={promptUrl("script-writer")}
-                  />
-
                   <Button type="submit">Save script</Button>
 
                   <Button
@@ -847,23 +1072,92 @@ export default async function VideoDetailPage({
                     Mock generate script
                   </Button>
                 </div>
-                <div className="space-y-1 text-xs text-muted-foreground">
-                  <p>
-                    Copies the full script request, including the channel rules and the current idea.
-                  </p>
-                  {!video.ideaJson?.trim() ? (
-                    <p className="text-destructive">
-                      Warning: this video has no Idea JSON yet. Add or generate an idea before copying the script request.
-                    </p>
-                  ) : null}
-                </div>
               </form>
+
+              {isBibleOneYearVideo && bibleOneYearJourney ? (
+                <BibleOneYearDayPanel
+                  videoId={video.id}
+                  initialConfig={bibleOneYearConfig}
+                  journey={bibleOneYearJourney}
+                  suggestedDayNumber={bibleOneYearJourney.nextDayNumber}
+                />
+              ) : null}
+
+              <ScriptWriterBatchControls
+                videoId={video.id}
+                channelKey={video.channelKey}
+                promptUrl={promptUrl("script-writer")}
+                copyLabel={`Copy Script Writer Request — ${channel.name}`}
+                references={scriptReferenceDocuments}
+                runAction={runScriptWriterBatch.bind(null, video.id)}
+                checkpoint={scriptWriterCheckpoint}
+                disabled={
+                  isBibleOneYearVideo
+                    ? !(
+                        bibleOneYearConfig &&
+                        bibleOneYearConfig.dayNumber > 0 &&
+                        bibleOneYearConfig.chapterBlocks.length > 0
+                      )
+                    : !video.ideaJson?.trim()
+                }
+                disabledReason={
+                  isBibleOneYearVideo
+                    ? !(
+                          bibleOneYearConfig &&
+                          bibleOneYearConfig.dayNumber > 0 &&
+                          bibleOneYearConfig.chapterBlocks.length > 0
+                        )
+                      ? "Save the Day Setup above first (day number, readings, and at least one chapter block). WEBUS text is optional — ChatGPT will use authentic WEBUS for empty chapters."
+                      : null
+                    : !video.ideaJson?.trim()
+                      ? "Add or generate an Idea JSON before running Script Writer Batch."
+                      : null
+                }
+              />
+
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p>
+                  {channel.key === "podcast-english-lessons"
+                    ? "Copy is manual. Run Batch uses Chrome CDP at port 9222 with ChatGPT logged in via Google: sends the Script Writer request once, validates the spine, and saves the plain script here. No ChatGPT score or rewrite loop. Drafts are checkpointed so a failed Send can be resumed."
+                    : "Copy is manual. Run Batch uses Chrome CDP at port 9222 with ChatGPT logged in via Google: write → score → revise until above 9.2. Drafts are checkpointed so a failed Send can be resumed."}
+                </p>
+                {!video.ideaJson?.trim() ? (
+                  <p className="text-destructive">
+                    Warning: this video has no Idea JSON yet. Add or generate an idea before copying or running the script request.
+                  </p>
+                ) : null}
+                {isBibleOneYearVideo &&
+                !(
+                  bibleOneYearConfig &&
+                  bibleOneYearConfig.dayNumber > 0 &&
+                  bibleOneYearConfig.chapterBlocks.length > 0
+                ) ? (
+                  <p className="text-destructive">
+                    The Bible in One Year: save Day Setup with at least one
+                    chapter block before running Script Writer Batch. Pasting
+                    WEBUS text is optional.
+                  </p>
+                ) : null}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
+        ) : null}
 
+        {activeTab === "visual-plan" ? (
         <TabsContent value="visual-plan">
           <div className="grid gap-4">
+            {assetNotice ? (
+              <div
+                className={
+                  assetNotice.type === "success"
+                    ? "rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+                    : "rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                }
+              >
+                {assetNotice.message}
+              </div>
+            ) : null}
             <Card>
               <CardHeader>
                 <CardTitle>Visual Plan Summary</CardTitle>
@@ -914,12 +1208,276 @@ export default async function VideoDetailPage({
 
             <Card>
               <CardHeader>
-                <CardTitle>Scene Cleanup</CardTitle>
+                <CardTitle>Import Scenes</CardTitle>
                 <CardDescription>
-                  Delete duplicate or damaged scene ranges, then reindex the visual plan.
+                  Copy the Visual Planner Prompt for manual ChatGPT, or Run Batch
+                  to send the same request via Chrome CDP once and import the
+                  scenes automatically.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent>
+                <ImportScenesForm
+                  action={importScenes.bind(null, video.id)}
+                  visualPlanPromptUrl={promptUrl("visual-planner")}
+                  channelName={channel.name}
+                  videoId={video.id}
+                  videoTitle={video.title}
+                  channelKey={channel.key}
+                  topicCategory={video.topicCategory}
+                  projectBiblePath={channel.projectBiblePath}
+                  imagePromptBiblePath={channel.imagePromptBiblePath}
+                  characterBiblePath={channel.characterBiblePath}
+                  visualPlannerPath={channel.prompts.visualPlanner}
+                  scriptLength={video.script?.length ?? 0}
+                  currentSceneCount={video.scenes.length}
+                  currentScenesJson={JSON.stringify(
+                    video.scenes.map((scene) => ({
+                      scriptText: scene.scriptText,
+                      sceneType: scene.sceneType,
+                      visualPurpose: scene.visualPurpose ?? "",
+                      visualIdea: scene.visualIdea ?? "",
+                      duration: scene.duration ?? 8,
+                      imagePrompt: scene.imagePrompt ?? "",
+                      status: "planned",
+                    })),
+                    null,
+                    2,
+                  )}
+                  hybridCheckpoint={hybridCheckpoint}
+                  clearHybridProgressAction={clearVisualPlanHybridProgress.bind(
+                    null,
+                    video.id,
+                  )}
+                  buildFromScriptAction={
+                    video.channelKey === "podcast-english-lessons"
+                      ? buildPodcastScenesFromScript.bind(null, video.id)
+                      : undefined
+                  }
+                  imageOutputFolder={imageOutputFolderDisplay}
+                />
+              </CardContent>
+            </Card>
+
+            <CollapsibleCard
+              title="Hook Review"
+              description="Diagnose opening pacing, then import a ChatGPT patch for the selected hook range."
+              defaultOpen={
+                hookReview.criticalCount > 0 || hookReview.over65Count > 0
+              }
+              badge={
+                hookReview.criticalCount > 0 ? (
+                  <Badge variant="outline">{hookReview.criticalCount} critical</Badge>
+                ) : hookReview.over55Count > 0 ? (
+                  <Badge variant="outline">{hookReview.over55Count} over 5.5s</Badge>
+                ) : video.scenes.length > 0 ? (
+                  <Badge variant="muted">Pacing OK</Badge>
+                ) : null
+              }
+            >
+                <div className="flex flex-wrap items-center gap-2">
+                  {[15, 30, 60, 120].map((preset) => (
+                    <Link
+                      key={preset}
+                      href={`/videos/${video.id}?tab=visual-plan&hookWindowSec=${preset}`}
+                      className={`rounded-md border px-3 py-2 text-sm ${
+                        hookWindowSec === preset
+                          ? "border-foreground bg-foreground text-background"
+                          : "bg-background"
+                      }`}
+                    >
+                      {preset}s
+                    </Link>
+                  ))}
+                  <form method="get" action={`/videos/${video.id}`} className="flex items-center gap-2">
+                    <input type="hidden" name="tab" value="visual-plan" />
+                    <Input
+                      name="hookWindowSec"
+                      type="number"
+                      min="5"
+                      max="300"
+                      defaultValue={hookWindowSec}
+                      className="w-28"
+                    />
+                    <Button type="submit" variant="outline">
+                      Custom
+                    </Button>
+                  </form>
+                </div>
+
+                <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
+                  <SummaryItem label="Hook scenes" value={hookReview.scenes.length} />
+                  <SummaryItem
+                    label="Selected duration"
+                    value={formatDuration(hookReview.totalDurationSeconds)}
+                  />
+                  <SummaryItem
+                    label="Average scene"
+                    value={`${hookReview.averageDurationSeconds.toFixed(1)}s`}
+                  />
+                  <SummaryItem
+                    label="Over 5.5s"
+                    value={hookReview.over55Count}
+                  />
+                  <SummaryItem
+                    label="Over 6.5s"
+                    value={hookReview.over65Count}
+                  />
+                  <SummaryItem
+                    label="Critical 8s+"
+                    value={hookReview.criticalCount}
+                  />
+                </div>
+
+                {hookReview.criticalCount > 0 ? (
+                  <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+                    {hookReview.criticalCount} hook scene
+                    {hookReview.criticalCount === 1 ? "" : "s"} are at or above 8 seconds. These are the first places to split or tighten.
+                  </div>
+                ) : hookReview.over65Count > 0 ? (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    {hookReview.over65Count} hook scene
+                    {hookReview.over65Count === 1 ? "" : "s"} currently exceed 6.5 seconds. The pacing is likely dragging in the opening beats.
+                  </div>
+                ) : hookReview.over55Count > 0 ? (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    {hookReview.over55Count} hook scene
+                    {hookReview.over55Count === 1 ? "" : "s"} exceed 5.5 seconds. These are worth checking before regenerating voiceover or render.
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                    The current hook selection is pacing cleanly.
+                  </div>
+                )}
+
+                {video.scenes.length > 0 ? (
+                  <HookAutoFixPanel
+                    action={importScenePatch.bind(null, video.id)}
+                    videoId={video.id}
+                    channelKey={channel.key}
+                    scenes={video.scenes.map((scene) => ({
+                      id: scene.id,
+                      sortOrder: scene.sortOrder,
+                      scriptText: scene.scriptText,
+                      visualIdea: scene.visualIdea,
+                      imagePrompt: scene.imagePrompt,
+                      hasGeneratedImage: Boolean(
+                        scene.imageLocalPath ||
+                          scene.imageFileName ||
+                          scene.imageUrl,
+                      ),
+                    }))}
+                  />
+                ) : null}
+
+                {hookReview.scenes.length > 0 ? (
+                  <details className="rounded-md border bg-muted/20 p-4">
+                    <summary className="cursor-pointer text-sm font-medium">
+                      Hook scene table ({hookReview.scenes.length})
+                    </summary>
+                    <div className="mt-4 max-h-[360px] overflow-auto rounded-md border">
+                      <table className="min-w-full text-left text-sm">
+                        <thead className="sticky top-0 bg-background">
+                          <tr className="border-b">
+                            <th className="px-3 py-2 font-medium">Scene</th>
+                            <th className="px-3 py-2 font-medium">Cumulative</th>
+                            <th className="px-3 py-2 font-medium">Duration</th>
+                            <th className="px-3 py-2 font-medium">Script</th>
+                            <th className="px-3 py-2 font-medium">Warnings</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {hookReview.scenes.map((scene) => (
+                            <tr key={scene.id} className="border-b align-top">
+                              <td className="px-3 py-2">{scene.sortOrder}</td>
+                              <td className="px-3 py-2">
+                                {scene.startTimeSec.toFixed(1)}s -{" "}
+                                {scene.endTimeSec.toFixed(1)}s
+                              </td>
+                              <td className="px-3 py-2">{scene.duration ?? 0}s</td>
+                              <td className="px-3 py-2">{scene.scriptText}</td>
+                              <td className="px-3 py-2">
+                                {scene.warnings.length > 0
+                                  ? scene.warnings.map((warning) => warning.text).join(", ")
+                                  : "OK"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                ) : null}
+
+                <details className="rounded-md border bg-muted/20 p-4">
+                  <summary className="cursor-pointer text-sm font-medium">
+                    Pending prompt regeneration
+                  </summary>
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      Scenes with empty image prompts are ready to export into the Bulk Scene Patch flow.
+                    </p>
+                    <CopyPromptButton
+                      label="Copy Pending Patch JSON"
+                      prompt={pendingPromptPatchJson}
+                    />
+                  </div>
+                </details>
+
+                <details className="rounded-md border bg-muted/20 p-4">
+                  <summary className="cursor-pointer text-sm font-medium">
+                    Advanced manual editing
+                  </summary>
+                  <div className="mt-4 grid gap-3">
+                    {hookReview.scenes.length > 0 ? (
+                      hookReview.scenes.map((scene) => (
+                        <HookSceneReviewCard
+                          key={scene.id}
+                          scene={scene}
+                          editAction={updateScene.bind(null, scene.id, video.id)}
+                          splitAction={splitHookScene.bind(null, scene.id, video.id)}
+                          mergePreviousAction={mergeSceneWithPrevious.bind(
+                            null,
+                            scene.id,
+                            video.id,
+                          )}
+                          mergeNextAction={mergeSceneWithNext.bind(
+                            null,
+                            scene.id,
+                            video.id,
+                          )}
+                          regenerateAction={markSceneForPromptRegeneration.bind(
+                            null,
+                            scene.id,
+                            video.id,
+                          )}
+                          hasPrevious={scene.hasPrevious}
+                          hasNext={scene.hasNext}
+                        />
+                      ))
+                    ) : (
+                      <div className="rounded-md border px-4 py-6 text-sm text-muted-foreground">
+                        Add or import scenes to review the hook.
+                      </div>
+                    )}
+                  </div>
+                </details>
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              title="Scene Cleanup"
+              description="Delete duplicate or damaged scene ranges, then reindex the visual plan."
+              defaultOpen={duplicateSceneGroups.length > 0 || duplicateImageGroups.length > 0}
+              badge={
+                duplicateSceneGroups.length + duplicateImageGroups.length > 0 ? (
+                  <Badge variant="outline">
+                    {duplicateSceneGroups.length + duplicateImageGroups.length} issue
+                    {duplicateSceneGroups.length + duplicateImageGroups.length === 1 ? "" : "s"}
+                  </Badge>
+                ) : (
+                  <Badge variant="muted">Clean</Badge>
+                )
+              }
+            >
                 <form
                   action={deleteSceneRange.bind(null, video.id)}
                   className="grid gap-3 rounded-md border bg-muted/20 p-4 sm:grid-cols-[140px_140px_1fr_auto]"
@@ -1066,246 +1624,12 @@ export default async function VideoDetailPage({
                     No duplicated image file references found.
                   </div>
                 )}
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Hook Review</CardTitle>
-                <CardDescription>
-                  Diagnose opening pacing, export a batch optimization pack, then import a replacement patch for the selected hook range.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  {[15, 30, 60, 120].map((preset) => (
-                    <Link
-                      key={preset}
-                      href={`/videos/${video.id}?tab=visual-plan&hookWindowSec=${preset}`}
-                      className={`rounded-md border px-3 py-2 text-sm ${
-                        hookWindowSec === preset
-                          ? "border-foreground bg-foreground text-background"
-                          : "bg-background"
-                      }`}
-                    >
-                      {preset}s
-                    </Link>
-                  ))}
-                  <form method="get" action={`/videos/${video.id}`} className="flex items-center gap-2">
-                    <input type="hidden" name="tab" value="visual-plan" />
-                    <Input
-                      name="hookWindowSec"
-                      type="number"
-                      min="5"
-                      max="300"
-                      defaultValue={hookWindowSec}
-                      className="w-28"
-                    />
-                    <Button type="submit" variant="outline">
-                      Custom
-                    </Button>
-                  </form>
-                </div>
-
-                <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
-                  <SummaryItem label="Hook scenes" value={hookReview.scenes.length} />
-                  <SummaryItem
-                    label="Selected duration"
-                    value={formatDuration(hookReview.totalDurationSeconds)}
-                  />
-                  <SummaryItem
-                    label="Average scene"
-                    value={`${hookReview.averageDurationSeconds.toFixed(1)}s`}
-                  />
-                  <SummaryItem
-                    label="Over 5.5s"
-                    value={hookReview.over55Count}
-                  />
-                  <SummaryItem
-                    label="Over 6.5s"
-                    value={hookReview.over65Count}
-                  />
-                  <SummaryItem
-                    label="Critical 8s+"
-                    value={hookReview.criticalCount}
-                  />
-                </div>
-
-                {hookReview.criticalCount > 0 ? (
-                  <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-                    {hookReview.criticalCount} hook scene
-                    {hookReview.criticalCount === 1 ? "" : "s"} are at or above 8 seconds. These are the first places to split or tighten.
-                  </div>
-                ) : hookReview.over65Count > 0 ? (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    {hookReview.over65Count} hook scene
-                    {hookReview.over65Count === 1 ? "" : "s"} currently exceed 6.5 seconds. The pacing is likely dragging in the opening beats.
-                  </div>
-                ) : hookReview.over55Count > 0 ? (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    {hookReview.over55Count} hook scene
-                    {hookReview.over55Count === 1 ? "" : "s"} exceed 5.5 seconds. These are worth checking before regenerating voiceover or render.
-                  </div>
-                ) : (
-                  <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                    The current hook selection is pacing cleanly.
-                  </div>
-                )}
-
-                {hookReview.scenes.length > 0 ? (
-                  <div className="max-h-[360px] overflow-auto rounded-md border">
-                    <table className="min-w-full text-left text-sm">
-                      <thead className="sticky top-0 bg-background">
-                        <tr className="border-b">
-                          <th className="px-3 py-2 font-medium">Scene</th>
-                          <th className="px-3 py-2 font-medium">Cumulative</th>
-                          <th className="px-3 py-2 font-medium">Duration</th>
-                          <th className="px-3 py-2 font-medium">Script</th>
-                          <th className="px-3 py-2 font-medium">Warnings</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {hookReview.scenes.map((scene) => (
-                          <tr key={scene.id} className="border-b align-top">
-                            <td className="px-3 py-2">{scene.sortOrder}</td>
-                            <td className="px-3 py-2">
-                              {scene.startTimeSec.toFixed(1)}s -{" "}
-                              {scene.endTimeSec.toFixed(1)}s
-                            </td>
-                            <td className="px-3 py-2">{scene.duration ?? 0}s</td>
-                            <td className="px-3 py-2">{scene.scriptText}</td>
-                            <td className="px-3 py-2">
-                              {scene.warnings.length > 0
-                                ? scene.warnings.map((warning) => warning.text).join(", ")
-                                : "OK"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : null}
-
-                {hookReview.scenes.length > 0 ? (
-                  <HookAutoFixPanel
-                    action={importHookReplacementPatch.bind(null, video.id)}
-                    videoId={video.id}
-                    selectedFromOrder={hookRange.fromOrder}
-                    selectedToOrder={hookRange.toOrder}
-                    currentScenes={video.scenes.map((scene) => ({
-                      order: scene.sortOrder,
-                      scriptText: scene.scriptText,
-                      duration: scene.duration,
-                    }))}
-                    optimizationPacks={hookOptimizationPacks}
-                    defaultPacing={defaultHookPacing}
-                  />
-                ) : null}
-
-                <div className="rounded-md border bg-muted/20 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h3 className="text-sm font-medium">Pending Prompt Regeneration</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Scenes with empty image prompts are ready to export into the existing Bulk Scene Patch flow.
-                      </p>
-                    </div>
-                    <CopyPromptButton
-                      label="Copy Pending Patch JSON"
-                      prompt={pendingPromptPatchJson}
-                    />
-                  </div>
-                </div>
-
-                <details className="rounded-md border bg-muted/20 p-4">
-                  <summary className="cursor-pointer text-sm font-medium">
-                    Advanced manual editing
-                  </summary>
-                  <div className="mt-4 grid gap-3">
-                    {hookReview.scenes.length > 0 ? (
-                      hookReview.scenes.map((scene) => (
-                        <HookSceneReviewCard
-                          key={scene.id}
-                          scene={scene}
-                          editAction={updateScene.bind(null, scene.id, video.id)}
-                          splitAction={splitHookScene.bind(null, scene.id, video.id)}
-                          mergePreviousAction={mergeSceneWithPrevious.bind(
-                            null,
-                            scene.id,
-                            video.id,
-                          )}
-                          mergeNextAction={mergeSceneWithNext.bind(
-                            null,
-                            scene.id,
-                            video.id,
-                          )}
-                          regenerateAction={markSceneForPromptRegeneration.bind(
-                            null,
-                            scene.id,
-                            video.id,
-                          )}
-                          hasPrevious={scene.hasPrevious}
-                          hasNext={scene.hasNext}
-                        />
-                      ))
-                    ) : (
-                      <div className="rounded-md border px-4 py-6 text-sm text-muted-foreground">
-                        Add or import scenes to review the hook.
-                      </div>
-                    )}
-                  </div>
-                </details>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Import Scenes</CardTitle>
-                <CardDescription>
-                  This is a manual workflow. Copy the Visual Planner Prompt,
-                  generate the scenes externally, then paste the resulting JSON
-                  here.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ImportScenesForm
-                  action={importScenes.bind(null, video.id)}
-                  visualPlanPromptUrl={promptUrl("visual-planner")}
-                  channelName={channel.name}
-                  videoId={video.id}
-                  videoTitle={video.title}
-                  channelKey={channel.key}
-                  projectBiblePath={channel.projectBiblePath}
-                  imagePromptBiblePath={channel.imagePromptBiblePath}
-                  characterBiblePath={channel.characterBiblePath}
-                  visualPlannerPath={channel.prompts.visualPlanner}
-                  scriptLength={video.script?.length ?? 0}
-                  currentSceneCount={video.scenes.length}
-                  currentScenesJson={JSON.stringify(
-                    video.scenes.map((scene) => ({
-                      scriptText: scene.scriptText,
-                      sceneType: scene.sceneType,
-                      visualPurpose: scene.visualPurpose ?? "",
-                      visualIdea: scene.visualIdea ?? "",
-                      duration: scene.duration ?? 8,
-                      imagePrompt: scene.imagePrompt ?? "",
-                      status: "planned",
-                    })),
-                    null,
-                    2,
-                  )}
-                />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Bulk Scene Patch Import</CardTitle>
-                <CardDescription>
-                  Paste a targeted JSON patch to update the existing visual plan without replacing the full scene list.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+            <CollapsibleCard
+              title="Bulk Scene Patch Import"
+              description="Paste a targeted JSON patch to update the existing visual plan without replacing the full scene list."
+            >
                 <ScenePatchImporter
                   action={importScenePatch.bind(null, video.id)}
                   videoId={video.id}
@@ -1316,28 +1640,32 @@ export default async function VideoDetailPage({
                     scriptText: scene.scriptText,
                     visualIdea: scene.visualIdea,
                     imagePrompt: scene.imagePrompt,
+                    hasGeneratedImage: Boolean(
+                      scene.imageLocalPath ||
+                        scene.imageFileName ||
+                        scene.imageUrl,
+                    ),
                   }))}
                 />
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Add scene</CardTitle>
-                <CardDescription>
-                  Break the script into ordered visual beats.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+            <CollapsibleCard
+              title="Add scene"
+              description="Break the script into ordered visual beats."
+            >
                 <SceneForm
                   action={addScene.bind(null, video.id)}
                   submitLabel="Add scene"
                   defaultOrder={nextSceneOrder}
                 />
-              </CardContent>
-            </Card>
+            </CollapsibleCard>
 
-            {video.scenes.map((scene) => (
+            <CollapsibleCard
+              title={`All scenes (${video.scenes.length})`}
+              description="Edit individual scenes when you need one-off fixes. Keep this closed during import and patch workflows."
+            >
+              <div className="grid gap-4">
+{video.scenes.map((scene) => (
               <Card key={scene.id} id={`scene-${scene.sortOrder}`}>
                 <CardHeader>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1378,14 +1706,25 @@ export default async function VideoDetailPage({
                 </CardContent>
               </Card>
             ))}
+              </div>
+            </CollapsibleCard>
           </div>
         </TabsContent>
+        ) : null}
 
+        {activeTab === "assets" ? (
         <TabsContent value="assets">
           <AssetsWorkflow
             videoId={video.id}
-            defaultOutputFolder={generatedImagesDir(video.id, video.title)}
+            channelKey={video.channelKey}
+            script={video.script}
+            defaultOutputFolder={imageOutputFolderDisplay}
             notice={assetNotice}
+            podcastLibrarySummary={
+              video.channelKey === "podcast-english-lessons"
+                ? await getPodcastImageLibrarySummary()
+                : null
+            }
             scenes={video.scenes.map((scene) => ({
               id: scene.id,
               sortOrder: scene.sortOrder,
@@ -1415,7 +1754,9 @@ export default async function VideoDetailPage({
             }))}
           />
         </TabsContent>
+        ) : null}
 
+        {activeTab === "voiceover" ? (
         <TabsContent value="voiceover">
           <div className="grid gap-4">
             {voiceoverNotice ? (
@@ -1430,6 +1771,8 @@ export default async function VideoDetailPage({
               </div>
             ) : null}
 
+            <TimelineAlignmentBanner report={timelineAlignment} />
+
             <div className="sticky top-2 z-10 flex flex-wrap gap-2 rounded-md border bg-background/95 p-2 text-sm shadow-sm backdrop-blur">
               <Button asChild variant="ghost" size="sm">
                 <a href="#voiceover-overview">Overview</a>
@@ -1438,13 +1781,7 @@ export default async function VideoDetailPage({
                 <a href="#voiceover-by-scene">By Scene</a>
               </Button>
               <Button asChild variant="ghost" size="sm">
-                <a href="#voiceover-qa">Voiceover QA</a>
-              </Button>
-              <Button asChild variant="ghost" size="sm">
                 <a href="#segment-subtitles">Scene Subtitles</a>
-              </Button>
-              <Button asChild variant="ghost" size="sm">
-                <a href="#manual-subtitles">Manual Subtitles</a>
               </Button>
             </div>
 
@@ -1586,6 +1923,7 @@ export default async function VideoDetailPage({
                     <CardTitle>Voiceover By Scene</CardTitle>
                     <CardDescription>
                       Generate one ElevenLabs clip per visual scene, then stitch a paced master voiceover.
+                      Scenes with script acting cues ([laughs], [sighs], …) auto-use eleven_v3; the rest keep your default model (turbo).
                     </CardDescription>
                   </div>
                   <Badge variant={hasSceneVoiceoverMaster ? "default" : "outline"}>
@@ -1605,6 +1943,11 @@ export default async function VideoDetailPage({
                   <SummaryItem label="Generated" value={sceneVoiceoverGeneratedCount} />
                   <SummaryItem label="Missing" value={sceneVoiceoverMissingCount} />
                   <SummaryItem label="Failed" value={sceneVoiceoverFailedCount} />
+                  <SummaryItem label="Rejected (skipped)" value={sceneVoiceoverRejectedCount} />
+                  <SummaryItem
+                    label="Expressive (v3)"
+                    value={actingCuesBySortOrder.size}
+                  />
                   <SummaryItem
                     label="Scene audio duration"
                     value={
@@ -1615,48 +1958,32 @@ export default async function VideoDetailPage({
                   />
                 </div>
 
-                <form id={elevenLabsSettingsFormId} className="grid gap-4 rounded-md border bg-muted/20 p-4 lg:grid-cols-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="voiceId">Voice ID</Label>
-                    <Input
-                      id="voiceId"
-                      name="voiceId"
-                      defaultValue={defaultVoiceId}
-                      placeholder="ElevenLabs voice ID"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="modelId">Model ID</Label>
-                    <Input
-                      id="modelId"
-                      name="modelId"
-                      defaultValue={defaultModelId}
-                      placeholder={DEFAULT_ELEVENLABS_MODEL_ID}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="outputFormat">Output format</Label>
-                    <Input
-                      id="outputFormat"
-                      name="outputFormat"
-                      defaultValue={DEFAULT_ELEVENLABS_OUTPUT_FORMAT}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="speed">Speed</Label>
-                    <Input
-                      id="speed"
-                      name="speed"
-                      type="number"
-                      min="0.7"
-                      max="1.2"
-                      step="0.05"
-                      defaultValue={defaultVoiceoverSpeed}
-                    />
-                  </div>
-                  <input type="hidden" name="stability" value="0.5" />
-                  <input type="hidden" name="similarityBoost" value="0.75" />
-                </form>
+                <ElevenLabsSettingsFields
+                  formId={elevenLabsSettingsFormId}
+                  initialSettings={elevenLabsSettings.settings}
+                  voiceIdHistory={elevenLabsSettings.voiceIdHistory}
+                  namedVoices={elevenLabsSettings.namedVoices}
+                />
+
+                <GoogleChirp3HdUsageMeter initialSummary={chirp3HdUsage} />
+
+                <ChatterboxVoiceCloner />
+
+                <VoiceoverSectionVoicesPanel
+                  videoId={video.id}
+                  formId={elevenLabsSettingsFormId}
+                  defaultVoiceId={elevenLabsSettings.settings.voiceId}
+                  defaultVoiceName={elevenLabsSettings.settings.voiceName}
+                  namedVoices={elevenLabsSettings.namedVoices}
+                  sectionVoices={voiceoverSectionVoices}
+                  sceneAssignments={autoSceneSectionAssignments}
+                  maxSortOrder={
+                    video.scenes.reduce(
+                      (max, scene) => Math.max(max, scene.sortOrder),
+                      0,
+                    )
+                  }
+                />
 
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="flex items-center gap-2 text-sm">
@@ -1687,6 +2014,10 @@ export default async function VideoDetailPage({
                   >
                     Generate all scene voiceovers
                   </Button>
+                  <p className="w-full text-xs text-muted-foreground">
+                    When every scene audio is ready, the master voiceover is
+                    stitched automatically.
+                  </p>
                   <Button
                     type="submit"
                     variant="outline"
@@ -1723,7 +2054,41 @@ export default async function VideoDetailPage({
                   >
                     Stitch master voiceover
                   </Button>
+                  <CancelSceneVoiceoverButton videoId={video.id} />
                 </div>
+
+                <MusicBedAssignPanel
+                  videoId={video.id}
+                  formId={elevenLabsSettingsFormId}
+                  presets={listMusicBedPresets()}
+                  hasFreesoundKey={Boolean(getFreesoundApiKey())}
+                  scenes={video.scenes.map((scene) => ({
+                    id: scene.id,
+                    sortOrder: scene.sortOrder,
+                    scriptText: scene.scriptText,
+                    visualIdea: scene.visualIdea,
+                    visualPurpose: scene.visualPurpose,
+                    duration: scene.duration,
+                    voiceoverLocalPath: scene.voiceoverLocalPath,
+                    voiceoverStatus: scene.voiceoverStatus,
+                    voiceoverProvider: scene.voiceoverProvider,
+                    clipLocalPath: scene.clipLocalPath,
+                    clipFileName: scene.clipFileName,
+                    clipMuted: scene.clipMuted,
+                  }))}
+                />
+
+                <VoiceoverScenePausePanel
+                  formId={elevenLabsSettingsFormId}
+                  disabled={video.scenes.length === 0}
+                  applyAction={updateSelectedScenePauses.bind(null, video.id)}
+                  scenes={video.scenes.map((scene) => ({
+                    sortOrder: scene.sortOrder,
+                    sceneType: scene.sceneType,
+                    visualIdea: scene.visualIdea,
+                    pauseAfterMs: scene.pauseAfterMs,
+                  }))}
+                />
 
                 <div className="max-h-[560px] overflow-auto rounded-md border">
                   <table className="w-full min-w-[980px] text-left text-sm">
@@ -1741,24 +2106,75 @@ export default async function VideoDetailPage({
                     <tbody>
                       {video.scenes.length > 0 ? (
                         video.scenes.map((scene) => {
-                          const audioUrl = generatedAudioUrl(scene.voiceoverLocalPath);
+                          const rejected = isSceneRejected(scene.status);
+                          const preview = sceneAudioPreview({
+                            clipLocalPath: scene.clipLocalPath,
+                            clipMuted: scene.clipMuted,
+                            voiceoverLocalPath: scene.voiceoverLocalPath,
+                            updatedAt: scene.updatedAt,
+                          });
+                          const audioUrl = preview.url;
+                          const sceneActingCues =
+                            actingCuesBySortOrder.get(scene.sortOrder) ?? [];
 
                           return (
-                            <tr key={scene.id} className="border-t align-top">
+                            <tr
+                              key={scene.id}
+                              className={
+                                rejected
+                                  ? "border-t align-top bg-destructive/5 opacity-70"
+                                  : "border-t align-top"
+                              }
+                            >
                               <td className="px-3 py-3 font-medium">{scene.sortOrder}</td>
                               <td className="px-3 py-3">
-                                <input
-                                  type="checkbox"
-                                  name="selectedSceneVoiceoverOrders"
-                                  value={scene.sortOrder}
-                                  form={elevenLabsSettingsFormId}
-                                  className="size-4"
-                                />
+                                {rejected ? (
+                                  <span className="text-xs text-destructive">—</span>
+                                ) : (
+                                  <input
+                                    type="checkbox"
+                                    name="selectedSceneVoiceoverOrders"
+                                    value={scene.sortOrder}
+                                    form={elevenLabsSettingsFormId}
+                                    className="size-4"
+                                  />
+                                )}
                               </td>
                               <td className="max-w-sm px-3 py-3">
                                 <div className="line-clamp-3 whitespace-pre-line">
                                   {scene.scriptText}
                                 </div>
+                                {rejected ? (
+                                  <p className="mt-1 text-xs font-medium text-destructive">
+                                    Rejected in Assets — skipped for voiceover/render
+                                  </p>
+                                ) : null}
+                                {sceneActingCues.length > 0 ? (
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {sceneActingCues.map((cue) => (
+                                      <Badge
+                                        key={`${scene.id}-${cue.audioTag}`}
+                                        variant="secondary"
+                                        className="font-mono text-[10px]"
+                                      >
+                                        {cue.audioTag} · v3
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                ) : null}
+                                {isMusicBedVisualIdea(scene.visualIdea) ? (
+                                  <p className="mt-2 text-xs font-medium text-amber-800">
+                                    MUSIC_BED · Freesound attach above
+                                    {scene.voiceoverProvider === "freesound"
+                                      ? " · attached"
+                                      : ""}
+                                  </p>
+                                ) : null}
+                                {preview.source === "exclusive_clip" ? (
+                                  <p className="mt-2 text-xs font-medium text-sky-800">
+                                    Exclusive clip audio (music bed ignored on render)
+                                  </p>
+                                ) : null}
                                 {scene.voiceoverError ? (
                                   <p className="mt-2 text-xs text-destructive">
                                     {scene.voiceoverError}
@@ -1776,14 +2192,19 @@ export default async function VideoDetailPage({
                                   : "Not set"}
                               </td>
                               <td className="px-3 py-3">
-                                {scene.pauseAfterMs ? `${scene.pauseAfterMs}ms` : "Auto"}
+                                {scene.pauseAfterMs != null
+                                  ? `${scene.pauseAfterMs}ms`
+                                  : "default 180ms"}
                               </td>
                               <td className="max-w-xs px-3 py-3">
                                 {audioUrl ? (
-                                  <audio controls src={audioUrl} className="w-56 max-w-full" />
+                                  <SceneVoiceoverAudioPlayer
+                                    src={audioUrl}
+                                    className="w-56 max-w-full"
+                                  />
                                 ) : null}
                                 <div className="mt-1 break-all font-mono text-xs text-muted-foreground">
-                                  {scene.voiceoverLocalPath ?? "No audio yet"}
+                                  {preview.pathLabel ?? "No audio yet"}
                                 </div>
                               </td>
                             </tr>
@@ -1805,45 +2226,6 @@ export default async function VideoDetailPage({
               </CardContent>
             </Card>
 
-            <Card id="voiceover-qa">
-              <CardHeader>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <CardTitle>Voiceover QA</CardTitle>
-                    <CardDescription>
-                      Review suspicious generated clips without listening through the full video.
-                    </CardDescription>
-                  </div>
-                  <Badge
-                    variant={
-                      voiceoverQaSummary.failed > 0 || voiceoverQaSummary.critical > 0
-                        ? "outline"
-                        : "default"
-                    }
-                  >
-                    {voiceoverQaSummary.failed > 0 || voiceoverQaSummary.critical > 0
-                      ? "Issues found"
-                      : "QA looks good"}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <VoiceoverQaPanel
-                  rows={voiceoverQaRows}
-                  summary={voiceoverQaSummary}
-                  masterAudioUrl={masterVoiceoverAudioUrl}
-                  elevenLabsSettingsFormId={elevenLabsSettingsFormId}
-                  regenerateAction={generateSelectedSceneVoiceovers.bind(null, video.id)}
-                  markOkAction={markSceneVoiceoverQaOk.bind(null, video.id)}
-                  markNeedsReviewAction={markSceneVoiceoverNeedsReview.bind(null, video.id)}
-                  useAudioDurationAction={updateSceneDurationFromVoiceover.bind(null, video.id)}
-                  updateAllDurationsAction={updateAllSceneDurationsFromVoiceover.bind(null, video.id)}
-                  deepQaUrl={deepVoiceoverQaUrl}
-                  deepQaEnabled={deepVoiceoverQaEnabled}
-                />
-              </CardContent>
-            </Card>
-
             <Card id="segment-subtitles">
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1851,7 +2233,10 @@ export default async function VideoDetailPage({
                     <CardTitle>Scene Subtitles</CardTitle>
                     <CardDescription>
                       Scene voiceovers are synced into one-scene subtitle jobs
-                      after generation or stitching.
+                      after generation or stitching. Empty-script bumpers
+                      (INTRO / LESSON / CLOSING / FINAL, music beds) skip
+                      alignment and stay silent — duration still advances so
+                      captions stay in sync.
                     </CardDescription>
                   </div>
                   <Badge variant="outline">
@@ -1911,66 +2296,60 @@ export default async function VideoDetailPage({
                   />
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <form action={updateSubtitleStylePreset.bind(null, video.id)}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <select
-                        name="captionStylePreset"
-                        defaultValue={video.captionStylePreset}
-                        className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        {Object.values(CAPTION_STYLE_PRESETS).map((preset) => (
-                          <option key={preset.id} value={preset.id}>
-                            {preset.name}
-                          </option>
-                        ))}
-                      </select>
-                      <Button type="submit" variant="outline">
-                        Apply style
-                      </Button>
-                    </div>
-                  </form>
-                  <Button
-                    type="submit"
-                    form={segmentSubtitlesFormId}
-                    formAction={generateSubtitlesForAllReadySegments.bind(
-                      null,
-                      video.id,
-                    )}
-                  >
-                    Generate Scene Subtitles
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    form={segmentSubtitlesFormId}
-                    formAction={applyCleanSubtitlePunctuation.bind(null, video.id)}
-                  >
-                    Apply Clean Punctuation
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    form={segmentSubtitlesFormId}
-                    formAction={combineSegmentSubtitles.bind(null, video.id)}
-                  >
-                    Combine Scene Subtitles
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    form={segmentSubtitlesFormId}
-                    formAction={markAllSubtitleSegmentsReady.bind(null, video.id)}
-                  >
-                    Mark Subtitles Ready
-                  </Button>
-                  <CopySubtitleButton label="Copy Combined SRT" text={formattedSrt} />
-                  <CopySubtitleButton label="Copy Combined VTT" text={formattedVtt} />
-                  <CopySubtitleButton label="Copy Combined ASS" text={formattedAss} />
-                  <CopySubtitleButton
-                    label="Copy Active Word JSON"
-                    text={activeWordCaptionJson}
+                <div className="space-y-3">
+                  <CaptionStylePicker
+                    action={updateSubtitleStylePreset.bind(null, video.id)}
+                    currentPresetId={video.captionStylePreset}
                   />
+                  <SubtitleAlignmentProviderPicker
+                    formId={segmentSubtitlesFormId}
+                    defaultProvider={pipelineSettings.voiceover.alignmentProvider}
+                    id={`alignmentProvider-${video.id}`}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="submit"
+                      form={segmentSubtitlesFormId}
+                      formAction={generateSubtitlesForAllReadySegments.bind(
+                        null,
+                        video.id,
+                      )}
+                    >
+                      Generate Scene Subtitles
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      form={segmentSubtitlesFormId}
+                      formAction={applyCleanSubtitlePunctuation.bind(null, video.id)}
+                    >
+                      Apply Clean Punctuation
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      form={segmentSubtitlesFormId}
+                      formAction={combineSegmentSubtitles.bind(null, video.id)}
+                    >
+                      Combine Scene Subtitles
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      form={segmentSubtitlesFormId}
+                      formAction={markAllSubtitleSegmentsReady.bind(null, video.id)}
+                      title="Usually automatic after Generate Scene Subtitles; use if status was reset"
+                    >
+                      Mark Subtitles Ready
+                    </Button>
+                    <CopySubtitleButton label="Copy Combined SRT" text={formattedSrt} />
+                    <CopySubtitleButton label="Copy Combined VTT" text={formattedVtt} />
+                    <CopySubtitleButton label="Copy Combined ASS" text={formattedAss} />
+                    <CopySubtitleButton
+                      label="Copy Active Word JSON"
+                      text={activeWordCaptionJson}
+                    />
+                  </div>
                 </div>
 
                 <div className="max-h-[520px] overflow-auto rounded-md border">
@@ -1992,6 +2371,9 @@ export default async function VideoDetailPage({
                         video.voiceoverSegments.map((segment) => {
                           const subtitleSegment =
                             subtitleSegmentByVoiceoverId.get(segment.id);
+                          const silent = isSilentSubtitleVoiceoverText(
+                            segment.pacedTextUsed || segment.text,
+                          );
                           const localCues = parseFormattedSubtitleCues(
                             subtitleSegment?.localCuesJson,
                           );
@@ -2012,6 +2394,11 @@ export default async function VideoDetailPage({
                                 <Badge variant="outline">
                                   {statusLabel(segment.status)}
                                 </Badge>
+                                {silent ? (
+                                  <p className="mt-2 text-xs font-medium text-muted-foreground">
+                                    Silent bumper · no captions
+                                  </p>
+                                ) : null}
                               </td>
                               <td className="px-3 py-3">
                                 <Badge variant="outline">
@@ -2019,6 +2406,15 @@ export default async function VideoDetailPage({
                                     subtitleSegment?.status ?? "pending",
                                   )}
                                 </Badge>
+                                {silent &&
+                                subtitleSegment &&
+                                ["formatted", "ready"].includes(
+                                  subtitleSegment.status,
+                                ) ? (
+                                  <p className="mt-2 text-xs text-muted-foreground">
+                                    Skipped alignment (offset kept)
+                                  </p>
+                                ) : null}
                                 {subtitleSegment?.error ? (
                                   <p className="mt-2 text-xs text-destructive">
                                     {subtitleSegment.error}
@@ -2027,9 +2423,13 @@ export default async function VideoDetailPage({
                               </td>
                               <td className="px-3 py-3">{localCues.length}</td>
                               <td className="px-3 py-3">
-                                {localDuration > 0
-                                  ? `${localDuration.toFixed(1)}s`
-                                  : "Not set"}
+                                {silent
+                                  ? segment.durationSec != null
+                                    ? `${segment.durationSec.toFixed(1)}s gap`
+                                    : "Silent gap"
+                                  : localDuration > 0
+                                    ? `${localDuration.toFixed(1)}s`
+                                    : "Not set"}
                               </td>
                               <td className="max-w-sm px-3 py-3">
                                 <div className="space-y-2">
@@ -2049,7 +2449,9 @@ export default async function VideoDetailPage({
                                   ))}
                                   {localCues.length === 0 ? (
                                     <span className="text-muted-foreground">
-                                      No local captions yet.
+                                      {silent
+                                        ? "No captions (structural / video bumper)."
+                                        : "No local captions yet."}
                                     </span>
                                   ) : null}
                                 </div>
@@ -2174,79 +2576,6 @@ export default async function VideoDetailPage({
               </CardContent>
             </Card>
 
-            <Card id="manual-subtitles">
-              <CardHeader>
-                <CardTitle>Subtitles</CardTitle>
-                <CardDescription>
-                  Recommended caption style: complete subtitles split into
-                  short, visual, easy-to-read blocks. Do not format subtitles
-                  before the final voiceover is locked, because timing depends
-                  on the final audio.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form
-                  action={saveRawSubtitles.bind(null, video.id)}
-                  className="space-y-4"
-                >
-                  <div className="grid gap-4 lg:grid-cols-[180px_1fr]">
-                    <div className="grid gap-2">
-                      <Label htmlFor="rawSubtitleFormat">Format</Label>
-                      <select
-                        id="rawSubtitleFormat"
-                        name="rawSubtitleFormat"
-                        defaultValue={video.rawSubtitleFormat ?? "auto"}
-                        className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="auto">Auto</option>
-                        <option value="srt">SRT</option>
-                        <option value="vtt">VTT</option>
-                      </select>
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label htmlFor="rawSubtitleText">Raw SRT/VTT</Label>
-                      <Textarea
-                        id="rawSubtitleText"
-                        name="rawSubtitleText"
-                        className="min-h-72 font-mono text-sm"
-                        defaultValue={video.rawSubtitleText ?? ""}
-                        placeholder={
-                          "1\n00:00:01,000 --> 00:00:03,500\nPaste final ElevenLabs subtitles here..."
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="submit" variant="outline">
-                      Save raw subtitles
-                    </Button>
-                    <Button
-                      type="submit"
-                      formAction={parseAndFormatSubtitles.bind(null, video.id)}
-                    >
-                      Parse subtitles
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      formAction={parseAndFormatSubtitles.bind(null, video.id)}
-                    >
-                      Format captions
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      formAction={markSubtitlesReady.bind(null, video.id)}
-                    >
-                      Mark subtitles ready
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-
             <Card>
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -2331,7 +2660,9 @@ export default async function VideoDetailPage({
             </Card>
           </div>
         </TabsContent>
+        ) : null}
 
+        {activeTab === "render-draft" ? (
         <TabsContent value="render-draft">
           <div className="grid gap-4">
             {renderNotice ? (
@@ -2346,14 +2677,17 @@ export default async function VideoDetailPage({
               </div>
             ) : null}
 
+            <TimelineAlignmentBanner report={timelineAlignment} />
+
             <Card>
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <CardTitle>Render Draft</CardTitle>
                     <CardDescription>
-                      Create a local 1920x1080 draft MP4 from scene images,
-                      segmented voiceover audio, and active-word ASS captions.
+                      Create a local 1920x1080 draft MP4 from scene images and
+                      voiceover audio. Subtitles are optional — uncheck the box
+                      below to render without on-screen captions.
                     </CardDescription>
                   </div>
                   <Badge variant="outline">
@@ -2363,10 +2697,19 @@ export default async function VideoDetailPage({
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                  <SummaryItem label="Scenes" value={video.scenes.length} />
+                  <SummaryItem
+                    label="Scenes"
+                    value={`${
+                      video.scenes.filter((scene) => !isSceneRejected(scene.status))
+                        .length
+                    } active / ${video.scenes.length}`}
+                  />
                   <SummaryItem
                     label="Images ready"
-                    value={`${imageReadyCount} / ${video.scenes.length}`}
+                    value={`${imageReadyCount} / ${
+                      video.scenes.filter((scene) => !isSceneRejected(scene.status))
+                        .length
+                    }`}
                   />
                   <SummaryItem
                     label="Voiceover segments"
@@ -2397,25 +2740,6 @@ export default async function VideoDetailPage({
                     value={latestRenderDraft ? statusLabel(latestRenderDraft.status) : "None"}
                   />
                 </div>
-
-                {voiceoverQaSummary.failed > 0 || voiceoverQaSummary.critical > 0 ? (
-                  <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <p>
-                        Voiceover QA found issues before render: {voiceoverQaSummary.failed} failed,{" "}
-                        {voiceoverQaSummary.critical} critical.
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button asChild size="sm" variant="outline">
-                          <a href="#voiceover-qa">Open Voiceover QA</a>
-                        </Button>
-                        <span className="rounded-md border border-amber-300 px-3 py-2 text-xs">
-                          Continue anyway by rendering below
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
 
                 <form
                   action={renderDraft.bind(null, video.id)}
@@ -2464,15 +2788,34 @@ export default async function VideoDetailPage({
                         <option value="contain">Contain / pad</option>
                       </select>
                     </div>
-                    <div className="flex items-end gap-2 pb-2">
-                      <input
-                        id="burnCaptions"
-                        name="burnCaptions"
-                        type="checkbox"
-                        defaultChecked
-                        className="size-4"
-                      />
-                      <Label htmlFor="burnCaptions">Burn captions</Label>
+                    <div className="flex flex-col justify-end gap-1 pb-1">
+                      <div className="flex items-center gap-2">
+                        <input
+                          id="burnCaptions"
+                          name="burnCaptions"
+                          type="checkbox"
+                          value="on"
+                          defaultChecked={pipelineSettings.render.burnCaptions}
+                          className="size-4"
+                        />
+                        <Label htmlFor="burnCaptions">
+                          Include subtitles in render
+                        </Label>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Uncheck to render video and audio only, without burned
+                        captions.
+                      </p>
+                      <div className="mt-3">
+                        <VoiceSoundBarsRenderFields
+                          defaultEnabled={
+                            pipelineSettings.render.voiceSoundBars
+                          }
+                          defaultStyle={
+                            pipelineSettings.render.voiceSoundBarsStyle
+                          }
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -2480,10 +2823,12 @@ export default async function VideoDetailPage({
                     <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                       <p className="font-medium">Hook pacing has warnings.</p>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <CopyPromptButton
-                          label="Export Hook Optimization Pack"
-                          prompt={hookOptimizationPacks[defaultHookPacing]}
-                        />
+                        {hookOptimizationPacks ? (
+                          <CopyPromptButton
+                            label="Export Hook Optimization Pack"
+                            prompt={hookOptimizationPacks[defaultHookPacing]}
+                          />
+                        ) : null}
                         <Button asChild variant="outline">
                           <Link href={`/videos/${video.id}?tab=visual-plan`}>
                             Open Hook Review
@@ -2541,17 +2886,21 @@ export default async function VideoDetailPage({
               </CardContent>
             </Card>
 
-            <RenderDiagnosticsCard
-              diagnostics={renderDiagnostics}
-              burnCaptionsEnabled
-              assCaptionSourceAvailable={Boolean(video.styledSubtitleAss)}
-            />
+            {renderDiagnostics ? (
+              <RenderDiagnosticsCard
+                diagnostics={renderDiagnostics}
+                burnCaptionsEnabled={renderDiagnostics.lastBurnCaptions ?? true}
+                assCaptionSourceAvailable={Boolean(video.styledSubtitleAss)}
+                timelineAlignment={timelineAlignment}
+              />
+            ) : null}
 
             <Card>
               <CardHeader>
-                <CardTitle>Project draft.mp4</CardTitle>
+                <CardTitle>Rendered video</CardTitle>
                 <CardDescription>
-                  Preview the generated draft.mp4 stored in this video's render folder.
+                  Preview the final render stored in this video&apos;s render folder
+                  (filename from the video title).
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -2559,7 +2908,11 @@ export default async function VideoDetailPage({
                   <SummaryItem label="Project file" value={projectDraftPath} />
                   <SummaryItem
                     label="Preview"
-                    value={projectDraftUrl ? "draft.mp4 found" : "draft.mp4 missing"}
+                    value={
+                      projectDraftUrl
+                        ? `${projectDraftFileName} found`
+                        : `${projectDraftFileName} missing`
+                    }
                   />
                 </div>
 
@@ -2570,25 +2923,34 @@ export default async function VideoDetailPage({
                 ) : null}
 
                 {projectDraftUrl ? (
-                  <div className="space-y-2">
-                    <DraftVideoPlayer
-                      src={projectDraftUrl}
-                      sourceLabel={projectDraftPath}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <DraftVideoPlayer
+                        src={projectDraftUrl}
+                        sourceLabel={projectDraftPath}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Source: {projectDraftPath}
+                      </p>
+                    </div>
+                    <DownloadYoutubeChaptersButton
+                      downloadUrl={`/api/videos/${encodeURIComponent(
+                        video.id,
+                      )}/youtube-chapters`}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Source: {projectDraftPath}
-                    </p>
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    No draft.mp4 file exists yet in this video's render folder.
+                    No rendered video file exists yet in this video&apos;s render folder.
                   </p>
                 )}
               </CardContent>
             </Card>
           </div>
         </TabsContent>
+        ) : null}
 
+        {activeTab === "thumbnail" ? (
         <TabsContent value="thumbnail">
           <div className="space-y-5">
             {thumbnailNotice ? (
@@ -2609,443 +2971,44 @@ export default async function VideoDetailPage({
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <CardTitle>Thumbnail Brief</CardTitle>
+                    <CardTitle>Thumbnail</CardTitle>
                     <CardDescription>
-                      Plan a CTR-focused thumbnail with one host, one large finance symbol, short text, and a clean white layout.
+                      Channel prompt masters → ChatGPT resolves variables with the
+                      video title → ChatGPT generates the image → we download and save
+                      it for YouTube.
                     </CardDescription>
                   </div>
                   <Badge variant="outline">{statusLabel(video.thumbnailStatus)}</Badge>
                 </div>
               </CardHeader>
               <CardContent>
-                <form
-                  id={thumbnailBriefFormId}
-                  action={saveThumbnailBrief.bind(null, video.id)}
-                  className="space-y-4"
-                >
-                  <input
-                    type="hidden"
-                    name="thumbnailActiveConceptId"
-                    value={activeThumbnailConcept?.id ?? "A"}
-                  />
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="grid gap-2">
-                      <Label htmlFor="thumbnailHook">Thumbnail hook</Label>
-                      <Input
-                        id="thumbnailHook"
-                        name="thumbnailHook"
-                        defaultValue={thumbnailBriefValue(
-                          thumbnailBriefSource,
-                          "thumbnailHook",
-                          video.title,
-                        )}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="thumbnailOverlayText">Overlay text</Label>
-                      <Input
-                        id="thumbnailOverlayText"
-                        name="thumbnailOverlayText"
-                        defaultValue={thumbnailBriefValue(
-                          thumbnailBriefSource,
-                          "overlayText",
-                          "NOT READY",
-                        )}
-                        placeholder="FIRST $10K"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        2 to 5 words, uppercase, huge black text.
-                      </p>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="thumbnailMainEmotion">Main emotion</Label>
-                      <select
-                        id="thumbnailMainEmotion"
-                        name="thumbnailMainEmotion"
-                        defaultValue={thumbnailBriefValue(
-                          thumbnailBriefSource,
-                          "mainEmotion",
-                          "surprised realization",
-                        )}
-                        className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="shocked">Shocked</option>
-                        <option value="worried">Worried</option>
-                        <option value="confused">Confused</option>
-                        <option value="suspicious">Suspicious</option>
-                        <option value="excited">Excited</option>
-                        <option value="relieved">Relieved</option>
-                        <option value="urgent">Urgent</option>
-                        <option value="smug">Smug</option>
-                        <option value="surprised realization">Surprised realization</option>
-                      </select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="thumbnailColorAccent">Color accent</Label>
-                      <select
-                        id="thumbnailColorAccent"
-                        name="thumbnailColorAccent"
-                        defaultValue={thumbnailBriefValue(
-                          thumbnailBriefSource,
-                          "colorAccent",
-                          "green",
-                        )}
-                        className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="red">Red</option>
-                        <option value="green">Green</option>
-                        <option value="blue">Blue</option>
-                        <option value="yellow">Yellow</option>
-                        <option value="none">None</option>
-                      </select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="thumbnailMainHostPose">Main host pose</Label>
-                      <Input
-                        id="thumbnailMainHostPose"
-                        name="thumbnailMainHostPose"
-                        defaultValue={thumbnailBriefValue(
-                          thumbnailBriefSource,
-                          "mainHostPose",
-                          "main host reacting with raised eyebrows",
-                        )}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="thumbnailPrimaryObject">Main object/symbol</Label>
-                      <Input
-                        id="thumbnailPrimaryObject"
-                        name="thumbnailPrimaryObject"
-                        defaultValue={thumbnailBriefValue(
-                          thumbnailBriefSource,
-                          "primaryObject",
-                          "oversized finance symbol",
-                        )}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="thumbnailSecondaryObject">Secondary object/symbol</Label>
-                      <Input
-                        id="thumbnailSecondaryObject"
-                        name="thumbnailSecondaryObject"
-                        defaultValue={thumbnailBriefValue(
-                          thumbnailBriefSource,
-                          "secondaryObject",
-                          "a few simple money symbols",
-                        )}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="thumbnailVisualTension">Visual tension</Label>
-                      <Input
-                        id="thumbnailVisualTension"
-                        name="thumbnailVisualTension"
-                        defaultValue={thumbnailBriefValue(
-                          thumbnailBriefSource,
-                          "visualTension",
-                          "small detail feels unexpectedly important",
-                        )}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="thumbnailAvoid">Avoid</Label>
-                    <Textarea
-                      id="thumbnailAvoid"
-                      name="thumbnailAvoid"
-                      defaultValue={thumbnailAvoid}
-                      className="min-h-28"
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="submit">Save Thumbnail Brief</Button>
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      formAction={markThumbnailBriefReady.bind(null, video.id)}
-                    >
-                      Mark Brief Ready
-                    </Button>
-                    <CopyPromptButton
-                      label="Copy Thumbnail Brief JSON"
-                      prompt={thumbnailBriefJson}
-                    />
-                    <CopyPromptButton
-                      label="Copy Overlay Text"
-                      prompt={thumbnailBriefValue(
-                        thumbnailBriefSource,
-                        "overlayText",
-                        "NOT READY",
-                      )}
-                    />
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Thumbnail Concepts</CardTitle>
-                <CardDescription>
-                  Generate three local draft concepts: curiosity, urgency, and transformation.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <form action={generateThumbnailConcepts.bind(null, video.id)}>
-                  <Button type="submit">
-                    <Sparkles />
-                    Generate Thumbnail Concepts
-                  </Button>
-                </form>
-
-                {thumbnailConcepts.length > 0 ? (
-                  <div className="grid gap-3 lg:grid-cols-3">
-                    {thumbnailConcepts.map((concept) => (
-                      <form
-                        key={concept.id}
-                        action={selectThumbnailConcept.bind(null, video.id)}
-                        className="rounded-md border p-4"
-                      >
-                        <input
-                          type="hidden"
-                          name="thumbnailConceptId"
-                          value={concept.id}
-                        />
-                        <div className="mb-3 flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-xs font-semibold uppercase text-muted-foreground">
-                              Concept {concept.id}
-                            </p>
-                            <h3 className="font-semibold">{concept.name}</h3>
-                          </div>
-                          {activeThumbnailConcept?.id === concept.id ? (
-                            <Badge>Active</Badge>
-                          ) : null}
-                        </div>
-                        <dl className="space-y-2 text-sm">
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Overlay</dt>
-                            <dd className="font-black uppercase">{concept.overlayText}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Emotion</dt>
-                            <dd>{concept.mainEmotion}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Object</dt>
-                            <dd>{concept.primaryObject}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Why it works</dt>
-                            <dd>{concept.whyItWorks}</dd>
-                          </div>
-                        </dl>
-                        <Button type="submit" variant="outline" className="mt-4 w-full">
-                          Select Concept {concept.id}
-                        </Button>
-                      </form>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No thumbnail concepts generated yet.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Thumbnail Prompt</CardTitle>
-                <CardDescription>
-                  Generate a clean Google Flow-style prompt from the active brief. No image API is called.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-md border bg-muted/20 p-4 text-sm">
-                  <p className="font-semibold">Wealth Insights main host descriptor</p>
-                  <p className="mt-2 text-muted-foreground">
-                    {WEALTH_INSIGHTS_HOST_DESCRIPTOR}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="submit"
-                    form={thumbnailBriefFormId}
-                    formAction={generateThumbnailPrompt.bind(null, video.id)}
-                  >
-                    <Sparkles />
-                    Generate Thumbnail Prompt
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    form={thumbnailBriefFormId}
-                    formAction={generateThumbnailImageWithFlow.bind(null, video.id)}
-                  >
-                    <Sparkles />
-                    Generate with Flow
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    form={thumbnailBriefFormId}
-                    formAction={markThumbnailPromptReady.bind(null, video.id)}
-                  >
-                    Mark Prompt Ready
-                  </Button>
-                  <CopyPromptButton
-                    label="Copy Thumbnail Prompt"
-                    prompt={video.thumbnailPrompt ?? ""}
-                  />
-                  <CopyPromptButton
-                    label="Copy Negative Prompt"
-                    prompt={video.thumbnailNegativePrompt ?? THUMBNAIL_NEGATIVE_PROMPT}
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="thumbnailPrompt">Prompt</Label>
-                  <Textarea
-                    id="thumbnailPrompt"
-                    readOnly
-                    className="min-h-72 font-mono text-xs"
-                    value={video.thumbnailPrompt ?? ""}
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="thumbnailNegativePrompt">Negative prompt</Label>
-                  <Textarea
-                    id="thumbnailNegativePrompt"
-                    readOnly
-                    className="min-h-24 font-mono text-xs"
-                    value={video.thumbnailNegativePrompt ?? THUMBNAIL_NEGATIVE_PROMPT}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Final Thumbnail</CardTitle>
-                <CardDescription>
-                  Store a manual URL or local path for the final thumbnail image.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form
-                  action={saveThumbnailFinal.bind(null, video.id)}
-                  className="space-y-4"
-                >
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="grid gap-2">
-                      <Label htmlFor="thumbnailImageUrl">Thumbnail image URL</Label>
-                      <Input
-                        id="thumbnailImageUrl"
-                        name="thumbnailImageUrl"
-                        defaultValue={video.thumbnailImageUrl ?? ""}
-                        placeholder="https://..."
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="thumbnailImagePath">Local image path</Label>
-                      <Input
-                        id="thumbnailImagePath"
-                        name="thumbnailImagePath"
-                        defaultValue={video.thumbnailImagePath ?? ""}
-                        placeholder="storage/thumbnails/.../thumbnail.png"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="thumbnailFileName">File name</Label>
-                      <Input
-                        id="thumbnailFileName"
-                        name="thumbnailFileName"
-                        defaultValue={video.thumbnailFileName ?? ""}
-                        placeholder="thumbnail.png"
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="thumbnailNotes">Notes</Label>
-                      <Input
-                        id="thumbnailNotes"
-                        name="thumbnailNotes"
-                        defaultValue={video.thumbnailNotes ?? ""}
-                        placeholder="Final thumbnail notes"
-                      />
-                    </div>
-                  </div>
-
-                  {thumbnailPreviewSrc ? (
-                    <div className="max-w-xl overflow-hidden rounded-md border bg-muted/20">
-                      <img
-                        src={thumbnailPreviewSrc}
-                        alt="Final thumbnail preview"
-                        className="aspect-video w-full object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No final thumbnail image saved yet.
-                    </p>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="submit">Save Final Thumbnail</Button>
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      formAction={markThumbnailReady.bind(null, video.id)}
-                    >
-                      Mark Thumbnail Ready
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      formAction={resetThumbnail.bind(null, video.id)}
-                    >
-                      Reset Thumbnail
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Thumbnail Status</CardTitle>
-                <CardDescription>
-                  Track the thumbnail independently from render and voiceover.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
-                <SummaryItem label="Status" value={statusLabel(video.thumbnailStatus)} />
-                <SummaryItem
-                  label="Concepts"
-                  value={thumbnailConcepts.length > 0 ? `${thumbnailConcepts.length}` : "None"}
-                />
-                <SummaryItem
-                  label="Prompt"
-                  value={video.thumbnailPrompt ? "Ready" : "Missing"}
-                />
-                <SummaryItem
-                  label="Image"
-                  value={thumbnailPreviewSrc ? "Saved" : "Missing"}
-                />
-                <SummaryItem
-                  label="File"
-                  value={video.thumbnailFileName ?? "Not set"}
+                <ThumbnailMasterWorkflow
+                  videoId={video.id}
+                  videoTitle={video.title}
+                  channelKey={channel.key}
+                  channelName={channel.name}
+                  thumbnailStatus={video.thumbnailStatus}
+                  resolvedPrompt={video.thumbnailPrompt}
+                  thumbnailNotes={video.thumbnailNotes}
+                  previewSrc={thumbnailPreviewSrc || null}
+                  fileName={video.thumbnailFileName}
+                  selectedMasterId={thumbnailMasterSelection?.masterId ?? null}
+                  masters={thumbnailMasters.masters}
+                  defaultMasterId={thumbnailMasters.defaultMasterId}
                 />
               </CardContent>
             </Card>
           </div>
         </TabsContent>
+        ) : null}
 
+        {activeTab === "metadata" ? (
         <TabsContent value="metadata">
+          {savedNotice ? (
+            <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              Metadata saved.
+            </div>
+          ) : null}
           <Card>
             <CardHeader>
               <CardTitle>Metadata</CardTitle>
@@ -3091,9 +3054,12 @@ export default async function VideoDetailPage({
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
+        ) : null}
+      </VideoPageTabs>
 
-      <ProcessFormGuard />
+      <Suspense fallback={null}>
+        <ProcessFormGuard />
+      </Suspense>
     </div>
   );
 }
@@ -3555,39 +3521,6 @@ function analyzeSubtitlePreviewCue(
   };
 }
 
-function voiceoverWordCount(text: string) {
-  return text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
-}
-
-function storedVoiceoverPath(audioPath: string | null | undefined) {
-  if (!audioPath?.trim()) {
-    return null;
-  }
-
-  const normalized = audioPath.replace(/\\/g, "/");
-
-  if (path.isAbsolute(normalized)) {
-    return normalized;
-  }
-
-  return path.resolve(process.cwd(), normalized);
-}
-
-async function voiceoverFileExists(audioPath: string | null | undefined) {
-  const resolvedPath = storedVoiceoverPath(audioPath);
-
-  if (!resolvedPath) {
-    return false;
-  }
-
-  try {
-    await access(resolvedPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function renderFileCacheKey(outputPath: string | null | undefined) {
   if (!outputPath?.startsWith("storage/renders/")) {
     return null;
@@ -3607,319 +3540,6 @@ async function renderFileCacheKey(outputPath: string | null | undefined) {
   } catch {
     return null;
   }
-}
-
-function voiceoverQaStatus({
-  sceneDuration,
-  voiceoverDuration,
-  wordsPerSecond,
-  hasScript,
-  hasAudioPath,
-  audioExists,
-  manualStatus,
-}: {
-  sceneDuration: number | null;
-  voiceoverDuration: number | null;
-  wordsPerSecond: number | null;
-  hasScript: boolean;
-  hasAudioPath: boolean;
-  audioExists: boolean;
-  manualStatus: string | null;
-}) {
-  const warnings: string[] = [];
-  let status: VoiceoverQaStatus = "ok";
-
-  if (manualStatus === "needs_review") {
-    status = "needs_review";
-    warnings.push("Marked needs review.");
-  }
-
-  if (hasScript && !hasAudioPath) {
-    warnings.push("Missing audio.");
-    return { status: "failed" as const, warnings };
-  }
-
-  if (hasAudioPath && !audioExists) {
-    warnings.push("Audio file does not exist.");
-    return { status: "failed" as const, warnings };
-  }
-
-  if (manualStatus === "failed") {
-    status = "failed";
-    warnings.push("Scene generation failed.");
-  }
-
-  if (voiceoverDuration !== null && sceneDuration !== null) {
-    if (voiceoverDuration > sceneDuration + 0.5) {
-      status = "critical";
-      warnings.push("Audio is longer than scene duration by more than 0.5s.");
-    } else if (voiceoverDuration > sceneDuration) {
-      if (status === "ok") status = "warning";
-      warnings.push("Audio is longer than scene duration.");
-    }
-
-    if (voiceoverDuration < sceneDuration * 0.45) {
-      if (status === "ok") status = "warning";
-      warnings.push("Audio is much shorter than scene duration.");
-    }
-  }
-
-  if (wordsPerSecond !== null) {
-    if (wordsPerSecond > 4.2) {
-      status = "critical";
-      warnings.push("Words per second is very high.");
-    } else if (wordsPerSecond > 3.5) {
-      if (status === "ok" || status === "needs_review") status = "warning";
-      warnings.push("Words per second is high.");
-    } else if (wordsPerSecond < 0.8 && voiceoverDuration !== null && voiceoverDuration > 2) {
-      if (status === "ok") status = "warning";
-      warnings.push("Words per second is very low.");
-    }
-  }
-
-  return { status, warnings };
-}
-
-type DeepVoiceoverQaResult = {
-  silenceWarning: string | null;
-  volumeWarning: string | null;
-};
-
-function parseNumberAfter(label: string, text: string) {
-  const match = text.match(new RegExp(`${label}:\\s*(-?\\d+(?:\\.\\d+)?)`));
-
-  return match?.[1] ? Number(match[1]) : null;
-}
-
-function parseSilenceEvents(output: string) {
-  const events: Array<{ start: number; end: number; duration: number }> = [];
-  let pendingStart: number | null = null;
-
-  for (const line of output.split("\n")) {
-    const start = parseNumberAfter("silence_start", line);
-
-    if (start !== null && Number.isFinite(start)) {
-      pendingStart = start;
-      continue;
-    }
-
-    const end = parseNumberAfter("silence_end", line);
-    const duration = parseNumberAfter("silence_duration", line);
-
-    if (
-      pendingStart !== null &&
-      end !== null &&
-      duration !== null &&
-      Number.isFinite(end) &&
-      Number.isFinite(duration)
-    ) {
-      events.push({ start: pendingStart, end, duration });
-      pendingStart = null;
-    }
-  }
-
-  return events;
-}
-
-function summarizeSilenceWarnings(
-  events: Array<{ start: number; end: number; duration: number }>,
-  durationSec: number | null,
-) {
-  const warnings: string[] = [];
-
-  for (const event of events) {
-    const startsAtBeginning = event.start <= 0.08;
-    const endsAtEnd =
-      durationSec !== null && durationSec > 0 && event.end >= durationSec - 0.12;
-
-    if (startsAtBeginning && event.duration > 0.4) {
-      warnings.push(`start silence ${event.duration.toFixed(1)}s`);
-      continue;
-    }
-
-    if (endsAtEnd && event.duration > 0.8) {
-      warnings.push(`end silence ${event.duration.toFixed(1)}s`);
-      continue;
-    }
-
-    if (!startsAtBeginning && !endsAtEnd && event.duration > 1.2) {
-      warnings.push(`internal silence ${event.duration.toFixed(1)}s`);
-    }
-  }
-
-  return warnings.length > 0 ? warnings.join("; ") : null;
-}
-
-async function analyzeDeepVoiceoverAudio(
-  audioPath: string | null,
-  durationSec: number | null,
-): Promise<DeepVoiceoverQaResult> {
-  const resolvedPath = storedVoiceoverPath(audioPath);
-
-  if (!resolvedPath) {
-    return {
-      silenceWarning: "No audio path.",
-      volumeWarning: null,
-    };
-  }
-
-  try {
-    await ensureFfmpegAvailable();
-    const result = await runFfmpeg([
-      "-hide_banner",
-      "-nostats",
-      "-i",
-      resolvedPath,
-      "-af",
-      "silencedetect=n=-45dB:d=0.15,volumedetect",
-      "-f",
-      "null",
-      "-",
-    ]);
-    const output = `${result.stdout}\n${result.stderr}`;
-
-    if (!result.ok) {
-      return {
-        silenceWarning: "Deep QA failed.",
-        volumeWarning: output.slice(-220).trim() || "FFmpeg failed.",
-      };
-    }
-
-    const silenceWarning = summarizeSilenceWarnings(
-      parseSilenceEvents(output),
-      durationSec,
-    );
-    const meanVolume = parseNumberAfter("mean_volume", output);
-    const maxVolume = parseNumberAfter("max_volume", output);
-    const volumeWarnings: string[] = [];
-
-    if (meanVolume !== null && meanVolume < -35) {
-      volumeWarnings.push(`low volume ${meanVolume.toFixed(1)} dB`);
-    }
-
-    if (maxVolume !== null && maxVolume > -0.5) {
-      volumeWarnings.push(`possible clipping ${maxVolume.toFixed(1)} dB`);
-    }
-
-    return {
-      silenceWarning,
-      volumeWarning: volumeWarnings.length > 0 ? volumeWarnings.join("; ") : null,
-    };
-  } catch (error) {
-    return {
-      silenceWarning: "Deep QA unavailable.",
-      volumeWarning: error instanceof Error ? error.message : "FFmpeg failed.",
-    };
-  }
-}
-
-async function buildVoiceoverQaRows(
-  scenes: Array<{
-    id: string;
-    sortOrder: number;
-    scriptText: string;
-    duration: number | null;
-    voiceoverLocalPath: string | null;
-    voiceoverDuration: number | null;
-    voiceoverStatus: string | null;
-    pauseAfterMs: number | null;
-  }>,
-  runDeepQa = false,
-): Promise<VoiceoverQaRow[]> {
-  let masterStartSec = 0;
-  const orderedScenes = scenes.slice().sort((a, b) => a.sortOrder - b.sortOrder);
-  const rows: VoiceoverQaRow[] = [];
-
-  for (const scene of orderedScenes) {
-    const hasScript = Boolean(scene.scriptText.trim());
-    const audioExists = await voiceoverFileExists(scene.voiceoverLocalPath);
-    const words = voiceoverWordCount(scene.scriptText);
-    const wordsPerSecond =
-      scene.voiceoverDuration && scene.voiceoverDuration > 0
-        ? words / scene.voiceoverDuration
-        : null;
-    const diffSec =
-      scene.voiceoverDuration !== null && scene.duration !== null
-        ? scene.voiceoverDuration - scene.duration
-        : null;
-    const qa = voiceoverQaStatus({
-      sceneDuration: scene.duration,
-      voiceoverDuration: scene.voiceoverDuration,
-      wordsPerSecond,
-      hasScript,
-      hasAudioPath: Boolean(scene.voiceoverLocalPath),
-      audioExists,
-      manualStatus: scene.voiceoverStatus,
-    });
-    const deepQa =
-      runDeepQa && audioExists
-        ? await analyzeDeepVoiceoverAudio(
-            scene.voiceoverLocalPath,
-            scene.voiceoverDuration,
-          )
-        : { silenceWarning: null, volumeWarning: null };
-    const deepWarnings = [
-      deepQa.silenceWarning ? `Silence: ${deepQa.silenceWarning}` : null,
-      deepQa.volumeWarning ? `Volume: ${deepQa.volumeWarning}` : null,
-    ].filter((warning): warning is string => Boolean(warning));
-    const finalStatus: VoiceoverQaStatus =
-      deepWarnings.length > 0 && qa.status === "ok" ? "warning" : qa.status;
-
-    rows.push({
-      id: scene.id,
-      order: scene.sortOrder,
-      scriptText: scene.scriptText,
-      sceneDuration: scene.duration,
-      voiceoverDuration: scene.voiceoverDuration,
-      pauseAfterMs: scene.pauseAfterMs,
-      diffSec,
-      wordsPerSecond,
-      status: finalStatus,
-      warnings: [...qa.warnings, ...deepWarnings],
-      silenceWarning: deepQa.silenceWarning,
-      volumeWarning: deepQa.volumeWarning,
-      deepQaChecked: runDeepQa && audioExists,
-      audioUrl: generatedAudioUrl(scene.voiceoverLocalPath),
-      audioExists,
-      voiceoverLocalPath: scene.voiceoverLocalPath,
-      masterStartSec,
-      isHook: masterStartSec < 120,
-    });
-
-    masterStartSec +=
-      (scene.voiceoverDuration ?? scene.duration ?? 0) +
-      Math.max(0, (scene.pauseAfterMs ?? 0) / 1000);
-  }
-
-  return rows;
-}
-
-function summarizeVoiceoverQa(rows: VoiceoverQaRow[]) {
-  const suspiciousRows = rows.filter((row) =>
-    ["warning", "critical", "failed", "needs_review"].includes(row.status),
-  );
-
-  return {
-    totalScenes: rows.length,
-    scenesWithAudio: rows.filter((row) => row.audioUrl && row.audioExists).length,
-    missingAudio: rows.filter((row) => !row.audioUrl || !row.audioExists).length,
-    ok: rows.filter((row) => row.status === "ok").length,
-    warnings: rows.filter((row) => row.status === "warning").length,
-    critical: rows.filter((row) => row.status === "critical").length,
-    failed: rows.filter((row) => row.status === "failed").length,
-    needsReview: rows.filter((row) => row.status === "needs_review").length,
-    estimatedFullDurationSec: rows.reduce(
-      (total, row) =>
-        total +
-        (row.voiceoverDuration ?? row.sceneDuration ?? 0) +
-        Math.max(0, (row.pauseAfterMs ?? 0) / 1000),
-      0,
-    ),
-    suspiciousReviewDurationSec: suspiciousRows.reduce(
-      (total, row) => total + (row.voiceoverDuration ?? 0),
-      0,
-    ),
-  };
 }
 
 function getCueWords(cue: FormattedSubtitleCue) {

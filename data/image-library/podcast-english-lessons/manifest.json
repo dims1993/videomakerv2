@@ -1,0 +1,1250 @@
+{
+  "version": 1,
+  "channelKey": "podcast-english-lessons",
+  "updatedAt": "2026-08-14T14:23:50.575Z",
+  "assets": [
+    {
+      "id": "emma-2-qj38lebq",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-002-qj38lebq.png",
+      "fileName": "emma-002-qj38lebq.png",
+      "sourceSceneOrder": 2,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-4-mh52n7j1",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-004-mh52n7j1.png",
+      "fileName": "emma-004-mh52n7j1.png",
+      "sourceSceneOrder": 4,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-6-h4pt6y6y",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-006-h4pt6y6y.png",
+      "fileName": "emma-006-h4pt6y6y.png",
+      "sourceSceneOrder": 6,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-8-xclmcwbb",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-008-xclmcwbb.png",
+      "fileName": "emma-008-xclmcwbb.png",
+      "sourceSceneOrder": 8,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-9-3sto8ob5",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-009-3sto8ob5.png",
+      "fileName": "emma-009-3sto8ob5.png",
+      "sourceSceneOrder": 9,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-11-4keum3wf",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-011-4keum3wf.png",
+      "fileName": "emma-011-4keum3wf.png",
+      "sourceSceneOrder": 11,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-13-chhkevqn",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-013-chhkevqn.png",
+      "fileName": "emma-013-chhkevqn.png",
+      "sourceSceneOrder": 13,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-15-zcsnkasz",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-015-zcsnkasz.png",
+      "fileName": "emma-015-zcsnkasz.png",
+      "sourceSceneOrder": 15,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-17-i9sooyi1",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-017-i9sooyi1.png",
+      "fileName": "emma-017-i9sooyi1.png",
+      "sourceSceneOrder": 17,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-19-815udi6p",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-019-815udi6p.png",
+      "fileName": "emma-019-815udi6p.png",
+      "sourceSceneOrder": 19,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-21-ewjlbn4q",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-021-ewjlbn4q.png",
+      "fileName": "emma-021-ewjlbn4q.png",
+      "sourceSceneOrder": 21,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-25-7ohg8636",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-025-7ohg8636.png",
+      "fileName": "emma-025-7ohg8636.png",
+      "sourceSceneOrder": 25,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-27-2q43gg4v",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-027-2q43gg4v.png",
+      "fileName": "emma-027-2q43gg4v.png",
+      "sourceSceneOrder": 27,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-28-6d4gueue",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-028-6d4gueue.png",
+      "fileName": "emma-028-6d4gueue.png",
+      "sourceSceneOrder": 28,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-34-lfkph6nh",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-034-lfkph6nh.png",
+      "fileName": "emma-034-lfkph6nh.png",
+      "sourceSceneOrder": 34,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-36-zl8w9s6j",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-036-zl8w9s6j.png",
+      "fileName": "emma-036-zl8w9s6j.png",
+      "sourceSceneOrder": 36,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-37-xm59cq1k",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-037-xm59cq1k.png",
+      "fileName": "emma-037-xm59cq1k.png",
+      "sourceSceneOrder": 37,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-38-c5rcxeym",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-038-c5rcxeym.png",
+      "fileName": "emma-038-c5rcxeym.png",
+      "sourceSceneOrder": 38,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-40-unb9bxn7",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-040-unb9bxn7.png",
+      "fileName": "emma-040-unb9bxn7.png",
+      "sourceSceneOrder": 40,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-42-yrbg3kk3",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-042-yrbg3kk3.png",
+      "fileName": "emma-042-yrbg3kk3.png",
+      "sourceSceneOrder": 42,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-44-b5jo0k6r",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-044-b5jo0k6r.png",
+      "fileName": "emma-044-b5jo0k6r.png",
+      "sourceSceneOrder": 44,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-45-342pj5kv",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-045-342pj5kv.png",
+      "fileName": "emma-045-342pj5kv.png",
+      "sourceSceneOrder": 45,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-46-hpf4r4gf",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-046-hpf4r4gf.png",
+      "fileName": "emma-046-hpf4r4gf.png",
+      "sourceSceneOrder": 46,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-48-v2i6dv19",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-048-v2i6dv19.png",
+      "fileName": "emma-048-v2i6dv19.png",
+      "sourceSceneOrder": 48,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-50-g1exiq45",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-050-g1exiq45.png",
+      "fileName": "emma-050-g1exiq45.png",
+      "sourceSceneOrder": 50,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-52-nra9n34v",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-052-nra9n34v.png",
+      "fileName": "emma-052-nra9n34v.png",
+      "sourceSceneOrder": 52,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-56-qlwpefwd",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-056-qlwpefwd.png",
+      "fileName": "emma-056-qlwpefwd.png",
+      "sourceSceneOrder": 56,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-57-9y05qm9k",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-057-9y05qm9k.png",
+      "fileName": "emma-057-9y05qm9k.png",
+      "sourceSceneOrder": 57,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-59-8ytkwq6z",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-059-8ytkwq6z.png",
+      "fileName": "emma-059-8ytkwq6z.png",
+      "sourceSceneOrder": 59,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-60-mtyqoxvp",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-060-mtyqoxvp.png",
+      "fileName": "emma-060-mtyqoxvp.png",
+      "sourceSceneOrder": 60,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-62-0hka07y2",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-062-0hka07y2.png",
+      "fileName": "emma-062-0hka07y2.png",
+      "sourceSceneOrder": 62,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-63-oxvqbxk5",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-063-oxvqbxk5.png",
+      "fileName": "emma-063-oxvqbxk5.png",
+      "sourceSceneOrder": 63,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-64-1ba84maa",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-064-1ba84maa.png",
+      "fileName": "emma-064-1ba84maa.png",
+      "sourceSceneOrder": 64,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-65-e8h45zsj",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-065-e8h45zsj.png",
+      "fileName": "emma-065-e8h45zsj.png",
+      "sourceSceneOrder": 65,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-70-ufdc34mw",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-070-ufdc34mw.png",
+      "fileName": "emma-070-ufdc34mw.png",
+      "sourceSceneOrder": 70,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-72-qnkff3yf",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-072-qnkff3yf.png",
+      "fileName": "emma-072-qnkff3yf.png",
+      "sourceSceneOrder": 72,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-83-i4o72qof",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-083-i4o72qof.png",
+      "fileName": "emma-083-i4o72qof.png",
+      "sourceSceneOrder": 83,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-85-sb3cie48",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-085-sb3cie48.png",
+      "fileName": "emma-085-sb3cie48.png",
+      "sourceSceneOrder": 85,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-87-b9v32rkq",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-087-b9v32rkq.png",
+      "fileName": "emma-087-b9v32rkq.png",
+      "sourceSceneOrder": 87,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-88-o7ps6rvl",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-088-o7ps6rvl.png",
+      "fileName": "emma-088-o7ps6rvl.png",
+      "sourceSceneOrder": 88,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-90-id1xoav9",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-090-id1xoav9.png",
+      "fileName": "emma-090-id1xoav9.png",
+      "sourceSceneOrder": 90,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-92-o6fv3svc",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-092-o6fv3svc.png",
+      "fileName": "emma-092-o6fv3svc.png",
+      "sourceSceneOrder": 92,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-94-34yorqds",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-094-34yorqds.png",
+      "fileName": "emma-094-34yorqds.png",
+      "sourceSceneOrder": 94,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-95-glfld3s0",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-095-glfld3s0.png",
+      "fileName": "emma-095-glfld3s0.png",
+      "sourceSceneOrder": 95,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-96-n6ok46jr",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-096-n6ok46jr.png",
+      "fileName": "emma-096-n6ok46jr.png",
+      "sourceSceneOrder": 96,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-99-pzsa5qxr",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-099-pzsa5qxr.png",
+      "fileName": "emma-099-pzsa5qxr.png",
+      "sourceSceneOrder": 99,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-100-lbe3w7jo",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-100-lbe3w7jo.png",
+      "fileName": "emma-100-lbe3w7jo.png",
+      "sourceSceneOrder": 100,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-104-izbqfu1n",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-104-izbqfu1n.png",
+      "fileName": "emma-104-izbqfu1n.png",
+      "sourceSceneOrder": 104,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-106-2ib1737z",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-106-2ib1737z.png",
+      "fileName": "emma-106-2ib1737z.png",
+      "sourceSceneOrder": 106,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-108-a91e4wt3",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-108-a91e4wt3.png",
+      "fileName": "emma-108-a91e4wt3.png",
+      "sourceSceneOrder": 108,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-110-8g3eesav",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-110-8g3eesav.png",
+      "fileName": "emma-110-8g3eesav.png",
+      "sourceSceneOrder": 110,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-112-h6rb60ip",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-112-h6rb60ip.png",
+      "fileName": "emma-112-h6rb60ip.png",
+      "sourceSceneOrder": 112,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-115-jma3nin5",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-115-jma3nin5.png",
+      "fileName": "emma-115-jma3nin5.png",
+      "sourceSceneOrder": 115,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-117-ams1q3x1",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-117-ams1q3x1.png",
+      "fileName": "emma-117-ams1q3x1.png",
+      "sourceSceneOrder": 117,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-119-6hmi1mk1",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-119-6hmi1mk1.png",
+      "fileName": "emma-119-6hmi1mk1.png",
+      "sourceSceneOrder": 119,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-121-00jxa101",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-121-00jxa101.png",
+      "fileName": "emma-121-00jxa101.png",
+      "sourceSceneOrder": 121,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-122-hdcvkv60",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-122-hdcvkv60.png",
+      "fileName": "emma-122-hdcvkv60.png",
+      "sourceSceneOrder": 122,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-123-xnhkiokz",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-123-xnhkiokz.png",
+      "fileName": "emma-123-xnhkiokz.png",
+      "sourceSceneOrder": 123,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-124-x3wt0jb8",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-124-x3wt0jb8.png",
+      "fileName": "emma-124-x3wt0jb8.png",
+      "sourceSceneOrder": 124,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-125-lcdzce54",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-125-lcdzce54.png",
+      "fileName": "emma-125-lcdzce54.png",
+      "sourceSceneOrder": 125,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-126-3tuysj4c",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-126-3tuysj4c.png",
+      "fileName": "emma-126-3tuysj4c.png",
+      "sourceSceneOrder": 126,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-130-oqjzdmlw",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-130-oqjzdmlw.png",
+      "fileName": "emma-130-oqjzdmlw.png",
+      "sourceSceneOrder": 130,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-132-d3zv295z",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-132-d3zv295z.png",
+      "fileName": "emma-132-d3zv295z.png",
+      "sourceSceneOrder": 132,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-136-uyue4yzg",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-136-uyue4yzg.png",
+      "fileName": "emma-136-uyue4yzg.png",
+      "sourceSceneOrder": 136,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-138-jvuxgz6y",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-138-jvuxgz6y.png",
+      "fileName": "emma-138-jvuxgz6y.png",
+      "sourceSceneOrder": 138,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-140-m2ou0yb9",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-140-m2ou0yb9.png",
+      "fileName": "emma-140-m2ou0yb9.png",
+      "sourceSceneOrder": 140,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-141-0r3gs6ng",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-141-0r3gs6ng.png",
+      "fileName": "emma-141-0r3gs6ng.png",
+      "sourceSceneOrder": 141,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-142-2zsqesb9",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-142-2zsqesb9.png",
+      "fileName": "emma-142-2zsqesb9.png",
+      "sourceSceneOrder": 142,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-143-5nb0atl2",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-143-5nb0atl2.png",
+      "fileName": "emma-143-5nb0atl2.png",
+      "sourceSceneOrder": 143,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-145-prc60tgj",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-145-prc60tgj.png",
+      "fileName": "emma-145-prc60tgj.png",
+      "sourceSceneOrder": 145,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-146-ouwl331r",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-146-ouwl331r.png",
+      "fileName": "emma-146-ouwl331r.png",
+      "sourceSceneOrder": 146,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-148-is6w861y",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-148-is6w861y.png",
+      "fileName": "emma-148-is6w861y.png",
+      "sourceSceneOrder": 148,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-150-hzwg6qxh",
+      "tag": "emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/emma-150-hzwg6qxh.png",
+      "fileName": "emma-150-hzwg6qxh.png",
+      "sourceSceneOrder": 150,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "emma-shoping-mall-emma-Emma_teaching_in_shopping_center_202608050322",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/Emma_teaching_in_shopping_center_202608050322.jpeg",
+      "fileName": "Emma_teaching_in_shopping_center_202608050322.jpeg"
+    },
+    {
+      "id": "emma-shoping-mall-emma-English_teacher_standing_in_store_202608050322",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/English_teacher_standing_in_store_202608050322.jpeg",
+      "fileName": "English_teacher_standing_in_store_202608050322.jpeg"
+    },
+    {
+      "id": "emma-shoping-mall-emma-Female_teacher_in_shopping_center_202608050322",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/Female_teacher_in_shopping_center_202608050322.jpeg",
+      "fileName": "Female_teacher_in_shopping_center_202608050322.jpeg"
+    },
+    {
+      "id": "emma-shoping-mall-emma-Teacher_explaining_in_shopping_c…_202608050322",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/Teacher_explaining_in_shopping_c…_202608050322.jpeg",
+      "fileName": "Teacher_explaining_in_shopping_c…_202608050322.jpeg"
+    },
+    {
+      "id": "emma-shoping-mall-emma-Teacher_making_teaching_gesture_202608050322",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/Teacher_making_teaching_gesture_202608050322.jpeg",
+      "fileName": "Teacher_making_teaching_gesture_202608050322.jpeg"
+    },
+    {
+      "id": "emma-shoping-mall-emma-Teacher_standing_in_store_202608050322",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/Teacher_standing_in_store_202608050322.jpeg",
+      "fileName": "Teacher_standing_in_store_202608050322.jpeg"
+    },
+    {
+      "id": "emma-shoping-mall-emma-Woman_teacher_explaining_in_store_202608050322",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/Woman_teacher_explaining_in_store_202608050322.jpeg",
+      "fileName": "Woman_teacher_explaining_in_store_202608050322.jpeg"
+    },
+    {
+      "id": "emma-shoping-mall-emma-Woman_teacher_in_store_202608050322",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/Woman_teacher_in_store_202608050322.jpeg",
+      "fileName": "Woman_teacher_in_store_202608050322.jpeg"
+    },
+    {
+      "id": "emma-shoping-mall-emma-personaje_001",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/personaje_001.png",
+      "fileName": "personaje_001.png"
+    },
+    {
+      "id": "emma-shoping-mall-emma-personaje_004",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/personaje_004.png",
+      "fileName": "personaje_004.png"
+    },
+    {
+      "id": "emma-shoping-mall-emma-personaje_006",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/personaje_006.png",
+      "fileName": "personaje_006.png"
+    },
+    {
+      "id": "emma-shoping-mall-emma-personaje_010",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/personaje_010.png",
+      "fileName": "personaje_010.png"
+    },
+    {
+      "id": "emma-shoping-mall-emma-personaje_013",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/personaje_013.png",
+      "fileName": "personaje_013.png"
+    },
+    {
+      "id": "emma-shoping-mall-emma-personaje_018",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/personaje_018.png",
+      "fileName": "personaje_018.png"
+    },
+    {
+      "id": "emma-shoping-mall-emma-personaje_019",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/personaje_019.png",
+      "fileName": "personaje_019.png"
+    },
+    {
+      "id": "emma-shoping-mall-emma-personaje_021",
+      "tag": "emma",
+      "scenario": "shoping-mall-emma",
+      "relativePath": "data/image-library/podcast-english-lessons/emma/shoping mall emma/personaje_021.png",
+      "fileName": "personaje_021.png"
+    },
+    {
+      "id": "leo-3-j657plsj",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-003-j657plsj.png",
+      "fileName": "leo-003-j657plsj.png",
+      "sourceSceneOrder": 3,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-5-214zpt8a",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-005-214zpt8a.png",
+      "fileName": "leo-005-214zpt8a.png",
+      "sourceSceneOrder": 5,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-10-lnopa6bx",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-010-lnopa6bx.png",
+      "fileName": "leo-010-lnopa6bx.png",
+      "sourceSceneOrder": 10,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-12-m5lzjvq8",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-012-m5lzjvq8.png",
+      "fileName": "leo-012-m5lzjvq8.png",
+      "sourceSceneOrder": 12,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-16-kqq5cqr9",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-016-kqq5cqr9.png",
+      "fileName": "leo-016-kqq5cqr9.png",
+      "sourceSceneOrder": 16,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-20-h6hsjbwb",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-020-h6hsjbwb.png",
+      "fileName": "leo-020-h6hsjbwb.png",
+      "sourceSceneOrder": 20,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-24-ba22hkdp",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-024-ba22hkdp.png",
+      "fileName": "leo-024-ba22hkdp.png",
+      "sourceSceneOrder": 24,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-26-s0rz75ua",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-026-s0rz75ua.png",
+      "fileName": "leo-026-s0rz75ua.png",
+      "sourceSceneOrder": 26,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-31-ip7xy2ci",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-031-ip7xy2ci.png",
+      "fileName": "leo-031-ip7xy2ci.png",
+      "sourceSceneOrder": 31,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-33-p5e9ka26",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-033-p5e9ka26.png",
+      "fileName": "leo-033-p5e9ka26.png",
+      "sourceSceneOrder": 33,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-35-fq5m0az4",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-035-fq5m0az4.png",
+      "fileName": "leo-035-fq5m0az4.png",
+      "sourceSceneOrder": 35,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-39-xmm3fbsl",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-039-xmm3fbsl.png",
+      "fileName": "leo-039-xmm3fbsl.png",
+      "sourceSceneOrder": 39,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-43-bsjhnhes",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-043-bsjhnhes.png",
+      "fileName": "leo-043-bsjhnhes.png",
+      "sourceSceneOrder": 43,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-49-8q5v09xh",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-049-8q5v09xh.png",
+      "fileName": "leo-049-8q5v09xh.png",
+      "sourceSceneOrder": 49,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-61-15rs23e2",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-061-15rs23e2.png",
+      "fileName": "leo-061-15rs23e2.png",
+      "sourceSceneOrder": 61,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-67-rcqdf648",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-067-rcqdf648.png",
+      "fileName": "leo-067-rcqdf648.png",
+      "sourceSceneOrder": 67,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-69-96do004v",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-069-96do004v.png",
+      "fileName": "leo-069-96do004v.png",
+      "sourceSceneOrder": 69,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-71-c8o5f27q",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-071-c8o5f27q.png",
+      "fileName": "leo-071-c8o5f27q.png",
+      "sourceSceneOrder": 71,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-75-jl2mou25",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-075-jl2mou25.png",
+      "fileName": "leo-075-jl2mou25.png",
+      "sourceSceneOrder": 75,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-77-fkdqeuxx",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-077-fkdqeuxx.png",
+      "fileName": "leo-077-fkdqeuxx.png",
+      "sourceSceneOrder": 77,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-80-nqsay9uq",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-080-nqsay9uq.png",
+      "fileName": "leo-080-nqsay9uq.png",
+      "sourceSceneOrder": 80,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-82-5dtcvhvu",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-082-5dtcvhvu.png",
+      "fileName": "leo-082-5dtcvhvu.png",
+      "sourceSceneOrder": 82,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-84-rb99s9eh",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-084-rb99s9eh.png",
+      "fileName": "leo-084-rb99s9eh.png",
+      "sourceSceneOrder": 84,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-98-a2yqyg4m",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-098-a2yqyg4m.png",
+      "fileName": "leo-098-a2yqyg4m.png",
+      "sourceSceneOrder": 98,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-101-c8hvhq7z",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-101-c8hvhq7z.png",
+      "fileName": "leo-101-c8hvhq7z.png",
+      "sourceSceneOrder": 101,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-103-6f4dedyw",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-103-6f4dedyw.png",
+      "fileName": "leo-103-6f4dedyw.png",
+      "sourceSceneOrder": 103,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-105-rps8qoeg",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-105-rps8qoeg.png",
+      "fileName": "leo-105-rps8qoeg.png",
+      "sourceSceneOrder": 105,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-107-yuu32zv7",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-107-yuu32zv7.png",
+      "fileName": "leo-107-yuu32zv7.png",
+      "sourceSceneOrder": 107,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-111-yy5xthzv",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-111-yy5xthzv.png",
+      "fileName": "leo-111-yy5xthzv.png",
+      "sourceSceneOrder": 111,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-113-2g3stiht",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-113-2g3stiht.png",
+      "fileName": "leo-113-2g3stiht.png",
+      "sourceSceneOrder": 113,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-116-jbt31wak",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-116-jbt31wak.png",
+      "fileName": "leo-116-jbt31wak.png",
+      "sourceSceneOrder": 116,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-118-qpcglwkp",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-118-qpcglwkp.png",
+      "fileName": "leo-118-qpcglwkp.png",
+      "sourceSceneOrder": 118,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-128-sfdb14ro",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-128-sfdb14ro.png",
+      "fileName": "leo-128-sfdb14ro.png",
+      "sourceSceneOrder": 128,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-131-fck20mlv",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-131-fck20mlv.png",
+      "fileName": "leo-131-fck20mlv.png",
+      "sourceSceneOrder": 131,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-133-e5bvz8kf",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-133-e5bvz8kf.png",
+      "fileName": "leo-133-e5bvz8kf.png",
+      "sourceSceneOrder": 133,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-137-9ru9wi7h",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-137-9ru9wi7h.png",
+      "fileName": "leo-137-9ru9wi7h.png",
+      "sourceSceneOrder": 137,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-149-enrr2zx1",
+      "tag": "leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/leo-149-enrr2zx1.png",
+      "fileName": "leo-149-enrr2zx1.png",
+      "sourceSceneOrder": 149,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_adjusting_jacket_in_store_202608050329",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_adjusting_jacket_in_store_202608050329.jpeg",
+      "fileName": "Man_adjusting_jacket_in_store_202608050329.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_asking_for_help_202608050328",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_asking_for_help_202608050328.jpeg",
+      "fileName": "Man_asking_for_help_202608050328.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_asking_question_in_mall_202608050331",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_asking_question_in_mall_202608050331.jpeg",
+      "fileName": "Man_asking_question_in_mall_202608050331.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_comparing_shirts_in_store_202608050331",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_comparing_shirts_in_store_202608050331.jpeg",
+      "fileName": "Man_comparing_shirts_in_store_202608050331.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_deciding_near_checkout_counter_202608050333",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_deciding_near_checkout_counter_202608050333.jpeg",
+      "fileName": "Man_deciding_near_checkout_counter_202608050333.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_holding_card_shopping_202608050329",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_holding_card_shopping_202608050329.jpeg",
+      "fileName": "Man_holding_card_shopping_202608050329.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_holding_shirt_in_store_202608050329",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_holding_shirt_in_store_202608050329.jpeg",
+      "fileName": "Man_holding_shirt_in_store_202608050329.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_pointing_at_shirt_hanger_202608050332",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_pointing_at_shirt_hanger_202608050332.jpeg",
+      "fileName": "Man_pointing_at_shirt_hanger_202608050332.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_practicing_answer_in_mall_202608050329",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_practicing_answer_in_mall_202608050329.jpeg",
+      "fileName": "Man_practicing_answer_in_mall_202608050329.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_practicing_sentence_in_mall_202608050333",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_practicing_sentence_in_mall_202608050333.jpeg",
+      "fileName": "Man_practicing_sentence_in_mall_202608050333.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_rehearsing_phrase_in_mall_202608050332",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_rehearsing_phrase_in_mall_202608050332.jpeg",
+      "fileName": "Man_rehearsing_phrase_in_mall_202608050332.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_scratching_head_smiling_202608050332",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_scratching_head_smiling_202608050332.jpeg",
+      "fileName": "Man_scratching_head_smiling_202608050332.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_sitting_at_table_202608050328",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_sitting_at_table_202608050328.jpeg",
+      "fileName": "Man_sitting_at_table_202608050328.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_touching_clothing_rack_202608050329",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_touching_clothing_rack_202608050329.jpeg",
+      "fileName": "Man_touching_clothing_rack_202608050329.jpeg"
+    },
+    {
+      "id": "leo-shopping-centre-leo-Man_waving_holding_shopping_bag_202608050328",
+      "tag": "leo",
+      "scenario": "shopping-centre-leo",
+      "relativePath": "data/image-library/podcast-english-lessons/leo/shopping centre leo/Man_waving_holding_shopping_bag_202608050328.jpeg",
+      "fileName": "Man_waving_holding_shopping_bag_202608050328.jpeg"
+    },
+    {
+      "id": "music-1-e2gz3vh6",
+      "tag": "music",
+      "relativePath": "data/image-library/podcast-english-lessons/music/music-001-e2gz3vh6.png",
+      "fileName": "music-001-e2gz3vh6.png",
+      "sourceSceneOrder": 1,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "music-14-ibj158sg",
+      "tag": "music",
+      "relativePath": "data/image-library/podcast-english-lessons/music/music-014-ibj158sg.png",
+      "fileName": "music-014-ibj158sg.png",
+      "sourceSceneOrder": 14,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "music-283-e5dti4g7",
+      "tag": "music",
+      "relativePath": "data/image-library/podcast-english-lessons/music/music-283-e5dti4g7.png",
+      "fileName": "music-283-e5dti4g7.png",
+      "sourceSceneOrder": 283,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    },
+    {
+      "id": "music-310-j1zj1trd",
+      "tag": "music",
+      "relativePath": "data/image-library/podcast-english-lessons/music/music-310-j1zj1trd.png",
+      "fileName": "music-310-j1zj1trd.png",
+      "sourceSceneOrder": 310,
+      "sourceVideoId": "cms7alvzy0000nu84mv44maz6",
+      "scenario": "default"
+    }
+  ]
+}

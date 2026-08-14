@@ -1,0 +1,58 @@
+[
+  {
+    "key": "stickman-pshicologyst",
+    "name": "stickman-pshicologyst",
+    "description": "Feeling stuck? Tired of starting over? You’re not alone.\r\n\r\nAt Simple Ways of Life, we’re figuring it out one small habit at a time — no hustle culture, no “rise and grind” speeches. Just real talk, small changes, and the kind of discipline that actually feels doable.\r\n\r\nHere, you’ll find:\r\n\r\nTips to stay consistent (even on messy days)\r\n\r\nSimple routines that fit real life\r\n\r\nMotivation without the guilt trip\r\n\r\nCalmer ways to grow and show up for yourself\r\n\r\nIf you’ve been craving a reset — the kind that starts with cleaning your room or waking up 10 minutes earlier — welcome home. This space is for you. \r\n\r\nLet’s build a life that feels right, not rushed. One simple step at a time.",
+    "projectBiblePath": "docs/channels/stickman-pshicologyst/project-bible.md",
+    "imagePromptBiblePath": "docs/channels/stickman-pshicologyst/image-prompt-bible.md",
+    "characterBiblePath": "docs/channels/stickman-pshicologyst/character-bible.md",
+    "pipelineMode": "full",
+    "voiceoverSpeedDefault": 0.85,
+    "prompts": {
+      "angleBuilder": "prompts/channels/stickman-pshicologyst/angle-builder.md",
+      "scriptWriter": "prompts/channels/stickman-pshicologyst/script-writer.md",
+      "visualPlanner": "prompts/channels/stickman-pshicologyst/visual-planner.md",
+      "metadataWriter": "prompts/channels/stickman-pshicologyst/metadata-writer.md"
+    },
+    "topicSystem": {
+      "enabled": true,
+      "categories": [
+        {
+          "id": "psicology",
+          "label": "Psicology",
+          "description": "Primary topic category for stickman-pshicologyst."
+        }
+      ],
+      "weeklyRotation": [
+        "psicology"
+      ]
+    },
+    "editorialInstructions": {
+      "role": "editorial strategy partner",
+      "audience": "United States",
+      "niche": "Psicology",
+      "style": [
+        "clear and practical",
+        "easy to visualize",
+        "emotionally engaging without hype"
+      ],
+      "originalityRules": [
+        "Prefer specific mechanisms over generic category titles.",
+        "Avoid repeating overused angles unless there is a new mechanism."
+      ],
+      "overusedAngles": [],
+      "requiredTopicFields": [
+        "category",
+        "title",
+        "topic",
+        "angle",
+        "uniqueMechanism",
+        "trigger",
+        "promise",
+        "visualHook",
+        "thumbnailIdea",
+        "repetitionRisk"
+      ]
+    }
+  }
+]

@@ -20,10 +20,9 @@ Return **only the final narration script**.
 Do not return:
 
 - JSON,
-- markdown,
-- headings,
+- markdown headings (`#`),
 - bullet points,
-- numbered sections,
+- numbered lists as outline notes,
 - scene directions,
 - camera directions,
 - image prompts,
@@ -33,6 +32,45 @@ Do not return:
 - title options,
 - explanations,
 - or commentary about what you are doing.
+
+### Required structural markers (Visual Planner)
+
+The script **must** include bracket markers on their own lines. These markers are **not spoken aloud**. They exist so the Visual Planner can split the episode into section-hybrid chunks and chapter covers.
+
+Required shape:
+
+```text
+[HOOK]
+…opening tension / retention (about the first 1–2 minutes of spoken narration)…
+[END HOOK]
+
+[CHAPTER 1 — EXACT TITLE IN CAPS]
+…section body…
+
+[CHAPTER 2 — EXACT TITLE IN CAPS]
+…more [CHAPTER N — TITLE] sections as needed (usually 5–10 for a medium essay)…
+
+[FINAL — CLOSING TITLE IN CAPS]
+…hopeful close (spoken)…
+
+[FINAL]
+```
+
+Canonical chapter form: `[CHAPTER N — TITLE]` (example: `[CHAPTER 1 — THE DELAY]`).
+
+Also allowed for the spoken close section: `[CLOSING]`, `[CONCLUSION]`, `[REFLECTION AND PRAYER]`.
+
+The very last marker must be plain `[FINAL]` (video-library end bumper). It is not spoken and must have no narration under it.
+
+Rules for markers:
+- Put each marker alone on its line inside square brackets.
+- Never write the bracket text as spoken narration.
+- Chapter titles must be short, exact, and imageable (they become chapter-cover text).
+- Use exact form `[CHAPTER N — TITLE]`. Dash may be `—` or `-`.
+- `[FINAL — TITLE]` starts the spoken hopeful-close section.
+- Plain `[FINAL]` is the end bumper only (not a chapter cover).
+- Do **not** flatten the script into unmarked continuous prose.
+- Do **not** invent silent empty covers; the spoken opener after a chapter marker is the cover voiceover.
 
 The output should be ready to paste directly into `Video.script`.
 
@@ -94,6 +132,13 @@ The Idea JSON is the episode brief.
 Most scripts should follow this emotional structure:
 
 Tension -> Recognition -> Biblical Insight -> Personal Reflection -> Hope
+
+Map that arc onto the required markers:
+
+- `[HOOK]…[END HOOK]` → opening Tension
+- early `[CHAPTER…]` blocks → Recognition + Biblical Insight
+- later chapters → Revelation Turn + Personal Reflection
+- `[FINAL — …]` / `[CLOSING]` → Hopeful Close
 
 Use the `scriptDirection` object as the primary guide when it exists.
 
@@ -199,7 +244,20 @@ It may include:
 
 Do not end with hype or manipulation.
 
-Do not end with a generic engagement CTA.
+Do not end with a spoken subscribe / like / bell CTA.
+
+After the hopeful close narration under `[FINAL — TITLE]` (or `[CLOSING]` / `[CONCLUSION]`), end the script with a plain bumper marker on its own line:
+
+```text
+[FINAL]
+```
+
+Rules for that last marker:
+
+- Exact form `[FINAL]` only — not `[FINAL — TITLE]`.
+- It is **not spoken**. Nothing after it.
+- The Visual Planner turns it into a video-library end bumper (`FINAL.mp4`).
+- Do not put spoken narration under plain `[FINAL]`.
 
 ## Tone
 
@@ -339,10 +397,11 @@ Before returning the script, silently check:
 - Does it respect `scriptureFocus`?
 - Does it follow the emotional arc?
 - Does it start with tension rather than a generic intro?
-- Does it remain narration-only?
-- Does it avoid headings, notes, JSON, and markdown?
+- Does it include `[HOOK]…[END HOOK]`, numbered `[CHAPTER N — TITLE]` sections, a `[FINAL — TITLE]` (or `[CLOSING]` / `[CONCLUSION]`), and plain `[FINAL]` as the last line?
+- Does it remain narration-only aside from those bracket markers?
+- Does it avoid markdown headings, notes, JSON, and production commentary?
 - Does it avoid hype and manipulation?
 - Does it end with hope?
 - Does it create visual moments the Visual Planner can use?
 
-Return only the final narration script.
+Return only the final narration script (with structural markers).

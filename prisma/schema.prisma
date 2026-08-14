@@ -28,6 +28,7 @@ model Video {
   styledSubtitleAss       String?
   captionStylePreset      String             @default("active_word_highlight")
   voiceoverStatus         String             @default("pending")
+  voiceoverSectionVoicesJson Json?
   subtitleStatus          String             @default("pending")
   renderDraftStatus       String             @default("pending")
   thumbnailStatus         String             @default("pending")
@@ -39,6 +40,8 @@ model Video {
   thumbnailImageUrl       String?
   thumbnailFileName       String?
   thumbnailNotes          String?
+  /** Per-video Pipeline Queue settings JSON (script/visual/VO/render). */
+  pipelineSettingsJson    String?
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
   scenes                  Scene[]
@@ -47,6 +50,30 @@ model Video {
   subtitleSegments        SubtitleSegment[]
   renderDrafts            RenderDraft[]
   processRuns             ProcessRun[]
+  referenceDocuments      ReferenceDocument[]
+  pipelineQueueItems      PipelineQueueItem[]
+}
+
+model PipelineQueueItem {
+  id             String    @id @default(cuid())
+  videoId        String
+  channelKey     String
+  enabled        Boolean   @default(true)
+  status         String    @default("queued")
+  currentStep    String    @default("script")
+  errorMessage   String?
+  lastProcessRunId String?
+  sortOrder      Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  video          Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([enabled, status, sortOrder])
+  @@index([videoId])
+  @@index([channelKey])
 }
 
 model TopicIdea {
@@ -57,6 +84,10 @@ model TopicIdea {
   topic          String
   angle          String?
   uniqueMechanism String?
+  scriptureAnchor String?
+  centralQuestion String?
+  commonMisunderstanding String?
+  spiritualTurn  String?
   trigger        String?
   promise        String?
   visualHook     String?
@@ -90,6 +121,11 @@ model Scene {
   imageError     String?
   imageBatchId   String?
   imageFileName  String?
+  /** Optional visual video clip (e.g. music-bed intro). Replaces still image when set. */
+  clipLocalPath  String?
+  clipFileName   String?
+  /** When true (default), clip audio is discarded so music beds / VO can play. */
+  clipMuted      Boolean  @default(true)
   voiceoverStatus String?  @default("none")
   voiceoverLocalPath String?
   voiceoverFileName String?
@@ -222,4 +258,39 @@ model ProcessRun {
   @@index([status])
   @@index([type])
   @@index([updatedAt])
+}
+
+model ReferenceDocument {
+  id           String   @id @default(cuid())
+  channelKey   String
+  videoId      String?
+  type         String   @default("competitor_transcript")
+  title        String
+  sourceName   String?
+  sourceUrl    String?
+  content      String
+  contentHash  String
+  wordCount    Int      @default(0)
+  tagsJson     String?
+  analysisJson String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  video        Video?   @relation(fields: [videoId], references: [id], onDelete: SetNull)
+
+  @@unique([channelKey, contentHash])
+  @@index([channelKey, isActive])
+  @@index([videoId])
+}
+
+model BrowserAutomationSettings {
+  id             String   @id @default("default")
+  providerKey    String   @default("fake")
+  profileDir     String   @default("storage/browser-profiles/chatgpt")
+  cdpUrl         String?
+  headful        Boolean  @default(true)
+  maxConcurrency Int      @default(2)
+  timeoutMs      Int      @default(180000)
+  launchMode     String   @default("persistent_context")
+  updatedAt      DateTime @updatedAt
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   AlertCircle,
   CheckCircle2,
@@ -22,6 +22,7 @@ type ProcessLogItem = {
 type ProcessRun = {
   id: string;
   type: string;
+  videoId?: string | null;
   title: string;
   description: string | null;
   status: string;
@@ -87,11 +88,31 @@ function ProcessIcon({ status }: { status: string }) {
 
 export function ProcessStatusCard({ process }: { process: ProcessRun }) {
   const [expanded, setExpanded] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const logs = parseLogs(process.logs);
   const latestLog = logs[logs.length - 1];
   const updatedAt = new Date(process.updatedAt).getTime();
-  const isStale = ACTIVE_STATUSES.has(process.status) && Date.now() - updatedAt > STALE_AFTER_MS;
+  const isActive = ACTIVE_STATUSES.has(process.status);
+  const isStale = isActive && Date.now() - updatedAt > STALE_AFTER_MS;
   const progress = process.progressPercent;
+  const canCancelSceneVoiceover =
+    isActive &&
+    process.type === "scene_voiceover_generation" &&
+    Boolean(process.videoId);
+
+  function cancelSceneVoiceover() {
+    if (!process.videoId) {
+      return;
+    }
+    setIsCancelling(true);
+    void fetch(
+      `/api/videos/${process.videoId}/cancel-batch?kind=scene-voiceover`,
+      {
+        method: "POST",
+        keepalive: true,
+      },
+    );
+  }
 
   return (
     <div className="rounded-md border bg-background p-3 text-sm shadow-sm">
@@ -110,6 +131,20 @@ export function ProcessStatusCard({ process }: { process: ProcessRun }) {
           <div className="text-xs text-muted-foreground">
             {process.currentStep ?? "No current step"} · {formatElapsed(process.startedAt, process.finishedAt)}
           </div>
+          {canCancelSceneVoiceover ? (
+            <div className="pt-1">
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="h-7"
+                onClick={cancelSceneVoiceover}
+                disabled={isCancelling}
+              >
+                {isCancelling ? "Cancelling…" : "Cancel"}
+              </Button>
+            </div>
+          ) : null}
         </div>
         <Button
           type="button"
@@ -211,15 +246,53 @@ export function GlobalProcessTray({
   includeGlobal?: boolean;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [processes, setProcesses] = useState<ProcessRun[]>([]);
   const [open, setOpen] = useState(true);
   const effectiveVideoId =
     videoId ?? pathname.match(/^\/videos\/([^/?#]+)/)?.[1] ?? undefined;
+  const wasActiveRef = useRef(false);
 
   const hasActive = useMemo(
     () => processes.some((process) => ACTIVE_STATUSES.has(process.status)),
     [processes],
   );
+
+  useEffect(() => {
+    if (hasActive) {
+      // Remember we saw work in flight (survives Strict Mode cleanup).
+      wasActiveRef.current = true;
+      return;
+    }
+    if (!wasActiveRef.current) {
+      return;
+    }
+
+    // A watched process just finished — pull fresh scene/audio rows.
+    // Strict Mode safe: only clear the flag after the refresh actually runs.
+    let cancelled = false;
+    const timers = [
+      window.setTimeout(() => {
+        if (cancelled) {
+          return;
+        }
+        router.refresh();
+      }, 400),
+      window.setTimeout(() => {
+        if (cancelled) {
+          return;
+        }
+        wasActiveRef.current = false;
+        router.refresh();
+      }, 1400),
+    ];
+    return () => {
+      cancelled = true;
+      for (const timer of timers) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [hasActive, router]);
 
   useEffect(() => {
     let cancelled = false;

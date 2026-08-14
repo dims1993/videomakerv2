@@ -1,8 +1,10 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
+import { stripStructuralMarkers } from "@/lib/visual-plan-script";
+
 export const SCENE_VOICEOVER_MODE = "by_scene" as const;
-export const DEFAULT_SCENE_PAUSE_AFTER_MS = 220;
+export const DEFAULT_SCENE_PAUSE_AFTER_MS = 180;
 
 function storageRoot() {
   return path.join(process.cwd(), "storage");
@@ -42,15 +44,25 @@ export async function ensureSceneVoiceoversDir(videoId: string) {
 }
 
 export function normalizeSceneVoiceoverText(text: string) {
-  return text.trim().replace(/\n{3,}/g, "\n\n");
+  return stripStructuralMarkers(text).replace(/\n{3,}/g, "\n\n");
 }
 
 export function getPauseAfterScene({
+  existingPauseAfterMs,
 }: {
   scriptText: string;
   sortOrder: number;
   index: number;
   cumulativeTimeSec: number;
+  /** Prefer an already imported / manually set pause (milliseconds). */
+  existingPauseAfterMs?: number | null;
 }) {
+  if (
+    typeof existingPauseAfterMs === "number" &&
+    Number.isFinite(existingPauseAfterMs) &&
+    existingPauseAfterMs >= 0
+  ) {
+    return Math.round(existingPauseAfterMs);
+  }
   return DEFAULT_SCENE_PAUSE_AFTER_MS;
 }

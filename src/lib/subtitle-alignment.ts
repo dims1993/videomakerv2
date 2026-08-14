@@ -231,6 +231,66 @@ export function normalizeElevenLabsAlignment(alignmentJson: unknown): AlignedWor
   return charactersArray ? normalizeCharactersArray(charactersArray) : [];
 }
 
+/**
+ * Flatten WhisperX-style `{ segments: [{ words: [...] }] }` when there is no
+ * usable top-level words array. Prefer {@link normalizeWhisperXAlignment} from
+ * `whisperx.ts` for the full path (reuses this + ElevenLabs-style shapes).
+ */
+export function flattenSegmentWordsAlignment(
+  alignmentJson: unknown,
+): AlignedWord[] {
+  if (!isObject(alignmentJson) || !Array.isArray(alignmentJson.segments)) {
+    return [];
+  }
+
+  const words: AlignedWord[] = [];
+  for (const segment of alignmentJson.segments) {
+    if (!isObject(segment) || !Array.isArray(segment.words)) {
+      continue;
+    }
+    words.push(...normalizeWordsArray(segment.words));
+  }
+  return words.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * When ElevenLabs word ends overshoot the real scene audio duration, captions
+ * bleed into the next scene after stitch/combine. Scale timings down to fit
+ * without regenerating alignment or audio. Leaves short alignments alone.
+ */
+export function fitAlignedWordsToAudioDuration<T extends AlignedWord>(
+  words: T[],
+  audioDurationSec: number,
+  options?: { overshootToleranceSec?: number; endPaddingSec?: number },
+): T[] {
+  if (words.length === 0) {
+    return words;
+  }
+  if (!Number.isFinite(audioDurationSec) || audioDurationSec <= 0) {
+    return words;
+  }
+
+  const maxEnd = words.reduce((max, word) => Math.max(max, word.end), 0);
+  if (!(maxEnd > 0)) {
+    return words;
+  }
+
+  const overshootToleranceSec = options?.overshootToleranceSec ?? 0.05;
+  if (maxEnd <= audioDurationSec + overshootToleranceSec) {
+    return words;
+  }
+
+  const endPaddingSec = options?.endPaddingSec ?? 0.02;
+  const targetEnd = Math.max(0.05, audioDurationSec - endPaddingSec);
+  const scale = targetEnd / maxEnd;
+
+  return words.map((word) => ({
+    ...word,
+    start: Math.max(0, Number((word.start * scale).toFixed(3))),
+    end: Math.max(0, Number((word.end * scale).toFixed(3))),
+  }));
+}
+
 function cueText(words: AlignedWord[]) {
   return words.map((word) => word.word).join(" ").replace(/\s+/g, " ").trim();
 }
@@ -263,6 +323,98 @@ export function cleanSubtitleDisplayText(
 
   cleaned = cleaned.replace(/\s+/g, " ").trim();
   return style.uppercase ? cleaned.toUpperCase() : cleaned;
+}
+
+function normalizeWordCore(word: string) {
+  return word.toLowerCase().replace(/[^a-z0-9']/gi, "");
+}
+
+/**
+ * Prefer the script token form (casing + punctuation) when cores match.
+ * Otherwise copy letter casing from the script token onto the aligned word.
+ */
+export function transferScriptTokenCasing(
+  scriptToken: string,
+  alignedWord: string,
+) {
+  const scriptCore = normalizeWordCore(scriptToken);
+  const alignedCore = normalizeWordCore(alignedWord);
+  if (scriptCore && scriptCore === alignedCore) {
+    return scriptToken;
+  }
+
+  const scriptChars = [...scriptToken];
+  let scriptIndex = 0;
+  let result = "";
+
+  for (const char of alignedWord) {
+    if (/[a-z]/i.test(char)) {
+      while (
+        scriptIndex < scriptChars.length &&
+        !/[a-z]/i.test(scriptChars[scriptIndex] ?? "")
+      ) {
+        scriptIndex += 1;
+      }
+      const scriptChar = scriptChars[scriptIndex];
+      if (scriptChar && /[a-z]/i.test(scriptChar)) {
+        result +=
+          scriptChar === scriptChar.toUpperCase()
+            ? char.toUpperCase()
+            : char.toLowerCase();
+        scriptIndex += 1;
+        continue;
+      }
+    }
+    result += char;
+  }
+
+  return result || alignedWord;
+}
+
+/**
+ * Walk scriptText tokens and rewrite aligned words so captions keep the
+ * original capital/lowercase pattern from the script.
+ */
+export function applyScriptCasingToAlignedWords(
+  words: AlignedWord[],
+  scriptText: string,
+): AlignedWord[] {
+  const scriptTokens = scriptText.match(/\S+/g) ?? [];
+  if (words.length === 0 || scriptTokens.length === 0) {
+    return words;
+  }
+
+  let scriptIndex = 0;
+  return words.map((word) => {
+    const needle = normalizeWordCore(word.word);
+    if (!needle) {
+      return word;
+    }
+
+    while (scriptIndex < scriptTokens.length) {
+      const token = scriptTokens[scriptIndex]!;
+      scriptIndex += 1;
+      if (normalizeWordCore(token) === needle) {
+        return {
+          ...word,
+          word: transferScriptTokenCasing(token, word.word),
+        };
+      }
+    }
+
+    return word;
+  });
+}
+
+export function prepareAlignedWordsForCaptionStyle(
+  words: AlignedWord[],
+  style: CaptionStylePreset,
+  referenceText?: string | null,
+): AlignedWord[] {
+  if (style.matchScriptCasing && referenceText?.trim()) {
+    return applyScriptCasingToAlignedWords(words, referenceText);
+  }
+  return words;
 }
 
 function cleanDisplayWord(
@@ -887,7 +1039,7 @@ export function exportActiveWordCaptionsToAss(
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: ActiveWord,${styleOptions.fontFamily},${styleOptions.fontSize},${primaryColor},${primaryColor},${outlineColor},${backColor},1,0,0,0,100,100,0,0,1,${styleOptions.outlineWidth},${styleOptions.shadowBlur},2,80,80,${styleOptions.marginV},1`,
+    `Style: ActiveWord,${styleOptions.fontFamily},${styleOptions.fontSize},${primaryColor},${primaryColor},${outlineColor},${backColor},1,${styleOptions.italic ? 1 : 0},0,0,100,100,0,0,1,${styleOptions.outlineWidth},${styleOptions.shadowBlur},2,80,80,${styleOptions.marginV},1`,
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -898,6 +1050,7 @@ export function exportActiveWordCaptionsToAss(
 export function analyzeActiveWordAssEvents(
   cues: FormattedSubtitleCue[],
   assText: string | null | undefined,
+  styleOptions: CaptionStylePreset = CAPTION_STYLE_PRESETS.active_word_highlight,
 ) {
   const dialogueLines = assText
     ?.split("\n")
@@ -915,10 +1068,9 @@ export function analyzeActiveWordAssEvents(
   const overlapWarnings: string[] = [];
 
   for (const cue of cues) {
-    const cueEvents = buildActiveWordAssEventsForCue(
-      cue,
-      CAPTION_STYLE_PRESETS.active_word_highlight,
-    ).sort((a, b) => a.startCs - b.startCs || a.endCs - b.endCs);
+    const cueEvents = buildActiveWordAssEventsForCue(cue, styleOptions).sort(
+      (a, b) => a.startCs - b.startCs || a.endCs - b.endCs,
+    );
 
     for (let index = 0; index < cueEvents.length - 1; index += 1) {
       const currentEvent = cueEvents[index];

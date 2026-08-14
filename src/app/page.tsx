@@ -47,12 +47,20 @@ export default async function DashboardPage() {
           <h1 className="text-2xl font-semibold tracking-normal">Videos</h1>
           <p className="mt-1 text-sm text-muted-foreground">Plan scripts, scenes, assets, and metadata before AI automation.</p>
         </div>
-        <Button asChild>
-          <Link href="/videos/new">
-            <Plus />
-            Create video
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/channels/new">
+              <Plus />
+              Create channel
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/videos/new">
+              <Plus />
+              Create video
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {videos.length === 0 ? (
@@ -61,7 +69,13 @@ export default async function DashboardPage() {
             <CardTitle>No videos yet</CardTitle>
             <CardDescription>Create the first production item and start shaping the idea.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link href="/channels/new">
+                <Plus />
+                Create channel
+              </Link>
+            </Button>
             <Button asChild>
               <Link href="/videos/new">
                 <Plus />

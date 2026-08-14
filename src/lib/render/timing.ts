@@ -3,6 +3,8 @@ export type RenderScene = {
   scriptText: string;
   duration: number | null;
   imagePath: string | null;
+  clipPath?: string | null;
+  clipMuted?: boolean;
 };
 
 export type RenderVoiceoverSegment = {
@@ -17,7 +19,12 @@ export type SceneTimelineItem = {
   start: number;
   end: number;
   duration: number;
-  imagePath: string;
+  /** Still image used when mediaKind is "image". */
+  imagePath: string | null;
+  mediaKind: "image" | "video";
+  /** Video clip used when mediaKind is "video". */
+  clipPath: string | null;
+  clipMuted: boolean;
   scriptText: string;
 };
 
@@ -52,8 +59,12 @@ export function buildSceneTimelineFromSegments(
       segmentScenes.reduce((total, scene) => total + (scene.duration ?? 4), 0);
 
     for (const scene of segmentScenes) {
-      if (!scene.imagePath) {
-        throw new Error(`Cannot render: missing image for scene ${scene.sortOrder}.`);
+      const hasClip = Boolean(scene.clipPath?.trim());
+      const hasImage = Boolean(scene.imagePath?.trim());
+      if (!hasClip && !hasImage) {
+        throw new Error(
+          `Cannot render: missing image/clip for scene ${scene.sortOrder}.`,
+        );
       }
 
       const duration = segmentDuration * ((scene.duration ?? 4) / totalWeight);
@@ -65,7 +76,10 @@ export function buildSceneTimelineFromSegments(
         start,
         end,
         duration,
-        imagePath: scene.imagePath,
+        imagePath: hasImage ? scene.imagePath! : null,
+        mediaKind: hasClip ? "video" : "image",
+        clipPath: hasClip ? scene.clipPath! : null,
+        clipMuted: scene.clipMuted !== false,
         scriptText: scene.scriptText,
       });
       cursor = end;

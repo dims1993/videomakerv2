@@ -6,6 +6,23 @@ export function formatDate(date: Date) {
   }).format(date);
 }
 
+/** Locale-stable for SSR/client hydration (never use bare toLocaleString()). */
+export function formatDateTime(date: Date | string) {
+  const value = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(value.getTime())) {
+    return typeof date === "string" ? date : "";
+  }
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }).format(value);
+}
+
 type SceneStatsInput = {
   sceneType: string;
   duration: number | null;

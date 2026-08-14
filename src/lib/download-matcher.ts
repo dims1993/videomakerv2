@@ -2,11 +2,11 @@ import { copyFile, mkdir, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 import {
-  generatedImagesDir,
   localImageUrl,
   removePreviousGeneratedImage,
   stableSceneImageFileName,
 } from "@/lib/image-batches";
+import { resolveVideoImageOutputFolderAbsolute } from "@/lib/pipeline-settings";
 import { prisma } from "@/lib/prisma";
 
 const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp"]);
@@ -25,11 +25,14 @@ function sceneOrderFromFileName(fileName: string) {
 }
 
 async function listImageFiles(folderPath: string) {
-  const entries = await readdir(folderPath);
+  const absoluteFolder = path.isAbsolute(folderPath)
+    ? folderPath
+    : path.resolve(process.cwd(), folderPath);
+  const entries = await readdir(absoluteFolder);
   const files = [];
 
   for (const entry of entries) {
-    const fullPath = path.join(folderPath, entry);
+    const fullPath = path.join(absoluteFolder, entry);
     const entryStat = await stat(fullPath);
 
     if (entryStat.isFile() && imageExtensions.has(path.extname(entry).toLowerCase())) {
@@ -200,7 +203,7 @@ export async function importDownloadedImagesFromFolder({
       .map((scene) => [scene.imageFileName?.toLowerCase(), scene]),
   );
   const scenesByOrder = new Map(scenes.map((scene) => [scene.sortOrder, scene]));
-  const outputFolder = generatedImagesDir(videoId, video?.title);
+  const outputFolder = await resolveVideoImageOutputFolderAbsolute(videoId);
 
   const usedSceneIds = new Set<string>();
   const matches: ProposedMatch[] = [];

@@ -5,6 +5,9 @@ import { Readable } from "node:stream";
 
 import { NextResponse } from "next/server";
 
+import { prisma } from "@/lib/prisma";
+import { renderFinalVideoFileName } from "@/lib/render/output-name";
+
 type DraftPreviewRouteProps = {
   params: Promise<{ id: string }>;
 };
@@ -48,6 +51,50 @@ function parseRangeHeader(rangeHeader: string | null, fileSize: number) {
   };
 }
 
+async function resolveFinalRenderAbsolutePath(videoId: string) {
+  const draft = await prisma.renderDraft.findFirst({
+    where: {
+      videoId,
+      status: "rendered",
+      outputPath: { not: null },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { outputPath: true, fileName: true },
+  });
+
+  const candidates: string[] = [];
+  if (draft?.outputPath?.startsWith("storage/renders/")) {
+    candidates.push(path.resolve(process.cwd(), draft.outputPath));
+  }
+  if (draft?.fileName) {
+    candidates.push(path.join(rendersRoot, videoId, draft.fileName));
+  }
+
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { title: true },
+  });
+  candidates.push(
+    path.join(rendersRoot, videoId, renderFinalVideoFileName(video?.title)),
+  );
+  // Legacy filename from older renders.
+  candidates.push(path.join(rendersRoot, videoId, "draft.mp4"));
+
+  for (const candidate of candidates) {
+    if (!candidate.startsWith(`${rendersRoot}${path.sep}`)) {
+      continue;
+    }
+    try {
+      await stat(candidate);
+      return candidate;
+    } catch {
+      // try next
+    }
+  }
+
+  return null;
+}
+
 async function respondWithDraft(
   request: Request,
   { params }: DraftPreviewRouteProps,
@@ -55,9 +102,9 @@ async function respondWithDraft(
 ) {
   const { id } = await params;
   const safeVideoId = path.basename(decodeURIComponent(id));
-  const filePath = path.resolve(rendersRoot, safeVideoId, "draft.mp4");
+  const filePath = await resolveFinalRenderAbsolutePath(safeVideoId);
 
-  if (!filePath.startsWith(`${rendersRoot}${path.sep}`)) {
+  if (!filePath || !filePath.startsWith(`${rendersRoot}${path.sep}`)) {
     return NextResponse.json({ error: "Draft preview not found." }, { status: 404 });
   }
 

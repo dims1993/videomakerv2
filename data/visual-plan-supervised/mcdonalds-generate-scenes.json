@@ -1,0 +1,482 @@
+[
+{
+"order": 1,
+"scriptText": "In 1954, a 52-year-old milkshake machine salesman drove to San Bernardino, California, because one small restaurant had ordered more mixers than made sense. That was the strange part. Restaurants did not usually need that many machines.",
+"sceneType": "avatar",
+"visualPurpose": "Introduces the mixer order as the mystery clue that pulls the salesman into the story.",
+"visualIdea": "CHARACTER_A: A fictionalized 1950s equipment salesman studies an oversized plain mixer order beside a tiny generic restaurant icon and a California map pin.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: In 1954, a 52-year-old milkshake machine salesman drove to San Bernardino, California, because one small restaurant had ordered more mixers than made sense. That was the strange part. Restaurants did not usually need that many machines. Narrative meaning: A strange order becomes the first clue in the business mystery. Must show: fictionalized 1950s equipment salesman, oversized plain mixer order, tiny generic restaurant icon, California map pin, curious expression. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 2,
+"scriptText": "Most drive-ins were messy, slow, complicated places. Cars pulled in. Workers rushed around. Orders got confused. Food took too long. Customers waited.",
+"sceneType": "insert",
+"visualPurpose": "Shows the chaotic drive-in world that makes the later efficient restaurant feel surprising.",
+"visualIdea": "EDITORIAL BOARD: A clean four-box chaos board shows cars arriving, one rushing worker, crossed order tickets, and waiting customers.",
+"duration": 7,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: Most drive-ins were messy, slow, complicated places. Cars pulled in. Workers rushed around. Orders got confused. Food took too long. Customers waited. Narrative meaning: The ordinary drive-in model was full of friction. Must show: four clean panels with cars, rushing worker, crossed order tickets, simple clock, waiting customers. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 3,
+"scriptText": "But this restaurant was different. When Ray Kroc arrived, he did not see chaos. He saw a line of customers moving too quickly. He saw a tiny menu. He saw workers moving like parts of a machine. He saw hamburgers being made almost like cars on an assembly line.",
+"sceneType": "avatar",
+"visualPurpose": "Shows the salesman discovering that the restaurant operates like an engineered system.",
+"visualIdea": "CHARACTER_A: The salesman watches a fast customer line, tiny menu board, synchronized workers, and a simple burger assembly path inside a generic restaurant.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: But this restaurant was different. When Ray Kroc arrived, he did not see chaos. He saw a line of customers moving too quickly. He saw a tiny menu. He saw workers moving like parts of a machine. He saw hamburgers being made almost like cars on an assembly line. Narrative meaning: The salesman finds order, speed, and repeatable movement where he expected confusion. Must show: fictionalized salesman, fast customer line, tiny menu, workers as simple machine-like steps, generic burgers on an assembly path. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 4,
+"scriptText": "And for a man who had spent his life selling things, this was not just a restaurant. It was a signal. Something was hiding here. Something bigger than burgers.",
+"sceneType": "avatar",
+"visualPurpose": "Turns the efficient restaurant into a signal that something larger is hidden beneath it.",
+"visualIdea": "CHARACTER_A: The salesman sees a signal beam rising from a generic burger stand while hidden gears glow beneath the floor.",
+"duration": 7,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: And for a man who had spent his life selling things, this was not just a restaurant. It was a signal. Something was hiding here. Something bigger than burgers. Narrative meaning: The visible restaurant points to a deeper business mechanism. Must show: fictionalized salesman, generic burger stand, glowing signal beam, hidden gears under the floor. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 5,
+"scriptText": "Because the real story of McDonald’s is not the story most people think it is. Most people think McDonald’s became powerful because it sold cheap hamburgers. And yes, it sold hamburgers. Billions of them. But the burger was only the thing people could see.",
+"sceneType": "insert",
+"visualPurpose": "Separates the visible burger story from the hidden business story.",
+"visualIdea": "MECHANISM: A huge generic burger sits on the visible surface while a hidden machine layer is barely visible underneath.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: Because the real story of McDonald’s is not the story most people think it is. Most people think McDonald’s became powerful because it sold cheap hamburgers. And yes, it sold hamburgers. Billions of them. But the burger was only the thing people could see. Narrative meaning: The obvious product gets attention while the hidden structure stays unseen. Must show: large generic burger, visible surface layer, hidden gears and cash arrows underneath. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 6,
+"scriptText": "The real machine was underneath. Not under the grill. Not inside the fryer. Not in the secret sauce. Under the building. The land. The location. The lease. The system that turned one restaurant into thousands.",
+"sceneType": "insert",
+"visualPurpose": "Reveals the real estate and lease layer beneath the restaurant.",
+"visualIdea": "MECHANISM: A generic restaurant splits open like a dollhouse, revealing land, location pin, lease paper, and a replication machine underneath.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: The real machine was underneath. Not under the grill. Not inside the fryer. Not in the secret sauce. Under the building. The land. The location. The lease. The system that turned one restaurant into thousands. Narrative meaning: The deeper mechanism is under the building, not inside the food. Must show: dollhouse cutaway restaurant, land slab, location pin, lease document, small restaurant boxes multiplying. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 7,
+"scriptText": "McDonald’s looked like a burger company. It smelled like a burger company. It advertised like a burger company. But behind the counter, behind the franchise agreement, behind the parking lot, behind the golden arches, there was a second business hiding in plain sight. A real estate machine financed by fries.",
+"sceneType": "insert",
+"visualPurpose": "Shows the public burger identity sliding aside to reveal the hidden real estate business.",
+"visualIdea": "MECHANISM: Surface burger-company clues slide aside to reveal a real estate machine powered by fries-shaped cash arrows.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: McDonald’s looked like a burger company. It smelled like a burger company. It advertised like a burger company. But behind the counter, behind the franchise agreement, behind the parking lot, behind the golden arches, there was a second business hiding in plain sight. A real estate machine financed by fries. Narrative meaning: The public restaurant image hides a property-centered engine. Must show: generic counter, plain agreement, parking-lot tile, generic arch-like shape, hidden real estate machine, cash arrows shaped like fries. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 8,
+"scriptText": "And the strangest part is this: The people who created the restaurant were not the same people who fully understood the machine. The McDonald brothers saw speed. Ray Kroc saw scale. Harry Sonneborn saw the land. And when those three ideas collided, a small restaurant in California became one of the most recognizable businesses on Earth.",
+"sceneType": "insert",
+"visualPurpose": "Introduces the three different insights that combine into the machine.",
+"visualIdea": "EDITORIAL BOARD: Three insight cards, speed, scale, and land, collide above a small generic California restaurant.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: And the strangest part is this: The people who created the restaurant were not the same people who fully understood the machine. The McDonald brothers saw speed. Ray Kroc saw scale. Harry Sonneborn saw the land. And when those three ideas collided, a small restaurant in California became one of the most recognizable businesses on Earth. Narrative meaning: The future company emerges from three different ways of seeing the business. Must show: speed card, scale map card, land deed card, collision arrows, small generic restaurant. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 9,
+"scriptText": "But before it became an empire, it was just a problem. In 1940, Richard and Maurice McDonald opened a restaurant in San Bernardino. Most people know them as Dick and Mac. They were not trying to become symbols of American capitalism. They were not trying to build one of the most famous brands in the world. They were trying to run a restaurant.",
+"sceneType": "avatar",
+"visualPurpose": "Grounds the origin story in practical operators solving a restaurant problem.",
+"visualIdea": "CHARACTER_B: Fictionalized mid-century operator brothers stand beside a small plain restaurant, focused on practical operation instead of fame.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: But before it became an empire, it was just a problem. In 1940, Richard and Maurice McDonald opened a restaurant in San Bernardino. Most people know them as Dick and Mac. They were not trying to become symbols of American capitalism. They were not trying to build one of the most famous brands in the world. They were trying to run a restaurant. Narrative meaning: The origin is practical, not grand. Must show: fictionalized operator brothers, plain aprons, small generic roadside restaurant, fading empire silhouette behind them. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 10,
+"scriptText": "At first, it looked like a normal drive-in. A big menu. Carhop service. Customers in cars. Orders coming in from different directions. Workers trying to keep up. It was the kind of restaurant that could make money, but it was also the kind of restaurant that could fall apart every night.",
+"sceneType": "insert",
+"visualPurpose": "Shows the original restaurant as a money-making but unstable drive-in system.",
+"visualIdea": "EDITORIAL BOARD: A normal drive-in board shows a big menu, carhop path, cars, crossing order arrows, workers, cash, and a wobbling night-time restaurant block.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: At first, it looked like a normal drive-in. A big menu. Carhop service. Customers in cars. Orders coming in from different directions. Workers trying to keep up. It was the kind of restaurant that could make money, but it was also the kind of restaurant that could fall apart every night. Narrative meaning: The first model could earn money but had too many failure points. Must show: big menu, carhop arrows, cars, crossed orders, worker icons, cash register, wobbling restaurant. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 11,
+"scriptText": "Too many menu items. Too many mistakes. Too many workers. Too many delays. Too many ways for the same business to become unpredictable. And this is where the brothers did something most owners are afraid to do. They removed things. They cut the menu down. They removed complexity. They removed wasted motion. They removed anything that slowed the restaurant down.",
+"sceneType": "avatar",
+"visualPurpose": "Shows the breakthrough as subtraction: removing complexity and friction.",
+"visualIdea": "CHARACTER_B: The operator brothers pull extra menu blocks, mistake tickets, delay clocks, and wasted-motion arrows off a restaurant machine.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: Too many menu items. Too many mistakes. Too many workers. Too many delays. Too many ways for the same business to become unpredictable. And this is where the brothers did something most owners are afraid to do. They removed things. They cut the menu down. They removed complexity. They removed wasted motion. They removed anything that slowed the restaurant down. Narrative meaning: The breakthrough starts by removing everything that makes the restaurant unpredictable. Must show: fictionalized operator brothers, restaurant machine, removed menu blocks, mistake tickets, delay clocks, wasted-motion arrows. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 12,
+"scriptText": "Then they rebuilt the operation almost like an engineered system. The kitchen became choreography. One person did one task. Another person did the next. The food moved through the kitchen in a predictable order. The menu became simple. The process became repeatable. The customer experience became fast. This was the Speedee Service System. And it was more important than the burger.",
+"sceneType": "insert",
+"visualPurpose": "Shows the restaurant becoming a repeatable operating system.",
+"visualIdea": "MECHANISM: A clean kitchen flow line becomes a large service-system machine while a smaller generic burger sits beside it.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: Then they rebuilt the operation almost like an engineered system. The kitchen became choreography. One person did one task. Another person did the next. The food moved through the kitchen in a predictable order. The menu became simple. The process became repeatable. The customer experience became fast. This was the Speedee Service System. And it was more important than the burger. Narrative meaning: The operating system is the breakthrough. Must show: clean kitchen stations, one-task worker icons, predictable arrows, simple menu card, fast customer output, large system machine, smaller burger. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 13,
+"scriptText": "Because a burger can be copied. A menu can be copied. A price can be copied. But a repeatable system is different. A repeatable system can travel. A repeatable system can be taught. A repeatable system can survive outside the original building. That was the brothers’ breakthrough. They did not create a fancy restaurant. They created a restaurant that could behave the same way again and again. And in business, that is where scale begins.",
+"sceneType": "insert",
+"visualPurpose": "Explains why repeatability creates scale while products can be copied.",
+"visualIdea": "MECHANISM: Copy stamps duplicate a burger, menu, and price, while a repeatable-system blueprint travels to new buildings and creates identical behavior.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: Because a burger can be copied. A menu can be copied. A price can be copied. But a repeatable system is different. A repeatable system can travel. A repeatable system can be taught. A repeatable system can survive outside the original building. That was the brothers’ breakthrough. They did not create a fancy restaurant. They created a restaurant that could behave the same way again and again. And in business, that is where scale begins. Narrative meaning: Scale begins when the same behavior can travel beyond the first site. Must show: copied burger, menu, price icons, system blueprint, training board, repeated generic restaurant boxes. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 14,
+"scriptText": "A great restaurant can make money. A repeatable restaurant can become a chain. A repeatable restaurant with rules can become a franchise. A franchise with control can become an empire. But the brothers were still at the first stage. They had built the machine. They had not yet built the empire around the machine.",
+"sceneType": "insert",
+"visualPurpose": "Shows the ladder from restaurant to chain to franchise to empire, and where the brothers still were.",
+"visualIdea": "MECHANISM: One restaurant climbs steps into chain, rules-based franchise, and controlled empire, while the operator brothers remain at the first-stage machine.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: A great restaurant can make money. A repeatable restaurant can become a chain. A repeatable restaurant with rules can become a franchise. A franchise with control can become an empire. But the brothers were still at the first stage. They had built the machine. They had not yet built the empire around the machine. Narrative meaning: The machine exists before the empire around it. Must show: staircase, one restaurant, chain boxes, rule sheets, control lever, empire tower outline, first-stage machine. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 15,
+"scriptText": "Then Ray Kroc walked in. Kroc was not the inventor of McDonald’s. He was not the man who designed the first system. He was not the original founder. He was a salesman. And that matters. Because a salesman does not look at a restaurant the same way a cook does. A cook sees the food. An operator sees the process. A customer sees lunch. A salesman sees how many times the same thing can be sold.",
+"sceneType": "avatar",
+"visualPurpose": "Introduces the salesman as a different observer who sees repeatable sales.",
+"visualIdea": "CHARACTER_A: The salesman enters beside an already-built restaurant system, then a viewpoint board shows food, process, lunch, and repeated sales.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: Then Ray Kroc walked in. Kroc was not the inventor of McDonald’s. He was not the man who designed the first system. He was not the original founder. He was a salesman. And that matters. Because a salesman does not look at a restaurant the same way a cook does. A cook sees the food. An operator sees the process. A customer sees lunch. A salesman sees how many times the same thing can be sold. Narrative meaning: A salesman sees multiplication where others see food or process. Must show: fictionalized salesman, existing restaurant system, four viewpoint panels, repeated sales arrows. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 16,
+"scriptText": "When Kroc watched the McDonald brothers’ restaurant, he saw something that felt too simple to ignore. A limited menu. A fast line. Low prices. Clean process. Customers coming back. And, most importantly, a model that could be copied.",
+"sceneType": "avatar",
+"visualPurpose": "Shows the simple copyable model that the salesman recognizes.",
+"visualIdea": "CHARACTER_A: The salesman studies a clean model board with limited menu, fast line, low price tag, clean process, returning customers, and copyable blueprint.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: When Kroc watched the McDonald brothers’ restaurant, he saw something that felt too simple to ignore. A limited menu. A fast line. Low prices. Clean process. Customers coming back. And, most importantly, a model that could be copied. Narrative meaning: The simplicity becomes copyable. Must show: fictionalized salesman, limited menu, fast line, low price tag, clean process arrows, returning customer loop, blueprint copy stamp. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 17,
+"scriptText": "One McDonald’s was a successful restaurant. Ten McDonald’s could be a regional chain. A hundred McDonald’s could be national. A thousand McDonald’s would be something else entirely. Not a restaurant. Infrastructure. That was Kroc’s gift. He saw multiplication. But multiplication creates a problem. The more a business spreads, the easier it is to lose control. That is the dangerous part of franchising.",
+"sceneType": "insert",
+"visualPurpose": "Shows scale turning restaurants into infrastructure while control lines start to stretch.",
+"visualIdea": "MECHANISM: One generic restaurant multiplies into a map network, then stretched control lines begin to snap as the system spreads.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: One McDonald’s was a successful restaurant. Ten McDonald’s could be a regional chain. A hundred McDonald’s could be national. A thousand McDonald’s would be something else entirely. Not a restaurant. Infrastructure. That was Kroc’s gift. He saw multiplication. But multiplication creates a problem. The more a business spreads, the easier it is to lose control. That is the dangerous part of franchising. Narrative meaning: Multiplication creates scale and a control problem at the same time. Must show: one restaurant, ten boxes, national map, infrastructure grid, stretched control lines, warning symbols. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 18,
+"scriptText": "From the outside, franchising sounds simple. You have a brand. Someone else opens a location. They use your system. They pay you fees. They run the store. You expand without paying for everything yourself. It sounds almost perfect.",
+"sceneType": "insert",
+"visualPurpose": "Explains why franchising looks attractive from the outside.",
+"visualIdea": "MECHANISM: A simple franchise diagram shows brand box, outside operator, fee arrow, store box, and expansion arrow that looks almost perfect.",
+"duration": 8,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: From the outside, franchising sounds simple. You have a brand. Someone else opens a location. They use your system. They pay you fees. They run the store. You expand without paying for everything yourself. It sounds almost perfect. Narrative meaning: Franchising appears to solve the cost of expansion. Must show: brand box, operator figure, generic store, fee arrow, expansion arrow, clean diagram. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 19,
+"scriptText": "But every franchisee is also a risk. One operator can cut corners. One restaurant can damage the brand. One location can serve food badly. One owner can decide the rules are optional. And if the system spreads faster than control, the business can grow and weaken at the same time. That was the problem Kroc had to solve. How do you make McDonald’s spread without letting every location become its own version of McDonald’s? How do you let other people operate the restaurants while keeping the company powerful? How do you turn a franchise into a system instead of a loose collection of burger shops?",
+"sceneType": "insert",
+"visualPurpose": "Frames the franchise risk and the central problem of expansion with control.",
+"visualIdea": "MECHANISM: Scattered franchise boxes drift apart with corner-cutting, cracked brand shield, bad-food warning, and ignored rule sheet while a central grid tries to pull them into one system.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: But every franchisee is also a risk. One operator can cut corners. One restaurant can damage the brand. One location can serve food badly. One owner can decide the rules are optional. And if the system spreads faster than control, the business can grow and weaken at the same time. That was the problem Kroc had to solve. How do you make McDonald’s spread without letting every location become its own version of McDonald’s? How do you let other people operate the restaurants while keeping the company powerful? How do you turn a franchise into a system instead of a loose collection of burger shops? Narrative meaning: Expansion becomes dangerous unless the company can keep the locations controlled. Must show: scattered generic shops, cracked shield, corner-cut rule sheet, warning food icon, central control grid, loose collection becoming system. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 20,
+"scriptText": "At first, the answer seemed obvious. Control the menu. Control the process. Control the logo. Control the standards. Control the training. But there was a deeper layer. A layer most customers never think about. A restaurant does not float in the air. It sits somewhere. On a corner. Near traffic. Near families. Near highways. Near habits. Near routines. And whoever controls that place controls more than the building. They control the point where the whole business touches the world.",
+"sceneType": "space",
+"visualPurpose": "Moves from obvious operational controls to deeper location control.",
+"visualIdea": "LOCATION BEAT: Surface control switches sit above a hidden land layer, then a generic restaurant anchors to a corner map with traffic, families, highways, habits, and routines.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: At first, the answer seemed obvious. Control the menu. Control the process. Control the logo. Control the standards. Control the training. But there was a deeper layer. A layer most customers never think about. A restaurant does not float in the air. It sits somewhere. On a corner. Near traffic. Near families. Near highways. Near habits. Near routines. And whoever controls that place controls more than the building. They control the point where the whole business touches the world. Narrative meaning: The real point of control is the physical place where the restaurant meets the world. Must show: control switches, hidden land layer, generic restaurant, corner map, traffic arrows, family icon, highway line, habit loop, hand on location pin. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 21,
+"scriptText": "This is where Harry Sonneborn enters the story. If this were only a movie about burgers, Sonneborn would feel like a side character. But if this is a story about how money really works, he becomes one of the most important people in the room. Because Sonneborn understood something that did not look exciting. He understood that the land could be the key. Not because land flips burgers. Not because dirt sells fries. But because every McDonald’s needed a site. Every franchisee needed a place to operate. Every customer needed somewhere to drive. And every golden arch needed ground underneath it.",
+"sceneType": "avatar",
+"visualPurpose": "Introduces the financial architect who understands that land is the key.",
+"visualIdea": "CHARACTER_C: A fictionalized financial architect steps from the side with a lease folder and places a land slab under the restaurant, franchisee, customer car path, and generic arch-like ground marker.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: This is where Harry Sonneborn enters the story. If this were only a movie about burgers, Sonneborn would feel like a side character. But if this is a story about how money really works, he becomes one of the most important people in the room. Because Sonneborn understood something that did not look exciting. He understood that the land could be the key. Not because land flips burgers. Not because dirt sells fries. But because every McDonald’s needed a site. Every franchisee needed a place to operate. Every customer needed somewhere to drive. And every golden arch needed ground underneath it. Narrative meaning: The financial architect matters because he sees the land everyone else ignores. Must show: fictionalized financial architect, lease folder, site map, land slab, generic restaurant, franchisee, customer car path, ground support layer. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 22,
+"scriptText": "If McDonald’s could control the real estate, McDonald’s could control the franchise relationship at a much deeper level. The franchisee could operate the restaurant. The customer could buy the food. But McDonald’s would sit one layer underneath the entire transaction. The franchisee would not just pay for the right to use the brand. They would also pay to occupy the location where the brand worked. That changed the business. Because rent is different from a burger sale.",
+"sceneType": "insert",
+"visualPurpose": "Shows real estate control sitting underneath the transaction and changing the business.",
+"visualIdea": "MECHANISM: Customer and franchisee actions happen above while a land-and-lease layer underneath collects occupancy rent and controls the relationship.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: If McDonald’s could control the real estate, McDonald’s could control the franchise relationship at a much deeper level. The franchisee could operate the restaurant. The customer could buy the food. But McDonald’s would sit one layer underneath the entire transaction. The franchisee would not just pay for the right to use the brand. They would also pay to occupy the location where the brand worked. That changed the business. Because rent is different from a burger sale. Narrative meaning: The payment for occupying the site changes the power relationship. Must show: customer buying food, franchisee operating store, lease layer under transaction, land slab, brand-rights paper, rent arrow into foundation. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 23,
+"scriptText": "A burger is sold one customer at a time. Rent is built into the structure. A royalty depends on restaurant sales. Rent ties the operator to the place. A franchise fee starts the relationship. Real estate helps define who controls it. That was the hidden shift. McDonald’s was no longer asking only: How many burgers can we sell? It was asking: How many controlled locations can this system support? That is a much bigger question. And it explains why the title of this video matters.",
+"sceneType": "insert",
+"visualPurpose": "Compares food sales with structural rent and reframes the question around controlled locations.",
+"visualIdea": "MECHANISM: A burger-sale arrow is replaced by a controlled-location question board with rent foundation, royalty arrow, franchise-fee paper, lease line, and control lever.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: A burger is sold one customer at a time. Rent is built into the structure. A royalty depends on restaurant sales. Rent ties the operator to the place. A franchise fee starts the relationship. Real estate helps define who controls it. That was the hidden shift. McDonald’s was no longer asking only: How many burgers can we sell? It was asking: How many controlled locations can this system support? That is a much bigger question. And it explains why the title of this video matters. Narrative meaning: The hidden shift is from selling burgers to controlling locations. Must show: single burger sale arrow, rent block inside foundation, royalty arrow, franchise fee paper, operator tied to site, controlled location pins under a large question mark. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 24,
+"scriptText": "McDonald’s did get money from burgers. Of course it did. The food mattered. The fries mattered. The speed mattered. The brand mattered. But McDonald’s did not become one of the most powerful restaurant companies in the world only because people liked hamburgers. People liked hamburgers before McDonald’s.",
+"sceneType": "insert",
+"visualPurpose": "Balances the visible food business with the fact that burgers alone do not explain the power.",
+"visualIdea": "MECHANISM: Food, fries, speed, and brand icons form a real surface layer, while earlier generic burger preference appears before the chain.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: McDonald’s did get money from burgers. Of course it did. The food mattered. The fries mattered. The speed mattered. The brand mattered. But McDonald’s did not become one of the most powerful restaurant companies in the world only because people liked hamburgers. People liked hamburgers before McDonald’s. Narrative meaning: The food matters, but food preference alone cannot explain the machine. Must show: surface layer with generic food, fries, speed arrow, brand halo, older burger counter showing people already liked hamburgers. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 25,
+"scriptText": "McDonald’s became powerful because it turned the hamburger into a repeatable economic unit. A small building. On a controlled location. With a predictable menu. Operated by a franchisee. Supported by a global brand. Sending money back through royalties, rent, fees, and system control. That is not just a burger. That is a machine.",
+"sceneType": "insert",
+"visualPurpose": "Shows the hamburger becoming a full repeatable economic unit.",
+"visualIdea": "MECHANISM: A generic hamburger transforms into a unit machine: small building, controlled land, predictable menu, franchisee operator, brand halo, and cash-flow arrows.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: McDonald’s became powerful because it turned the hamburger into a repeatable economic unit. A small building. On a controlled location. With a predictable menu. Operated by a franchisee. Supported by a global brand. Sending money back through royalties, rent, fees, and system control. That is not just a burger. That is a machine. Narrative meaning: The unit is the machine, not the burger alone. Must show: small generic building, controlled location pin, menu card, operator, brand halo without logo, royalty arrow, rent arrow, fee arrow, control lever. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 26,
+"scriptText": "And the modern numbers make the machine easier to see. By the end of 2025, McDonald’s had more than 45,000 restaurants around the world. About 95 percent of them were franchised. That means most McDonald’s restaurants were not directly operated by McDonald’s corporate in the way a normal restaurant owner runs a shop. They were operated by franchisees. But McDonald’s was still sitting at the center of the system.",
+"sceneType": "insert",
+"visualPurpose": "Uses modern scale and franchising numbers to show the structure.",
+"visualIdea": "EDITORIAL BOARD: Modern number blocks show global restaurants, franchised share, franchisee-operated stores orbiting a central company system.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: And the modern numbers make the machine easier to see. By the end of 2025, McDonald’s had more than 45,000 restaurants around the world. About 95 percent of them were franchised. That means most McDonald’s restaurants were not directly operated by McDonald’s corporate in the way a normal restaurant owner runs a shop. They were operated by franchisees. But McDonald’s was still sitting at the center of the system. Narrative meaning: The numbers reveal a system centered around franchised locations. Must show: big restaurant count block, franchised percentage block, franchisee operator icons, central system machine, orbiting generic restaurants. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 27,
+"scriptText": "In 2025, McDonald’s reported more than 16 billion dollars in revenues from franchised restaurants. More than 10 billion of that came from rents. About 6 billion came from royalties. Think about what that means. The royalty is the part people expect from a franchise company. The rent is the part that reveals the deeper structure. McDonald’s was not just collecting money because people bought Big Macs. It was collecting money because the restaurants existed on sites connected to the McDonald’s system.",
+"sceneType": "insert",
+"visualPurpose": "Shows rent as the clue that reveals the deeper structure.",
+"visualIdea": "EDITORIAL BOARD: Revenue, rent, and royalty blocks show expected royalty on the surface and deeper rent arrows rising from connected sites.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: In 2025, McDonald’s reported more than 16 billion dollars in revenues from franchised restaurants. More than 10 billion of that came from rents. About 6 billion came from royalties. Think about what that means. The royalty is the part people expect from a franchise company. The rent is the part that reveals the deeper structure. McDonald’s was not just collecting money because people bought Big Macs. It was collecting money because the restaurants existed on sites connected to the McDonald’s system. Narrative meaning: Rent from connected sites exposes the deeper machine. Must show: franchised revenue block, rent block larger than royalty block, surface royalty arrow, deeper site-rent arrows, connected map pins. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 28,
+"scriptText": "That is why the business is so fascinating. A customer sees food. A franchisee sees opportunity. A landlord sees property. McDonald’s sees the whole stack. Food. Brand. Location. Operator. Lease. Habit. Cash flow. The customer transaction is simple. The business model is layered.",
+"sceneType": "insert",
+"visualPurpose": "Shows the layered business stack behind a simple customer transaction.",
+"visualIdea": "MECHANISM: Customer, franchisee, landlord, and company viewpoints surround a stacked model of food, brand, location, operator, lease, habit, and cash flow.",
+"duration": 8,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: That is why the business is so fascinating. A customer sees food. A franchisee sees opportunity. A landlord sees property. McDonald’s sees the whole stack. Food. Brand. Location. Operator. Lease. Habit. Cash flow. The customer transaction is simple. The business model is layered. Narrative meaning: Different participants see different layers of one system. Must show: customer food icon, franchisee opportunity icon, landlord property icon, whole stack of food, brand, location, operator, lease, habit, cash flow, simple transaction on top. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 29,
+"scriptText": "This is the part most people miss when they look at famous companies. They look at the visible product. Nike sells shoes. Apple sells phones. Costco sells groceries. Amazon ships packages. McDonald’s sells burgers. But the visible product is often only the doorway. The real money is usually in the structure behind the doorway. Distribution. Contracts. Memberships. Ecosystems. Real estate. Data. Financing. Habit. Control.",
+"sceneType": "insert",
+"visualPurpose": "Generalizes the lesson from visible products to hidden structures.",
+"visualIdea": "MECHANISM: Generic product doors open into hidden rooms labeled visually by distribution, contracts, memberships, ecosystems, real estate, data, financing, habit, and control symbols.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: This is the part most people miss when they look at famous companies. They look at the visible product. Nike sells shoes. Apple sells phones. Costco sells groceries. Amazon ships packages. McDonald’s sells burgers. But the visible product is often only the doorway. The real money is usually in the structure behind the doorway. Distribution. Contracts. Memberships. Ecosystems. Real estate. Data. Financing. Habit. Control. Narrative meaning: The product often acts as the doorway to the real money structure. Must show: generic shoes, phone, groceries, package, burger icons outside; hidden rooms with contract, map, data, financing, habit, and control symbols. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 30,
+"scriptText": "McDonald’s is one of the clearest examples because the product is so ordinary. A hamburger is not mysterious. That is what makes the story so good. The ordinary thing hides the extraordinary machine. From the road, a McDonald’s looks like lunch. From the inside, it is a system of incentives.",
+"sceneType": "insert",
+"visualPurpose": "Contrasts the ordinary lunch view with the extraordinary incentive machine inside.",
+"visualIdea": "MECHANISM: A simple roadside lunch view flips into an interior incentive-system cutaway full of gears, contracts, location pins, and cash arrows.",
+"duration": 8,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: McDonald’s is one of the clearest examples because the product is so ordinary. A hamburger is not mysterious. That is what makes the story so good. The ordinary thing hides the extraordinary machine. From the road, a McDonald’s looks like lunch. From the inside, it is a system of incentives. Narrative meaning: The ordinary exterior hides a powerful incentive system. Must show: generic burger, road-facing lunch stop, flip cutaway, incentive gears, contracts, location pins, cash arrows. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 31,
+"scriptText": "The customer pays the restaurant. The restaurant generates sales. The franchisee operates the location. The franchisee pays royalties. The franchisee pays rent. The location reinforces the brand. The brand brings more customers. More customers make the location more valuable. More valuable locations make the system stronger. The stronger system attracts more franchisees. And the cycle repeats. That is the flywheel. Not burger after burger. Location after location. Habit after habit. Contract after contract.",
+"sceneType": "insert",
+"visualPurpose": "Shows the full flywheel of customers, franchisees, rent, brand, location value, and contracts.",
+"visualIdea": "MECHANISM: A circular flywheel connects customer payment, sales, franchisee operation, royalties, rent, brand reinforcement, more customers, location value, stronger system, and new franchisees.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: The customer pays the restaurant. The restaurant generates sales. The franchisee operates the location. The franchisee pays royalties. The franchisee pays rent. The location reinforces the brand. The brand brings more customers. More customers make the location more valuable. More valuable locations make the system stronger. The stronger system attracts more franchisees. And the cycle repeats. That is the flywheel. Not burger after burger. Location after location. Habit after habit. Contract after contract. Narrative meaning: Each part feeds the next until the system repeats. Must show: circular flywheel with customer, sales, franchisee, royalty, rent, brand, location value, new franchisees, map pins, habit loops, contract papers. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 32,
+"scriptText": "A new McDonald’s does not just sell food. It plants another sign into the map. It makes the brand easier to recognize. It trains customers to expect the same thing. It creates another stream of rent and royalties. It proves the model again. It makes the next location feel less risky.",
+"sceneType": "space",
+"visualPurpose": "Shows how each new location strengthens recognition, habit, revenue, proof, and future expansion.",
+"visualIdea": "LOCATION BEAT: A new generic restaurant pin lands on a map and sends arrows to recognition, habit, rent, royalties, proof, and lower-risk next sites.",
+"duration": 8,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: A new McDonald’s does not just sell food. It plants another sign into the map. It makes the brand easier to recognize. It trains customers to expect the same thing. It creates another stream of rent and royalties. It proves the model again. It makes the next location feel less risky. Narrative meaning: Each new location reinforces the next one. Must show: generic restaurant map pin, recognition halo, habit loop, rent arrow, royalty arrow, proof stamp, lower-risk next pin. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 33,
+"scriptText": "And once the machine is everywhere, it becomes harder to copy. A competitor can copy a burger. A competitor can copy a menu. A competitor can copy low prices. A competitor can copy yellow and red. A competitor can copy speed. But copying a mature network of locations, contracts, franchisees, customer habits, and brand memory is much harder.",
+"sceneType": "avatar",
+"visualPurpose": "Shows that surface features can be copied but the mature network cannot.",
+"visualIdea": "CHARACTER_D: A competitor holds copied surface pieces while a locked mature network of locations, contracts, franchisees, customer habit loops, and brand memory stands behind a moat.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: And once the machine is everywhere, it becomes harder to copy. A competitor can copy a burger. A competitor can copy a menu. A competitor can copy low prices. A competitor can copy yellow and red. A competitor can copy speed. But copying a mature network of locations, contracts, franchisees, customer habits, and brand memory is much harder. Narrative meaning: The moat is the mature network, not the visible surface. Must show: fictionalized competitor, copied burger, menu, price, color cards, speed arrows, locked network of map pins, contracts, franchisees, habit loops, memory cloud. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 34,
+"scriptText": "By the time you understand what the machine really is, the best corners may already be taken. The habits may already be formed. The brand may already live in people’s heads. That is why McDonald’s became more than a restaurant chain. It became a default. A road trip stop. A childhood memory. A late-night option. A landmark. A place people recognize before they even decide what they want. That kind of familiarity is not created by one burger. It is created by repetition. And repetition needs places.",
+"sceneType": "space",
+"visualPurpose": "Shows first-mover locations turning into habit, memory, and default recognition.",
+"visualIdea": "LOCATION BEAT: Prime corners are already occupied by generic pins while habit loops, memory clouds, road trip, childhood, late-night, landmark, and recognition bubbles form around them.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: By the time you understand what the machine really is, the best corners may already be taken. The habits may already be formed. The brand may already live in people’s heads. That is why McDonald’s became more than a restaurant chain. It became a default. A road trip stop. A childhood memory. A late-night option. A landmark. A place people recognize before they even decide what they want. That kind of familiarity is not created by one burger. It is created by repetition. And repetition needs places. Narrative meaning: Repeated locations create default behavior and memory. Must show: occupied corner map, habit loops, memory clouds, road trip icon, childhood icon, moon icon, landmark pin, repeated place markers. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 35,
+"scriptText": "This is why land mattered. Not because land alone made McDonald’s great. A bad restaurant on good land is still a bad restaurant. But good locations attached to a repeatable system, a strong brand, franchise operators, and customer habit become extremely powerful.",
+"sceneType": "insert",
+"visualPurpose": "Clarifies that land matters only when attached to the full system.",
+"visualIdea": "MECHANISM: A weak land slab with a bad restaurant contrasts with a strong land slab connected to system gear, brand halo, franchise operator, and habit loop.",
+"duration": 8,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: This is why land mattered. Not because land alone made McDonald’s great. A bad restaurant on good land is still a bad restaurant. But good locations attached to a repeatable system, a strong brand, franchise operators, and customer habit become extremely powerful. Narrative meaning: Land becomes powerful when connected to repeatability, brand, operators, and habit. Must show: comparison of weak land with bad restaurant versus strong connected land system with gears, halo, operator, customer habit loop. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 36,
+"scriptText": "The land gave the system a physical anchor. The system made the restaurants predictable. The brand made customers comfortable. The franchisees brought capital and local operation. The rent and royalties gave McDonald’s recurring revenue. And the company sat in the middle. That is the hidden genius. The McDonald brothers created the operating system. Ray Kroc pushed the operating system across the country. Harry Sonneborn helped turn the expansion into a financial structure with real estate at the center. Three different insights. One empire.",
+"sceneType": "insert",
+"visualPurpose": "Summarizes how land, system, brand, franchisees, rent, royalties, and three insights combine.",
+"visualIdea": "EDITORIAL BOARD: Land anchor, system gear, brand halo, franchisee capital arrow, rent and royalty arrows, and three insight cards lock into one central empire machine.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: The land gave the system a physical anchor. The system made the restaurants predictable. The brand made customers comfortable. The franchisees brought capital and local operation. The rent and royalties gave McDonald’s recurring revenue. And the company sat in the middle. That is the hidden genius. The McDonald brothers created the operating system. Ray Kroc pushed the operating system across the country. Harry Sonneborn helped turn the expansion into a financial structure with real estate at the center. Three different insights. One empire. Narrative meaning: The hidden genius is the way all reinforcing layers sit around the center. Must show: land anchor, predictable system gear, brand comfort halo, franchisee capital arrow, rent arrow, royalty arrow, three insight cards, central empire tower. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 37,
+"scriptText": "And this is where the story becomes uncomfortable. Because the McDonald brothers were not irrelevant. They were essential. They built the original breakthrough. They took a chaotic restaurant model and made it repeatable. Without them, Ray Kroc has nothing special to scale.",
+"sceneType": "avatar",
+"visualPurpose": "Shows that the original creators were essential to the machine.",
+"visualIdea": "CHARACTER_B: The operator brothers hold the original repeatable machine while a scaling map depends on it in the background.",
+"duration": 8,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: And this is where the story becomes uncomfortable. Because the McDonald brothers were not irrelevant. They were essential. They built the original breakthrough. They took a chaotic restaurant model and made it repeatable. Without them, Ray Kroc has nothing special to scale. Narrative meaning: The original breakthrough matters even if it does not control the future. Must show: fictionalized operator brothers, repeatable machine, cleaned-up chaos board, expansion map depending on their machine. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 38,
+"scriptText": "But being first is not the same as controlling the final outcome. That is one of the coldest lessons in business history. The person who creates the idea does not always become the person who owns the future of the idea. The inventor may see the product. The operator may see the process. The scaler may see the empire. And the financier may see the structure that makes the empire profitable. The brothers saw the kitchen. Kroc saw the map. Sonneborn saw the ground. Each one saw a deeper layer. And each deeper layer made the business more powerful.",
+"sceneType": "insert",
+"visualPurpose": "Shows the lesson that creation, scaling, and financial control are different layers.",
+"visualIdea": "EDITORIAL BOARD: Product, process, map, ground, and future-control layers stack upward, with different role silhouettes seeing deeper layers.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: But being first is not the same as controlling the final outcome. That is one of the coldest lessons in business history. The person who creates the idea does not always become the person who owns the future of the idea. The inventor may see the product. The operator may see the process. The scaler may see the empire. And the financier may see the structure that makes the empire profitable. The brothers saw the kitchen. Kroc saw the map. Sonneborn saw the ground. Each one saw a deeper layer. And each deeper layer made the business more powerful. Narrative meaning: Business power often moves from the idea to deeper layers of control. Must show: first-idea flag, final-control lever, product layer, process layer, map layer, ground layer, role silhouettes, upward power arrows. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 39,
+"scriptText": "That is why this story is not just about McDonald’s. It is about how wealth hides. Most people look for money where the noise is. They look at the burger. The ad. The line. The logo. The product. But the power is often somewhere quieter. In the contract. In the land. In the bottleneck. In the part of the system everyone else depends on. And McDonald’s learned to own the bottleneck. The customer needed a quick, predictable meal. The franchisee needed the brand and the location. The brand needed consistency. The company needed control. The land helped connect all of those things.",
+"sceneType": "insert",
+"visualPurpose": "Shows wealth hiding in quiet bottlenecks rather than noisy visible products.",
+"visualIdea": "MECHANISM: Noisy burger, ad, line, logo, and product icons sit opposite quiet contract, land, bottleneck valve, and dependency connector centered on a land pin.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: That is why this story is not just about McDonald’s. It is about how wealth hides. Most people look for money where the noise is. They look at the burger. The ad. The line. The logo. The product. But the power is often somewhere quieter. In the contract. In the land. In the bottleneck. In the part of the system everyone else depends on. And McDonald’s learned to own the bottleneck. The customer needed a quick, predictable meal. The franchisee needed the brand and the location. The brand needed consistency. The company needed control. The land helped connect all of those things. Narrative meaning: Power hides in the quiet dependency point everyone needs. Must show: noisy surface icons, quiet contract, land pin, bottleneck valve, customer need, franchisee need, brand consistency, company control, connector arrows. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 40,
+"scriptText": "This is the difference between selling a product and controlling a system. Selling a product can make you money. Controlling the system around the product can make you powerful. That is why two burger restaurants can look similar from the street and be completely different underneath. One restaurant sells food and keeps whatever profit is left after labor, rent, ingredients, utilities, insurance, maintenance, and mistakes. The other restaurant is part of a global system where the operator carries much of the local restaurant work, while the parent company collects money through brand rights, rent, royalties, standards, and scale. From the customer’s point of view, both sell lunch. From the business model’s point of view, they are not the same animal. One is a restaurant. The other is a platform with a kitchen.",
+"sceneType": "insert",
+"visualPurpose": "Compares a standalone restaurant with a platform-like system around a restaurant.",
+"visualIdea": "MECHANISM: Two similar burger restaurants look identical above the street, but one drains through local cost buckets while the other connects to brand rights, rent, royalties, standards, and scale.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: This is the difference between selling a product and controlling a system. Selling a product can make you money. Controlling the system around the product can make you powerful. That is why two burger restaurants can look similar from the street and be completely different underneath. One restaurant sells food and keeps whatever profit is left after labor, rent, ingredients, utilities, insurance, maintenance, and mistakes. The other restaurant is part of a global system where the operator carries much of the local restaurant work, while the parent company collects money through brand rights, rent, royalties, standards, and scale. From the customer’s point of view, both sell lunch. From the business model’s point of view, they are not the same animal. One is a restaurant. The other is a platform with a kitchen. Narrative meaning: Similar products can hide completely different economics underneath. Must show: two generic restaurants, identical lunch trays on top, one side with cost buckets, other side with platform machine, operator workload, parent-system cash arrows. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 41,
+"scriptText": "That is why McDonald’s is so often misunderstood. It is not accurate to say it is not a food company at all. The food matters. The restaurants matter. The operations matter. The customers matter. But it is also not enough to call it just a burger chain. That misses the machine. McDonald’s became powerful because it stacked multiple businesses on top of each other. Food on top. Operations underneath. Franchising below that. Real estate below that. Brand surrounding all of it. A simple customer experience sitting on a complicated economic structure.",
+"sceneType": "insert",
+"visualPurpose": "Shows the company as multiple stacked businesses under a simple customer experience.",
+"visualIdea": "MECHANISM: Food, restaurant, operations, customers, franchising, real estate, and brand stack beneath a simple counter, revealing the machine.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: That is why McDonald’s is so often misunderstood. It is not accurate to say it is not a food company at all. The food matters. The restaurants matter. The operations matter. The customers matter. But it is also not enough to call it just a burger chain. That misses the machine. McDonald’s became powerful because it stacked multiple businesses on top of each other. Food on top. Operations underneath. Franchising below that. Real estate below that. Brand surrounding all of it. A simple customer experience sitting on a complicated economic structure. Narrative meaning: The food is real, but it sits on a larger layered machine. Must show: food layer, restaurant layer, operations gear, customer figures, franchising layer, real estate layer, brand halo around all layers, simple customer counter on top. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 42,
+"scriptText": "That is one of the most powerful patterns in business. Make the customer experience simple. Make the backend difficult to copy. If the customer has to think too hard, you lose them. But if competitors can copy you too easily, you lose the business. McDonald’s solved both problems. The customer experience was easy. The business machine was not. A person could walk in and order without thinking. But a competitor could not easily recreate the locations, the franchise network, the supplier scale, the brand memory, the operational standards, and the real estate structure all at once. That is where the moat lived. Not in one secret recipe. Not in one magical burger. In the whole system.",
+"sceneType": "insert",
+"visualPurpose": "Shows the simple front end and difficult-to-copy backend that create the moat.",
+"visualIdea": "MECHANISM: An easy customer door sits in front of a locked backend machine protected by a moat made of locations, franchise network, suppliers, memory, standards, and real estate.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: That is one of the most powerful patterns in business. Make the customer experience simple. Make the backend difficult to copy. If the customer has to think too hard, you lose them. But if competitors can copy you too easily, you lose the business. McDonald’s solved both problems. The customer experience was easy. The business machine was not. A person could walk in and order without thinking. But a competitor could not easily recreate the locations, the franchise network, the supplier scale, the brand memory, the operational standards, and the real estate structure all at once. That is where the moat lived. Not in one secret recipe. Not in one magical burger. In the whole system. Narrative meaning: The moat is the hard-to-copy system behind the easy experience. Must show: simple customer entrance, locked backend machine, competitor blocked outside, moat around full system, small recipe card and burger outside moat. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 43,
+"scriptText": "And that is what makes the beginning of the story so strange. Ray Kroc drove to San Bernardino because of milkshake machines. He was trying to understand why one restaurant needed so many of them. But what he found was not just demand for milkshakes. He found a business that had learned how to remove friction. Then he helped turn that frictionless restaurant into a national ambition. Then Sonneborn helped turn that ambition into a financial machine. A machine where the burger created traffic. Traffic created leverage. Leverage supported rent. Rent created control. Control supported expansion. And expansion made the burger more familiar. That is the McDonald’s flywheel. It is simple enough for anyone to understand. And powerful enough to build an empire.",
+"sceneType": "avatar",
+"visualPurpose": "Returns to the opening clue and assembles the final flywheel.",
+"visualIdea": "CHARACTER_A: The salesman returns to the mixer clue as a causal flywheel turns burger into traffic, leverage, rent, control, expansion, familiarity, and empire.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: And that is what makes the beginning of the story so strange. Ray Kroc drove to San Bernardino because of milkshake machines. He was trying to understand why one restaurant needed so many of them. But what he found was not just demand for milkshakes. He found a business that had learned how to remove friction. Then he helped turn that frictionless restaurant into a national ambition. Then Sonneborn helped turn that ambition into a financial machine. A machine where the burger created traffic. Traffic created leverage. Leverage supported rent. Rent created control. Control supported expansion. And expansion made the burger more familiar. That is the McDonald’s flywheel. It is simple enough for anyone to understand. And powerful enough to build an empire. Narrative meaning: The opening mystery becomes the full causal machine. Must show: fictionalized salesman, mixer clue, friction blocks removed, national map arrow, financial machine, flywheel chain from burger to traffic to leverage to rent to control to expansion to familiarity to empire. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 44,
+"scriptText": "So the next time you see a McDonald’s on a busy corner, do not just look at the sign. Look at the corner itself. Look at the cars turning in. Look at the fact that the restaurant is not randomly placed. Look at the way habit, traffic, brand, and land meet in one small building. That is the story hiding in plain sight. The burger is the part you buy. The system is the part you experience. The land is the part most people never notice. And the control is the part that made the company powerful.",
+"sceneType": "space",
+"visualPurpose": "Turns the viewer’s attention from the sign to the corner, land, habit, traffic, brand, and control.",
+"visualIdea": "LOCATION BEAT: A busy corner with a generic restaurant is de-emphasized above ground while habit loops, traffic arrows, brand halo, land slab, system layer, and control lever converge underneath.",
+"duration": 9,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: So the next time you see a McDonald’s on a busy corner, do not just look at the sign. Look at the corner itself. Look at the cars turning in. Look at the fact that the restaurant is not randomly placed. Look at the way habit, traffic, brand, and land meet in one small building. That is the story hiding in plain sight. The burger is the part you buy. The system is the part you experience. The land is the part most people never notice. And the control is the part that made the company powerful. Narrative meaning: The hidden story is the meeting point of place, habit, system, land, and control. Must show: generic busy corner, cars turning in, highlighted land slab, habit loops, traffic arrows, brand halo without logo, system layer, control lever, burger layer on top. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 45,
+"scriptText": "McDonald’s did not get rich from burgers alone. It got rich by turning burgers into traffic. Traffic into leverage. Leverage into rent. Rent into control. And control into an empire. That is the real lesson. In business, the obvious product gets the attention. But the hidden structure gets the power.",
+"sceneType": "insert",
+"visualPurpose": "Delivers the final causal chain and thesis.",
+"visualIdea": "MECHANISM: A final chain turns burgers into traffic, leverage, rent, control, and empire, while a spotlight stays on the product and power flows from hidden structure below.",
+"duration": 8,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: McDonald’s did not get rich from burgers alone. It got rich by turning burgers into traffic. Traffic into leverage. Leverage into rent. Rent into control. And control into an empire. That is the real lesson. In business, the obvious product gets the attention. But the hidden structure gets the power. Narrative meaning: Attention and power are not always in the same place. Must show: burger icon, traffic arrows, leverage bar, rent block, control lever, empire tower, spotlight on visible product, hidden structure powering it from below. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 46,
+"scriptText": "Quick reminder: this video is for education and storytelling. It is not investment advice.",
+"sceneType": "insert",
+"visualPurpose": "Provides the educational disclaimer in a clean object-detail scene.",
+"visualIdea": "OBJECT DETAIL: A clean education note card sits beside a closed business-history storybook.",
+"duration": 4,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: Quick reminder: this video is for education and storytelling. It is not investment advice. Narrative meaning: The episode is educational storytelling, not financial guidance. Must show: education note card, closed storybook, small generic business icons, neutral background. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 47,
+"scriptText": "If this helped you see a familiar company differently, subscribe for more stories about the hidden business models, founders, incentives, and money machines behind the companies everyone thinks they understand.",
+"sceneType": "insert",
+"visualPurpose": "Connects the call to action to the channel’s hidden business model promise.",
+"visualIdea": "OBJECT DETAIL: An open storybook shows hidden business-model gears, founder-role silhouettes, incentive arrows, money-machine icons, and an unbranded play button shape.",
+"duration": 7,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: If this helped you see a familiar company differently, subscribe for more stories about the hidden business models, founders, incentives, and money machines behind the companies everyone thinks they understand. Narrative meaning: The viewer is invited to keep exploring hidden business machines. Must show: open storybook, hidden gears, founder-role silhouettes without likenesses, incentive arrows, money machine icons, unbranded play button shape. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+},
+{
+"order": 48,
+"scriptText": "I’ll see you in the next one.",
+"sceneType": "insert",
+"visualPurpose": "Ends the episode simply while preserving the hidden-machine motif.",
+"visualIdea": "OBJECT DETAIL: The storybook closes with one small gear peeking from the cover.",
+"duration": 3,
+"imagePrompt": "VISUAL STYLE LOCK: clean 2D editorial business-history storyboard panel, oversized caricature heads, thick clean outlines, flat colors, muted era-appropriate palette, simple geometric backgrounds, no photorealism, no 3D. Voiceover context: I’ll see you in the next one. Narrative meaning: The episode closes cleanly. Must show: closed storybook, one small hidden gear peeking from the cover, soft neutral background, no text. Style rules: one clear visual idea, minimal background, few large elements, readable in one second, 16:9. Avoid: exact real-person likeness, logos, trademarked signage, exact product names, subtitles, captions, long readable text, photorealism, 3D, anime, crowds.",
+"status": "planned"
+}
+]

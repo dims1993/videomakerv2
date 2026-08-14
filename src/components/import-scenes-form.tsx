@@ -1,14 +1,29 @@
 "use client";
 
 import type React from "react";
-import { useActionState, useEffect, useMemo, useState } from "react";
+import {
+  useActionState,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
+import { Loader2, Play, Square, Upload } from "lucide-react";
 
+import {
+  runVisualPlanBatch,
+  saveVideoImageOutputFolderAction,
+  updateVideoImageOutputFolder,
+} from "@/app/actions";
 import { CopyPromptButton } from "@/components/copy-prompt-button";
+import { ImageOutputFolderField } from "@/components/image-output-folder-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { JsonTextarea } from "@/components/json-textarea";
+import { Textarea } from "@/components/ui/textarea";
 import type { ImportScenesState } from "@/lib/action-types";
+import { formatDateTime } from "@/lib/format";
 import {
   extractScriptSegmentByPercent,
   parseScriptFromCurrentVideoData,
@@ -19,7 +34,27 @@ import {
   type SceneHandoffValidation,
 } from "@/lib/chatgpt-scene-handoff";
 import { getChannelSceneGenerationModes } from "@/lib/channels";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  buildTheGodsWordFlowVisualBrief,
+  buildTheGodsWordTimingRules,
+  buildTheGodsWordGenerationModeInstructions,
+} from "@/lib/the-gods-word-visual-brief";
+import {
+  buildBibleOneYearVisualBrief,
+  buildBibleOneYearOutputRequirementsSection,
+  buildBibleOneYearGenerationModeInstructions,
+  buildBibleOneYearTimingRules,
+} from "@/lib/the-bible-in-one-year-visual-brief";
+import {
+  buildBibleOneYearCoverBeatDirectives,
+  prepareBibleOneYearCompactScript,
+} from "@/lib/the-bible-in-one-year-compact-script";
+import { isBibleOneYearCategory } from "@/lib/the-bible-in-one-year-shared";
+import {
+  buildWealthInsightsVisualModeSection,
+  resolveWealthInsightsVisualMode,
+} from "@/lib/wealth-insights-visual-mode";
+import { ensureHookMarkersInScript } from "@/lib/visual-plan-script";
 
 const initialState: ImportScenesState = {
   status: "idle",
@@ -33,7 +68,7 @@ const GENERATION_MODE_LABELS: Record<ChatGptGenerationMode, string> = {
   SEGMENTED_BY_PERCENT: "Segmented by Percent",
 };
 
-type SceneImportMode = "replace" | "append";
+type SceneImportMode = "replace" | "append" | "prepend";
 
 function getSuggestedSceneImportMode({
   generationMode,
@@ -81,6 +116,7 @@ export function ImportScenesForm({
   videoId,
   videoTitle,
   channelKey,
+  topicCategory,
   projectBiblePath,
   imagePromptBiblePath,
   characterBiblePath,
@@ -88,6 +124,10 @@ export function ImportScenesForm({
   scriptLength,
   currentSceneCount,
   currentScenesJson,
+  hybridCheckpoint = null,
+  clearHybridProgressAction,
+  buildFromScriptAction,
+  imageOutputFolder,
 }: {
   action: (
     previousState: ImportScenesState,
@@ -98,6 +138,7 @@ export function ImportScenesForm({
   videoId: string;
   videoTitle: string;
   channelKey: string;
+  topicCategory?: string | null;
   projectBiblePath: string;
   imagePromptBiblePath: string;
   characterBiblePath?: string;
@@ -105,12 +146,39 @@ export function ImportScenesForm({
   scriptLength: number;
   currentSceneCount: number;
   currentScenesJson: string;
+  hybridCheckpoint?: {
+    filled: number;
+    total: number;
+    updatedAt: string;
+    mode?: "fill" | "section_generate";
+    unit?: "scenes" | "sections";
+    stale?: boolean;
+  } | null;
+  clearHybridProgressAction?: () => Promise<void>;
+  buildFromScriptAction?: (imageOutputFolder?: string | null) => Promise<void>;
+  imageOutputFolder: string;
 }) {
   const allowedModes = useMemo(
     () => getChannelSceneGenerationModes(channelKey),
     [channelKey],
   );
   const [state, formAction, isPending] = useActionState(action, initialState);
+  const [isBatchPending, startBatchTransition] = useTransition();
+  const [isBatchCancelling, setIsBatchCancelling] = useState(false);
+  const [isClearingCheckpoint, startClearCheckpointTransition] = useTransition();
+  const [isBuildingFromScript, startBuildFromScriptTransition] = useTransition();
+  const [isSavingImageFolder, startSaveImageFolderTransition] = useTransition();
+  const [imageFolder, setImageFolder] = useState(imageOutputFolder);
+  const [resetHybridCheckpoint, setResetHybridCheckpoint] = useState(false);
+  const usesFillHybrid = channelKey === "podcast-english-lessons";
+  const usesSectionHybrid =
+    channelKey === "the-gods-word" || channelKey === "wealth-insights";
+  const supportsHybridVisualPlan =
+    usesFillHybrid || usesSectionHybrid || Boolean(hybridCheckpoint);
+  const hybridUnit =
+    hybridCheckpoint?.unit ??
+    (usesSectionHybrid ? "sections" : "scenes");
+  const hybridUnitLabel = hybridUnit === "sections" ? "sections" : "scenes";
   const [mode, setMode] = useState<ChatGptGenerationMode>(() =>
     getDefaultGenerationMode(allowedModes),
   );
@@ -122,10 +190,15 @@ export function ImportScenesForm({
   const [requestError, setRequestError] = useState("");
   const [requestWarnings, setRequestWarnings] = useState<string[]>([]);
   const [response, setResponse] = useState("");
+  const [responseFileName, setResponseFileName] = useState<string | null>(null);
+  const [manualScenesJson, setManualScenesJson] = useState("");
   const [validation, setValidation] = useState<SceneHandoffValidation | null>(
     null,
   );
+  const [manualValidation, setManualValidation] =
+    useState<SceneHandoffValidation | null>(null);
   const [copied, setCopied] = useState(false);
+  const responseFileInputRef = useRef<HTMLInputElement>(null);
   const segmentValidationError = useMemo(
     () => validateSegmentPercentRange(startPercent, endPercent),
     [startPercent, endPercent],
@@ -134,10 +207,19 @@ export function ImportScenesForm({
     () => (validation ? scenesToImportJson(validation.scenes) : ""),
     [validation],
   );
+  const parsedManualScenesJson = useMemo(
+    () =>
+      manualValidation ? scenesToImportJson(manualValidation.scenes) : "",
+    [manualValidation],
+  );
 
   useEffect(() => {
     setMode((currentMode) => resolveGenerationMode(currentMode, allowedModes));
   }, [allowedModes]);
+
+  useEffect(() => {
+    setImageFolder(imageOutputFolder);
+  }, [imageOutputFolder]);
 
   useEffect(() => {
     const suggestedImportMode = getSuggestedSceneImportMode({
@@ -161,32 +243,7 @@ export function ImportScenesForm({
     }
 
     try {
-      const promptResponse = await fetch(visualPlanPromptUrl);
-
-      if (!promptResponse.ok) {
-        throw new Error("Could not load the Visual Planner prompt.");
-      }
-
-      const fullPrompt = await promptResponse.text();
-      const chatGptRequest = buildChatGptRequest({
-        fullPrompt,
-        mode,
-        videoId,
-        videoTitle,
-        channelKey,
-        projectBiblePath,
-        imagePromptBiblePath,
-        characterBiblePath,
-        visualPlannerPath,
-        scriptLength,
-        segmentRange:
-          mode === "SEGMENTED_BY_PERCENT"
-            ? { startPercent, endPercent }
-            : undefined,
-      });
-
-      setRequest(chatGptRequest.request);
-      setRequestWarnings(chatGptRequest.warnings);
+      await buildRequestText();
     } catch (error) {
       setRequestError(
         error instanceof Error
@@ -204,6 +261,83 @@ export function ImportScenesForm({
     await navigator.clipboard.writeText(request);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  async function buildRequestText() {
+    const promptResponse = await fetch(visualPlanPromptUrl);
+    if (!promptResponse.ok) {
+      throw new Error("Could not load the Visual Planner prompt.");
+    }
+
+    const fullPrompt = await promptResponse.text();
+    const chatGptRequest = buildChatGptRequest({
+      fullPrompt,
+      mode,
+      videoId,
+      videoTitle,
+      channelKey,
+      topicCategory,
+      projectBiblePath,
+      imagePromptBiblePath,
+      characterBiblePath,
+      visualPlannerPath,
+      scriptLength,
+      segmentRange:
+        mode === "SEGMENTED_BY_PERCENT"
+          ? { startPercent, endPercent }
+          : undefined,
+    });
+
+    setRequest(chatGptRequest.request);
+    setRequestWarnings(chatGptRequest.warnings);
+    return chatGptRequest.request;
+  }
+
+  function runBatch() {
+    setRequestError("");
+    setIsBatchCancelling(false);
+
+    if (mode === "SEGMENTED_BY_PERCENT" && segmentValidationError) {
+      setRequestError(segmentValidationError);
+      return;
+    }
+
+    startBatchTransition(async () => {
+      try {
+        const promptText = request?.trim()
+          ? request
+          : await buildRequestText();
+
+        const formData = new FormData();
+        formData.set("prompt", promptText);
+        formData.set("importMode", importMode);
+        if (resetHybridCheckpoint) {
+          formData.set("resetHybridCheckpoint", "1");
+        }
+        await runVisualPlanBatch(videoId, formData);
+      } catch (error) {
+        setRequestError(
+          error instanceof Error
+            ? error.message
+            : "Could not run Visual Plan Batch.",
+        );
+      }
+    });
+  }
+
+  function cancelBatch() {
+    setIsBatchCancelling(true);
+    // Fire-and-forget API cancel. Do not await a Server Action here: it can
+    // queue behind the long Run Batch POST and stall the UI for a long time.
+    void fetch(`/api/videos/${videoId}/cancel-batch?kind=visual-plan`, {
+      method: "POST",
+      keepalive: true,
+    });
+    window.location.assign(
+      `/videos/${videoId}?tab=visual-plan&assetNoticeType=error&assetNotice=${encodeURIComponent(
+        "Cancel requested. Visual Plan batch stops at the next ChatGPT checkpoint.",
+      )}`,
+    );
   }
 
   function parseResponse() {
@@ -238,8 +372,61 @@ export function ImportScenesForm({
     }
   }
 
+  function parseManualScenesJson() {
+    try {
+      setManualValidation(parseAndValidateHandoffResponse(manualScenesJson));
+    } catch (error) {
+      setManualValidation({
+        scenes: [],
+        errors: [
+          error instanceof Error
+            ? error.message
+            : "Could not find a valid JSON array in the pasted Manual Scenes JSON.",
+        ],
+        warnings: [],
+        summary: {
+          totalScenes: 0,
+          avatarScenes: 0,
+          insertScenes: 0,
+          spaceScenes: 0,
+          averageDuration: 0,
+          totalDuration: 0,
+          mainHostScenes: 0,
+          supportingCharacterScenes: 0,
+          insertTaggedScenes: 0,
+          spaceTaggedScenes: 0,
+          hookScenes: 0,
+          bodyScenes: 0,
+          otherSectionScenes: 0,
+          sectionCounts: {},
+        },
+      });
+    }
+  }
+
+  async function handleResponseFileUpload(
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      setResponse(text);
+      setResponseFileName(file.name);
+      setValidation(null);
+    } catch {
+      setRequestError(`Could not read file: ${file.name}`);
+    } finally {
+      event.target.value = "";
+    }
+  }
+
   function confirmReplace() {
-    if (importMode === "append") {
+    if (importMode === "append" || importMode === "prepend") {
       return true;
     }
 
@@ -258,6 +445,16 @@ export function ImportScenesForm({
   }
 
   function handleManualImportSubmit(event: React.FormEvent<HTMLFormElement>) {
+    if (
+      !manualValidation ||
+      manualValidation.errors.length > 0 ||
+      manualValidation.scenes.length === 0
+    ) {
+      event.preventDefault();
+      parseManualScenesJson();
+      return;
+    }
+
     if (!confirmReplace()) {
       event.preventDefault();
     }
@@ -270,12 +467,212 @@ export function ImportScenesForm({
           <div>
             <h3 className="text-base font-medium">ChatGPT Scene Generation</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Generate a complete request packet, paste it into ChatGPT, then
-              paste the response here to validate and import.
+              Generate a complete request packet for ChatGPT. Copy it manually,
+              or Run Batch to send it through Chrome CDP and import scenes
+              automatically.
+              {usesFillHybrid
+                ? " Preferred for this channel: Build scenes from script (local skeleton + library). Run Batch is optional when you want ChatGPT to refine visual fields."
+                : null}
+              {usesSectionHybrid
+                ? channelKey === "wealth-insights"
+                  ? " Run Batch isolates the editorial HOOK section first (from [HOOK]…[END HOOK] markers or a 15–20s timing boundary), then plans BODY chunks with continuity, and assembles the final scenes JSON (progress is checkpointed so you can resume)."
+                  : " Run Batch splits the script by structural sections ([HOOK], [INTRODUCTION], [CHAPTER N - Title], …) and asks ChatGPT to fully plan each section (progress is saved so you can resume)."
+                : null}
             </p>
+            {buildFromScriptAction ? (
+              <div className="space-y-2 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm">
+                <p>
+                  Build scenes from script labels locally. If the folder below
+                  has an image, that still is used for every Emma/Leo/music
+                  scene. PART covers stay for Flow; INTRO/LESSON/CLOSING/FINAL
+                  stay as section videos. Emma/Leo library only runs when the
+                  folder has no image.
+                </p>
+                <ImageOutputFolderField
+                  id="buildFromScriptImageFolder"
+                  name="imageOutputFolder"
+                  label="Episode still folder"
+                  description="Paste the full path, e.g. data/image-library/podcast-english-lessons/JustOnePic. “Use name” maps to that library path (not storage/). One image → all spoken scenes; PART/INTRO stay untouched."
+                  value={imageFolder}
+                  onChange={setImageFolder}
+                  disabled={
+                    isPending ||
+                    isBatchPending ||
+                    isBatchCancelling ||
+                    isBuildingFromScript ||
+                    isSavingImageFolder
+                  }
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={
+                      isPending ||
+                      isBatchPending ||
+                      isBatchCancelling ||
+                      isBuildingFromScript ||
+                      isSavingImageFolder
+                    }
+                    onClick={() => {
+                      startSaveImageFolderTransition(async () => {
+                        await updateVideoImageOutputFolder(videoId, imageFolder);
+                      });
+                    }}
+                  >
+                    {isSavingImageFolder ? "Saving folder…" : "Save folder"}
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={
+                      isPending ||
+                      isBatchPending ||
+                      isBatchCancelling ||
+                      isBuildingFromScript ||
+                      isSavingImageFolder ||
+                      scriptLength <= 0
+                    }
+                    onClick={() => {
+                      startBuildFromScriptTransition(async () => {
+                        await buildFromScriptAction(imageFolder);
+                      });
+                    }}
+                  >
+                    {isBuildingFromScript
+                      ? "Building scenes…"
+                      : currentSceneCount > 0
+                        ? "Rebuild scenes from script"
+                        : "Build scenes from script"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2 rounded-md border bg-background/60 px-3 py-2 text-sm">
+                <ImageOutputFolderField
+                  id="visualPlanImageFolder"
+                  name="imageOutputFolder"
+                  label="Image folder (attach source / Flow output)"
+                  description="Paste a full path to attach existing images, or leave the default generated-images folder for Flow. Browser Select cannot read absolute paths."
+                  value={imageFolder}
+                  onChange={setImageFolder}
+                  disabled={isPending || isSavingImageFolder}
+                />
+                <form
+                  action={saveVideoImageOutputFolderAction.bind(null, videoId)}
+                >
+                  <input
+                    type="hidden"
+                    name="imageOutputFolder"
+                    value={imageFolder}
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="outline"
+                    disabled={isPending || isSavingImageFolder}
+                  >
+                    Save image folder
+                  </Button>
+                </form>
+              </div>
+            )}
+            {supportsHybridVisualPlan ? (
+              <div className="space-y-2 rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm">
+                {hybridCheckpoint ? (
+                  <p>
+                    {hybridCheckpoint.stale ? (
+                      <>
+                        Stale hybrid checkpoint found (
+                        <strong>
+                          {hybridCheckpoint.filled}/{hybridCheckpoint.total}
+                        </strong>{" "}
+                        {hybridUnitLabel}
+                        {hybridCheckpoint.updatedAt
+                          ? `, updated ${formatDateTime(hybridCheckpoint.updatedAt)}`
+                          : ""}
+                        ). Script changed since it was saved — clear it or
+                        restart before Run Batch.
+                      </>
+                    ) : hybridCheckpoint.filled > 0 ? (
+                      <>
+                        Hybrid progress saved:{" "}
+                        <strong>
+                          {hybridCheckpoint.filled}/{hybridCheckpoint.total}
+                        </strong>{" "}
+                        {hybridUnitLabel} done
+                        {hybridCheckpoint.updatedAt
+                          ? ` (updated ${formatDateTime(hybridCheckpoint.updatedAt)})`
+                          : ""}
+                        . The next Run Batch resumes from the first unfinished{" "}
+                        {hybridUnit === "sections" ? "section" : "chunk"}.
+                      </>
+                    ) : (
+                      <>
+                        Hybrid checkpoint file present (
+                        <strong>
+                          0/{hybridCheckpoint.total}
+                        </strong>{" "}
+                        {hybridUnitLabel} done
+                        {hybridCheckpoint.updatedAt
+                          ? `, updated ${formatDateTime(hybridCheckpoint.updatedAt)}`
+                          : ""}
+                        ). No finished{" "}
+                        {hybridUnit === "sections" ? "sections" : "chunks"} yet
+                        — Clear progress if you want a clean start.
+                      </>
+                    )}
+                  </p>
+                ) : (
+                  <p>
+                    {usesSectionHybrid
+                      ? "Hybrid checkpoint: each finished script section is saved automatically. If a later section fails or you cancel, Run Batch resumes instead of starting over."
+                      : "Hybrid checkpoint: each finished ChatGPT chunk is saved automatically. If a later chunk fails or you cancel, Run Batch resumes instead of starting over."}
+                  </p>
+                )}
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={resetHybridCheckpoint}
+                      onChange={(event) =>
+                        setResetHybridCheckpoint(event.target.checked)
+                      }
+                      disabled={
+                        isBatchPending ||
+                        isBatchCancelling ||
+                        !hybridCheckpoint
+                      }
+                    />
+                    Restart from{" "}
+                    {hybridUnit === "sections" ? "section 1" : "chunk 1"}{" "}
+                    (ignore saved progress)
+                  </label>
+                  {clearHybridProgressAction ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={
+                        isBatchPending ||
+                        isBatchCancelling ||
+                        isClearingCheckpoint ||
+                        !hybridCheckpoint
+                      }
+                      onClick={() => {
+                        startClearCheckpointTransition(async () => {
+                          await clearHybridProgressAction();
+                        });
+                      }}
+                    >
+                      {isClearingCheckpoint ? "Clearing…" : "Clear progress"}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-[220px_auto_auto_1fr]">
+          <div className="grid gap-3 lg:grid-cols-[220px_auto_auto_auto_1fr]">
             <div className="grid gap-2">
               <Label htmlFor="generationMode">Generation mode</Label>
               <select
@@ -285,6 +682,7 @@ export function ImportScenesForm({
                   setMode(event.target.value as ChatGptGenerationMode)
                 }
                 className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                disabled={isBatchPending || isBatchCancelling}
               >
                 {allowedModes.map((allowedMode) => (
                   <option key={allowedMode} value={allowedMode}>
@@ -293,19 +691,57 @@ export function ImportScenesForm({
                 ))}
               </select>
             </div>
-            <Button type="button" className="mt-7" onClick={generateRequest}>
+            <Button
+              type="button"
+              className="mt-7"
+              onClick={generateRequest}
+              disabled={isBatchPending || isBatchCancelling}
+            >
               Generate ChatGPT Request
             </Button>
             <Button
               type="button"
               className="mt-7"
               variant="outline"
-              disabled={!request}
+              disabled={!request || isBatchPending || isBatchCancelling}
               onClick={copyRequest}
             >
               {copied ? "Copied" : "Copy ChatGPT Request"}
             </Button>
+            {isBatchPending ? (
+              <Button
+                type="button"
+                className="mt-7"
+                variant="destructive"
+                onClick={cancelBatch}
+                disabled={isBatchCancelling}
+              >
+                {isBatchCancelling ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <Square />
+                )}
+                {isBatchCancelling ? "Cancelling…" : "Cancel Batch"}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                className="mt-7"
+                onClick={runBatch}
+                disabled={isPending || scriptLength <= 0}
+              >
+                <Play />
+                Run Batch
+              </Button>
+            )}
           </div>
+
+          {isBatchPending ? (
+            <p className="text-sm text-muted-foreground">
+              Running Visual Plan Batch via ChatGPT CDP… one GENERATE request,
+              then import with mode: {importMode}.
+            </p>
+          ) : null}
 
           {mode === "SEGMENTED_BY_PERCENT" ? (
             <div className="grid gap-3 rounded-md border bg-background p-3 sm:grid-cols-2">
@@ -375,13 +811,42 @@ export function ImportScenesForm({
           ) : null}
 
           <div className="grid gap-2">
-            <Label htmlFor="chatGptResponse">ChatGPT Response</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label htmlFor="chatGptResponse">ChatGPT Response</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                {responseFileName ? (
+                  <span className="max-w-[220px] truncate text-xs text-muted-foreground">
+                    {responseFileName}
+                  </span>
+                ) : null}
+                <input
+                  ref={responseFileInputRef}
+                  type="file"
+                  accept=".json,.txt,application/json,text/plain"
+                  className="hidden"
+                  onChange={handleResponseFileUpload}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => responseFileInputRef.current?.click()}
+                >
+                  <Upload />
+                  Upload JSON file
+                </Button>
+              </div>
+            </div>
             <Textarea
               id="chatGptResponse"
               value={response}
-              onChange={(event) => setResponse(event.target.value)}
+              onChange={(event) => {
+                setResponse(event.target.value);
+                setResponseFileName(null);
+                setValidation(null);
+              }}
               className="min-h-64 font-mono text-sm"
-              placeholder="Paste ChatGPT's response here. Raw JSON, fenced JSON, or JSON surrounded by explanation text are supported."
+              placeholder="Paste ChatGPT's response here, or upload the downloaded .json / .txt file. Raw JSON, fenced JSON, or JSON surrounded by explanation text are supported."
             />
           </div>
 
@@ -398,7 +863,17 @@ export function ImportScenesForm({
             >
               <option value="replace">Replace existing scenes</option>
               <option value="append">Append to existing scenes</option>
+              <option value="prepend">
+                Prepend (shift existing, keep images)
+              </option>
             </select>
+            {importMode === "prepend" ? (
+              <p className="text-sm text-muted-foreground">
+                New scenes are inserted at the start. Existing scenes keep their
+                images and move to higher order numbers. Negative `order` values
+                are sorted before positive ones.
+              </p>
+            ) : null}
             {importModeAutoSet ? (
               <p className="text-sm text-muted-foreground">
                 Append was selected automatically because this is a later script
@@ -435,7 +910,9 @@ export function ImportScenesForm({
                   ? "Importing..."
                   : importMode === "append"
                     ? "Append Parsed Scenes"
-                    : "Replace Parsed Scenes"}
+                    : importMode === "prepend"
+                      ? "Prepend Parsed Scenes"
+                      : "Replace Parsed Scenes"}
               </Button>
             </form>
           </div>
@@ -452,16 +929,27 @@ export function ImportScenesForm({
         <div className="grid gap-2">
           <Label htmlFor="scenesJson">Manual Scenes JSON</Label>
           <p className="text-sm text-muted-foreground">
-            Paste the JSON array generated by the Visual Planner. This will
-            replace the current scenes for this video.
+            Paste a scenes JSON array (or a ChatGPT reply that contains one).
+            Use Parse & Validate to check schema before replacing scenes.
           </p>
-          <JsonTextarea
-            id="scenesJson"
-            name="scenesJson"
+          <Textarea
+            id="scenesJsonManual"
+            value={manualScenesJson}
+            onChange={(event) => {
+              setManualScenesJson(event.target.value);
+              setManualValidation(null);
+            }}
             className="min-h-80 font-mono text-sm"
             placeholder='[{"scriptText":"","sceneType":"avatar","visualPurpose":"","visualIdea":"","duration":8,"imagePrompt":"","status":"planned"}]'
             required
           />
+          {/* Submit the normalized validated JSON, not the raw paste. */}
+          <input
+            type="hidden"
+            name="scenesJson"
+            value={parsedManualScenesJson || manualScenesJson}
+          />
+          <input type="hidden" name="importMode" value="replace" />
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -473,10 +961,26 @@ export function ImportScenesForm({
             label="Copy Current Scenes JSON"
             prompt={currentScenesJson}
           />
-          <Button type="submit" variant="outline" disabled={isPending}>
+          <Button type="button" variant="outline" onClick={parseManualScenesJson}>
+            Parse & Validate Manual JSON
+          </Button>
+          <Button
+            type="submit"
+            variant="outline"
+            disabled={
+              isPending ||
+              !manualValidation ||
+              manualValidation.errors.length > 0 ||
+              manualValidation.scenes.length === 0
+            }
+          >
             {isPending ? "Replacing..." : "Replace Scenes Manually"}
           </Button>
         </div>
+
+        {manualValidation ? (
+          <HandoffPreview validation={manualValidation} />
+        ) : null}
       </form>
 
       {state.status !== "idle" ? (
@@ -669,11 +1173,23 @@ function splitPromptSections(fullPrompt: string) {
   return sections;
 }
 
-function findSuspiciousPromptSections(sections: Map<string, string>) {
+function findSuspiciousPromptSections(
+  sections: Map<string, string>,
+  options?: { characterBibleConfigured?: boolean },
+) {
   return promptSectionTitles.flatMap((title) => {
     const minimumLength = suspiciousMinimumLengths[title];
 
     if (!minimumLength) {
+      return [];
+    }
+
+    // Character Bible is optional per channel — only warn when the channel
+    // registers a path (otherwise a missing section is expected, not a load failure).
+    if (
+      title === "Character Bible" &&
+      options?.characterBibleConfigured === false
+    ) {
       return [];
     }
 
@@ -688,244 +1204,6 @@ function findSuspiciousPromptSections(sections: Map<string, string>) {
 }
 
 // TheGodsWord compact-flow helpers below are used only when channelKey === "the-gods-word".
-function buildTheGodsWordTimingRules() {
-  return [
-    "## Timing Rules",
-    "",
-    "Duration is stored as whole seconds. Use integer values only (for example 4, 5, 6, 7, 8).",
-    "",
-    "Hook scenes: 4 to 6 seconds.",
-    "- Use 4 seconds for very short hook lines",
-    "- Use 5 to 6 seconds for emotionally important hook beats",
-    "",
-    "Body scenes: 6 to 11 seconds.",
-    "- Use 6 to 7 seconds for concise narration",
-    "- Use 8 to 11 seconds for reflective, theological, or emotionally weighty narration",
-    "",
-    "Use shorter durations in the hook to keep the opening visually engaging.",
-    "Do not use body-length scenes in the hook unless the hook line is unusually long.",
-    "Do not let slow reflective pacing make the hook visually static.",
-  ].join("\n");
-}
-
-function buildTheGodsWordFlowVisualBrief() {
-  return [
-    "## TheGodsWord Flow Visual Brief",
-    "",
-    "TheGodsWord is an English Christian reflective storytelling channel in an illustrated Bible-study explainer style.",
-    "",
-    "Visual style:",
-    "16:9 horizontal hand-painted watercolor and ink Bible study illustration on warm off-white paper, soft sketch outlines, muted earth tones, wheat gold, olive green, dusty blue shadows, burnt umber soil, gentle parchment light, visible paper texture, loose brush texture, clean symbolic composition, calm reverent mood.",
-    "",
-    "Core rule:",
-    "The assigned `scriptText` is the main director of the `imagePrompt`.",
-    "",
-    "Workflow:",
-    "",
-    "- Read the narration fragment.",
-    "- Choose the best visual format (below).",
-    "- Stage that format naturally with the style lock.",
-    "- Do not default to generic skies, paths, lamps, or atmosphere when a card or diagram fits better.",
-    "",
-    "Section structure:",
-    "For full videos, first mentally divide the script into clear teaching sections, usually 7 to 10 sections depending on script length.",
-    "",
-    "Each major section should begin with a section opener card.",
-    "",
-    "A section opener card is an `insert` scene that introduces the next teaching movement with:",
-    "- a short exact visible title, usually 3 to 5 words",
-    "- an optional short subtitle, usually 4 to 9 words",
-    "- one simple illustrated object, symbol, or scene detail that represents the section",
-    "- clean parchment background",
-    "- large hand-lettered title and smaller subtitle",
-    "- calm Bible-study explainer layout",
-    "",
-    "Use section opener cards to make the video feel structured, like a guided illustrated Bible study.",
-    "",
-    "Do not create section opener cards for every minor paragraph.",
-    "Use them only when the script clearly moves to a new major idea.",
-    "",
-    "Represent section openers using existing fields only (no new schema fields):",
-    "sceneType: insert, visualPurpose: opens the section, visualIdea: Section opener card: [TITLE], subtitle [SUBTITLE], with [symbol].",
-    "",
-    "Do not output the section map.",
-    "Do not add section fields to the JSON.",
-    "Use section planning only to decide where section opener cards belong.",
-    "",
-    "Visual format:",
-    "For each scene, before writing the imagePrompt, choose the best visual format. Use it inside `visualIdea` and `imagePrompt`. No new schema field is required.",
-    "",
-    "1. `narrative scene` — biblical person, event, place, action, or moment.",
-    "2. `object/detail insert` — close object or detail carries the line.",
-    "3. `section opener card` — title, optional subtitle, one symbol; opens a major teaching section.",
-    "4. `concept card` — core idea, thesis, or memorable phrase with exact short visible text.",
-    "5. `scripture/reference card` — Scripture quote or Bible reference with exact short visible text.",
-    "6. `comparison card` — compares two or more ideas.",
-    "7. `devotional visual board` — explains a relationship, tension, process, or mechanism with title, labels, and layout.",
-    "8. `simple diagram` — mechanism, process, structure, or cause/effect.",
-    "9. `word-study card` — word, phrase, or definition.",
-    "10. `question card` — direct reflective question.",
-    "11. `atmosphere / space` — breath, transition, place-setting, road, garden, sky, or silence.",
-    "",
-    "Devotional visual boards:",
-    "The reference style often uses devotional visual boards: designed teaching images that explain an idea, not just display a quote.",
-    "",
-    "Use a devotional visual board when the narration teaches a relationship, tension, process, contrast, or spiritual mechanism.",
-    "",
-    "A devotional visual board may include:",
-    "- a short title",
-    "- 2 to 4 short labels",
-    "- arrows or a simple path",
-    "- side-by-side contrast",
-    "- cause/effect layout",
-    "- before/after layout",
-    "- one central biblical object with labeled meaning",
-    "- small supporting illustrations",
-    "",
-    "Do not make most cards only display a single phrase.",
-    "",
-    "Weak: HE WAS HEARD with only a cup underneath.",
-    "Better: HE WAS HEARD / prayer offered → cup remained → strength given",
-    "",
-    "Weak: THE CUP REMAINED with only a cup underneath.",
-    "Better: THE CUP REMAINED / not removed / not ignored / strengthened",
-    "",
-    "Weak: TOO SMALL with only a decorative frame.",
-    "Better: TOO SMALL / a narrow frame labeled what I asked, with the wider garden outside labeled what God was doing.",
-    "",
-    "Use exact short visible text only.",
-    "Keep the board clean, readable, and uncluttered.",
-    "Do not add random filler writing.",
-    "",
-    "Scene types:",
-    "",
-    "- `avatar`: narrative scenes with people or biblical figures.",
-    "- `insert`: object/detail inserts, section opener cards, concept cards, scripture/reference cards, comparison cards, devotional visual boards, simple diagrams, word-study cards, and question cards.",
-    "- `space`: atmosphere, locations, silence, roads, skies, transitions, and breathing room.",
-    "",
-    "Visual rhythm:",
-    "Across a full plan, mix formats intentionally:",
-    "- section opener cards for major new movements",
-    "- narrative scenes for biblical moments",
-    "- concept cards for thesis statements",
-    "- comparison cards for tension or contrast",
-    "- devotional visual boards for relationships, processes, and mechanisms",
-    "- simple diagrams for process or cause/effect",
-    "- object/detail inserts for memorable symbols",
-    "- space scenes only for breath, transition, or place-setting",
-    "",
-    "Do not let the video become only landscapes, only quote cards, only character scenes, or only cup imagery.",
-    "",
-    "Text policy:",
-    "",
-    "Normal visual scenes: No text, no captions, no letters, no words.",
-    "",
-    "Card / board / diagram scenes (section opener, concept, comparison, devotional visual board, simple diagram, question, word-study, scripture/reference):",
-    "- Ask Flow to render exact short visible text directly.",
-    "- Use only the requested words, usually 2 to 8 words.",
-    "- Use exact words from scriptText, `key_line`, or `main_scripture`.",
-    "- Simple readable hand-lettered typography.",
-    "- Do not invent Bible text. Do not paraphrase unless scriptText already does.",
-    "- Avoid extra text, random letters, misspelled text, or filler writing.",
-    "",
-    "Narrative anchoring:",
-    "When a reflective or theological fragment is still talking about a biblical moment, keep the image anchored in that biblical moment. Do not jump to a generic devotional metaphor too early.",
-    "",
-    "Weak: A quiet sky for \"He was heard.\"",
-    "Better: Concept card: HE WAS HEARD, with Jesus still in Gethsemane and the cup remaining below the text.",
-    "",
-    "Weak: A generic believer with a lamp for \"our definition of answered prayer is too small.\"",
-    "Better: Concept card: TOO SMALL, with a small boxed view showing only the cup while the wider garden continues outside the box.",
-    "",
-    "Weak: A generic path for \"That is the tension.\"",
-    "Better: Comparison card: ASKED TO BE DELIVERED / STILL DIED / HEARD BY THE FATHER, with cup and distant cross.",
-    "",
-    "Basic restrictions:",
-    "",
-    "- No photorealism.",
-    "- No 3D render.",
-    "- No glossy digital art.",
-    "- No cinematic realism.",
-    "- No neon/cyberpunk.",
-    "- No modern stock-photo look.",
-    "- No clutter.",
-    "- No watermark.",
-    "- No random text.",
-    "- No celebrity likeness.",
-    "- Jesus must be reverent, simple, non-photorealistic, and not theatrical.",
-    "",
-    "ImagePrompt shape:",
-    "",
-    "For normal visual scenes:",
-    "[style lock]. [Direct scene description based on the scriptText]. Simple composition, one focal idea, calm reverent mood. No text, no captions, no letters, no words. [negative restrictions].",
-    "",
-    "For concept / comparison / question / word-study cards:",
-    "[style lock]. Clean Bible-study concept card with exact readable visible text: \"[TEXT]\". [Brief visual support from the scriptText, such as cup, seed, soil, path, olive branch, cross, or parchment]. Simple centered hand-lettered layout, calm reverent mood. Only the requested visible text. No extra words, no random letters, no misspelled text. [negative restrictions].",
-    "",
-    "For scripture/reference cards:",
-    "[style lock]. Clean scripture reference card with exact readable visible text: \"[SHORT QUOTE]\" and smaller reference: \"[REFERENCE]\". Simple parchment layout, calm reverent mood. Only the requested visible text. No extra words, no random letters, no misspelled text. [negative restrictions].",
-    "",
-    "For devotional visual boards:",
-    "[style lock]. Clean devotional visual board with exact readable visible title: \"[TITLE]\" and short labels: \"[LABEL 1]\", \"[LABEL 2]\", \"[LABEL 3]\". Use arrows, panels, side-by-side contrast, or a simple cause/effect layout to explain the relationship in the scriptText. Include one central biblical object or scene detail from the narration, such as cup, prayer, garden, cross, closed door, hands, or dawn light. Warm parchment background, clean hand-lettered layout, calm reverent mood. Only the requested visible text. No extra words, no random letters, no misspelled text. [negative restrictions].",
-    "",
-    "For section opener cards:",
-    "[style lock]. Clean Bible-study section opener card with exact readable visible title: \"[TITLE]\" and smaller subtitle: \"[SUBTITLE]\". One simple illustrated object or symbol from the section, such as cup, olive branch, garden path, clay lamp, closed door, cross silhouette, empty tomb light, praying hands, or parchment. Large hand-lettered title, smaller subtitle, warm parchment background, calm reverent mood. Only the requested visible text. No extra words, no random letters, no misspelled text. [negative restrictions].",
-    "",
-    "For simple diagrams:",
-    "[style lock]. Clean Bible-study diagram with exact readable visible labels: \"[LABELS]\". Use simple arrows, panels, or a process path to explain the mechanism in the scriptText. Include small supporting illustrations from the narration. Warm parchment background, clean hand-lettered layout, calm reverent mood. Only the requested visible text. No extra words, no random letters, no misspelled text. [negative restrictions].",
-    "",
-    "Section opener cards should feel like designed chapter cards, not generic quote cards.",
-    "",
-    "Keep prompts concise (usually 60–120 words).",
-    "Do not write long theological explanations inside imagePrompt.",
-    "",
-    "visualPurpose: one short sentence explaining why the scene exists in the sequence.",
-    "visualIdea: one plain visual sentence; name the visual format when helpful (for example Section opener card: THE CUP BEFORE HIM, subtitle MORE THAN SUFFERING, with clay cup on Gethsemane soil).",
-  ].join("\n");
-}
-
-function buildTheGodsWordGenerationModeInstructions(mode: ChatGptGenerationMode) {
-  if (mode === "FULL_VIDEO") {
-    return [
-      "GENERATION MODE:",
-      "Generate the full visual plan for the complete script.",
-      "Include section opener cards at major section boundaries.",
-      "Usually 7 to 10 section opener cards for a long script. Do not overuse them.",
-      "Return a JSON array only.",
-    ].join("\n");
-  }
-
-  if (mode === "HOOK_TEST") {
-    return [
-      "GENERATION MODE:",
-      "Generate only the hook scenes from the opening retention section.",
-      "Usually include only one opener-style hook card if it fits.",
-      "Do not force many section openers in the hook.",
-      "Return a JSON array only.",
-    ].join("\n");
-  }
-
-  if (mode === "TEN_SCENE_TEST") {
-    return [
-      "GENERATION MODE:",
-      "Generate only the first 10 scenes from the script.",
-      "Include a section opener only if the first 10 scenes naturally include the start of a major section.",
-      "Return a JSON array only.",
-    ].join("\n");
-  }
-
-  if (mode === "SEGMENTED_BY_PERCENT") {
-    return [
-      "GENERATION MODE:",
-      "Generate scenes only for the Current Script Segment.",
-      "Include a section opener only if this segment begins a major new teaching section.",
-      "Return a JSON array only.",
-    ].join("\n");
-  }
-
-  return generationModeInstructions(mode);
-}
-
 function parseCurrentVideoDataJson(currentVideoDataSection: string) {
   const trimmed = currentVideoDataSection.trim();
 
@@ -1004,7 +1282,10 @@ function buildOptionalVisualContext(ideaJson: unknown) {
   );
 }
 
-function buildCompactTheGodsWordCurrentVideoData(currentVideoDataSection: string) {
+function buildCompactTheGodsWordCurrentVideoData(
+  currentVideoDataSection: string,
+  options?: { bibleOneYear?: boolean },
+) {
   const parsed = parseCurrentVideoDataJson(currentVideoDataSection);
 
   if (!parsed) {
@@ -1013,11 +1294,18 @@ function buildCompactTheGodsWordCurrentVideoData(currentVideoDataSection: string
 
   const ideaJson = parsed.ideaJson;
   const optionalVisualContext = buildOptionalVisualContext(ideaJson);
+  const ideaHook = pickIdeaJsonString(ideaJson, "hook");
+  const rawScript = typeof parsed.script === "string" ? parsed.script : undefined;
+  const markedScript = rawScript
+    ? options?.bibleOneYear
+      ? prepareBibleOneYearCompactScript(rawScript, { ideaHook })
+      : ensureHookMarkersInScript(rawScript, { ideaHook }).script
+    : undefined;
   const compact: Record<string, unknown> = {
     videoId: parsed.id,
     title: parsed.title,
     topic: parsed.topic,
-    hook: pickIdeaJsonString(ideaJson, "hook"),
+    hook: ideaHook,
     key_line: pickIdeaJsonString(ideaJson, "key_line", "keyLine"),
     main_scripture: pickIdeaJsonString(
       ideaJson,
@@ -1027,7 +1315,7 @@ function buildCompactTheGodsWordCurrentVideoData(currentVideoDataSection: string
     ...(optionalVisualContext
       ? { optional_visual_context: optionalVisualContext }
       : {}),
-    script: typeof parsed.script === "string" ? parsed.script : undefined,
+    script: markedScript,
   };
 
   return JSON.stringify(
@@ -1041,37 +1329,65 @@ function buildCompactTheGodsWordCurrentVideoData(currentVideoDataSection: string
   );
 }
 
-function buildCompactVideoContextSection(compactVideoData: string) {
+function buildCompactVideoContextSection(
+  compactVideoData: string,
+  options?: { bibleOneYear?: boolean },
+) {
+  if (options?.bibleOneYear) {
+    return [
+      "## Compact Video Context",
+      "",
+      "Optional visual context is only reference material. Use it only when the assigned scriptText naturally calls for it. The assigned scriptText always wins.",
+      "",
+      "Follow the Bible in One Year Visual Brief. Use only markers and spoken lines present in the script. Do not invent markers from other formats.",
+      "Preserve [INTRODUCTION], [CHAPTER COVER — …], [REFLECTION AND PRAYER], [CLOSING]. [HOOK]/[END HOOK] never replace those section markers.",
+      "If [INTRODUCTION] is missing, the first welcome/day-identification spoken line before Scripture reading is still a narrated introduction cover.",
+      "",
+      compactVideoData,
+    ].join("\n");
+  }
+
   return [
     "## Compact Video Context",
     "",
     "Optional visual context is only reference material. Do not force these elements into every scene. Use them only when the assigned scriptText naturally calls for them. The assigned scriptText always wins.",
     "",
+    "If script contains [HOOK]…[END HOOK], treat that block as the hook for segmentation and timing. Preserve chapter markers. Do not narrate the markers themselves.",
+    "Structural labels ([HOOK], [END HOOK], [CHAPTER…], [FINAL…], [INTRODUCTION], [CHAPTER COVER — …], [REFLECTION AND PRAYER], [CLOSING]) must never appear as bracket text in scriptText. When a label is followed by a spoken opener, that opener is the cover or section opener scene — do not create silent empty covers. [CLOSING] is segmentation only and must not become a cover.",
+    "",
     compactVideoData,
   ].join("\n");
 }
 
-function buildCompactSegmentInstructions() {
+function buildCompactSegmentInstructions(options?: { bibleOneYear?: boolean }) {
   return [
     "## Segment Instructions",
     "",
     "Generate scenes only for the Current Script Segment.",
     "Do not generate the full video.",
     "Do not generate scenes for script text outside the Current Script Segment.",
-    "Preserve exact scriptText only from the Current Script Segment.",
-    "Follow the TheGodsWord Flow Visual Brief.",
+    "Preserve spoken scriptText coverage only from the Current Script Segment.",
+    options?.bibleOneYear
+      ? "Follow the Bible in One Year Visual Brief."
+      : "Follow the TheGodsWord Flow Visual Brief.",
     "Return a JSON array only.",
     "Start scene order at 1 for this segment. The importer will normalize order on import.",
     "Use only the existing scene schema.",
+    'sceneType must be exactly "avatar", "insert", or "space" on every scene.',
+    "Do not invent other sceneType values.",
     "Do not add new fields.",
   ].join("\n");
 }
 
-function buildCompactVisualContinuityGuidance() {
+function buildCompactVisualContinuityGuidance(options?: {
+  bibleOneYear?: boolean;
+}) {
   return [
     "## Visual Continuity Guidance",
     "",
-    "Continue the same watercolor/ink style from the Flow Visual Brief.",
+    options?.bibleOneYear
+      ? "Continue the same warm watercolor-and-ink Bible study style from the Bible in One Year Visual Brief."
+      : "Continue the same watercolor/ink style from the Flow Visual Brief.",
     "Avoid repeating the exact same image twice in a row.",
     "The Current Script Segment remains the source of truth.",
   ].join("\n");
@@ -1102,7 +1418,44 @@ function buildOutputRequirementsSection() {
     "}",
     "]",
     "",
+    "Hard sceneType rule:",
+    'Every scene MUST use exactly one of these lowercase strings: "avatar", "insert", or "space".',
+    "Do not invent sceneType values.",
+    "Do not use aliases, synonyms, camelCase variants, or descriptive labels such as character, host, person, object, card, closeup, broll, landscape, establishing, environment, transition, atmosphere, graphic, or symbol.",
+    "If unsure, choose the closest allowed type:",
+    "- people / emotion / decision / identification → avatar",
+    "- object / detail / cover / compact card → insert",
+    "- concrete place / pause / transition → space",
+    "",
     "Do not add new fields.",
+  ].join("\n");
+}
+
+function buildTheGodsWordOutputRequirementsSection() {
+  return [
+    buildOutputRequirementsSection(),
+    "",
+    "JSON safety:",
+    "Return strict valid JSON.",
+    "",
+    "Do not use unescaped double quotes inside JSON string values.",
+    "Prefer avoiding quotation marks inside imagePrompt text. For visible text instructions, write:",
+    "exact readable visible title: HE WAS HEARD",
+    "instead of:",
+    'exact readable visible title: "HE WAS HEARD"',
+    "",
+    "If double quotes are necessary inside a string, escape them as \\\".",
+    "Do not break JSON strings with raw newlines inside quotes.",
+    "Invalid JSON is a failed output.",
+    "",
+    "scriptText hard rule:",
+    "scriptText must contain only spoken narration for voiceover.",
+    "Never include structural labels such as [HOOK], [END HOOK], [CHAPTER…], [FINAL…], [INTRODUCTION], [CHAPTER COVER — …], [REFLECTION AND PRAYER], or [CLOSING] as bracket text in scriptText.",
+    "When a label is followed by a spoken opener (title, chapter announcement, section start), that opener is the cover scene with voiceover. Do not create silent empty covers.",
+    "",
+    "Do not include markdown fences.",
+    "Do not include explanations.",
+    "Return the JSON array only.",
   ].join("\n");
 }
 
@@ -1112,6 +1465,7 @@ function generationModeInstructions(mode: ChatGptGenerationMode) {
       "GENERATION MODE:",
       "Generate the full visual plan for the complete script.",
       "Use the Visual Planner rules.",
+      'Every sceneType must be exactly "avatar", "insert", or "space".',
       "Return a JSON array only.",
     ].join("\n");
   }
@@ -1121,6 +1475,7 @@ function generationModeInstructions(mode: ChatGptGenerationMode) {
       "GENERATION MODE:",
       "Generate only the first 10 scenes from the script.",
       "This is a test of scene ratio, character universe, prompt quality, and image generation reliability.",
+      'Every sceneType must be exactly "avatar", "insert", or "space".',
       "Return a JSON array only.",
     ].join("\n");
   }
@@ -1132,6 +1487,7 @@ function generationModeInstructions(mode: ChatGptGenerationMode) {
       "Do not generate scenes for the rest of the script.",
       "Return a JSON array only.",
       "Use the existing scene schema.",
+      'Every sceneType must be exactly "avatar", "insert", or "space".',
       "Do not add new fields.",
       "Start scene order at 1 for this segment.",
     ].join("\n");
@@ -1141,6 +1497,7 @@ function generationModeInstructions(mode: ChatGptGenerationMode) {
     "GENERATION MODE:",
     "Generate only the hook scenes from the opening retention section.",
     "Focus on the opening 45 to 120 seconds depending on script length.",
+    'Every sceneType must be exactly "avatar", "insert", or "space".',
     "Return a JSON array only.",
   ].join("\n");
 }
@@ -1158,6 +1515,7 @@ function buildSegmentInstructions() {
     "Return a JSON array only.",
     "Start scene order at 1 for this segment. The importer will normalize order on import.",
     "Use only the existing scene schema.",
+    'Every sceneType must be exactly "avatar", "insert", or "space".',
     "Do not add new fields.",
   ].join("\n");
 }
@@ -1224,6 +1582,7 @@ function buildChatGptRequest({
   videoId,
   videoTitle,
   channelKey,
+  topicCategory,
   projectBiblePath,
   imagePromptBiblePath,
   characterBiblePath,
@@ -1236,6 +1595,7 @@ function buildChatGptRequest({
   videoId: string;
   videoTitle: string;
   channelKey: string;
+  topicCategory?: string | null;
   projectBiblePath: string;
   imagePromptBiblePath: string;
   characterBiblePath?: string;
@@ -1253,9 +1613,15 @@ function buildChatGptRequest({
   const visualPlannerPrompt = sections.get("Visual Planner Prompt") ?? "";
   const currentVideoData = sections.get("Current Video Data") ?? "";
   const useCompactTheGodsWordRequest = useTheGodsWordCompactFlowRequest(channelKey);
+  const bibleOneYear = isBibleOneYearCategory(topicCategory);
+  const compactVisualBrief = bibleOneYear
+    ? buildBibleOneYearVisualBrief()
+    : buildTheGodsWordFlowVisualBrief();
   const warnings = useCompactTheGodsWordRequest
     ? []
-    : findSuspiciousPromptSections(sections);
+    : findSuspiciousPromptSections(sections, {
+        characterBibleConfigured: Boolean(characterBiblePath?.trim()),
+      });
 
   if (mode === "SEGMENTED_BY_PERCENT" && segmentRange) {
     const script = parseScriptFromCurrentVideoData(currentVideoData);
@@ -1274,10 +1640,10 @@ function buildChatGptRequest({
 
           return [
             useCompactTheGodsWordRequest
-              ? buildCompactSegmentInstructions()
+              ? buildCompactSegmentInstructions({ bibleOneYear })
               : buildSegmentInstructions(),
             useCompactTheGodsWordRequest
-              ? buildCompactVisualContinuityGuidance()
+              ? buildCompactVisualContinuityGuidance({ bibleOneYear })
               : buildVisualContinuityGuidance(),
             buildCurrentScriptSegmentSection({
               script,
@@ -1289,12 +1655,34 @@ function buildChatGptRequest({
       : [];
 
   const timingRulesSection = isTheGodsWordChannel(channelKey)
-    ? [buildTheGodsWordTimingRules()]
+    ? [
+        bibleOneYear
+          ? buildBibleOneYearTimingRules()
+          : buildTheGodsWordTimingRules(),
+      ]
     : [];
 
+  const wealthVisualModeSection =
+    channelKey === "wealth-insights"
+      ? (() => {
+          const parsed = parseCurrentVideoDataJson(currentVideoData);
+          const mode = resolveWealthInsightsVisualMode({
+            topicCategory,
+            ideaJson: parsed?.ideaJson ?? null,
+          });
+          return `## Wealth Insights Visual Mode\n\n${buildWealthInsightsVisualModeSection(mode)}`;
+        })()
+      : null;
+
   if (useCompactTheGodsWordRequest) {
-    const compactVideoData =
-      buildCompactTheGodsWordCurrentVideoData(currentVideoData);
+    const sourceScript = parseScriptFromCurrentVideoData(currentVideoData) ?? "";
+    const compactVideoData = buildCompactTheGodsWordCurrentVideoData(
+      currentVideoData,
+      { bibleOneYear },
+    );
+    const coverBeatDirectives = bibleOneYear
+      ? buildBibleOneYearCoverBeatDirectives(sourceScript)
+      : "";
 
     const request = [
       "# ChatGPT Scene Generation Request",
@@ -1308,6 +1696,7 @@ function buildChatGptRequest({
         `* videoTitle: ${videoTitle}`,
         `* channelKey: ${channelKey}`,
         `* requestFormat: compact-flow`,
+        ...(bibleOneYear ? ["* categoryFormat: bible-in-one-year"] : []),
         `* scriptLength: ${scriptLength}`,
         ...(segmentRange
           ? [
@@ -1316,12 +1705,17 @@ function buildChatGptRequest({
             ]
           : []),
       ].join("\n"),
-      buildTheGodsWordFlowVisualBrief(),
-      buildCompactVideoContextSection(compactVideoData),
+      compactVisualBrief,
+      ...(coverBeatDirectives ? [coverBeatDirectives] : []),
+      buildCompactVideoContextSection(compactVideoData, { bibleOneYear }),
       ...segmentedSections,
       ...timingRulesSection,
-      buildOutputRequirementsSection(),
-      buildTheGodsWordGenerationModeInstructions(mode),
+      bibleOneYear
+        ? buildBibleOneYearOutputRequirementsSection()
+        : buildTheGodsWordOutputRequirementsSection(),
+      bibleOneYear
+        ? buildBibleOneYearGenerationModeInstructions(mode)
+        : buildTheGodsWordGenerationModeInstructions(mode),
     ].join("\n\n");
 
     return { request, warnings };
@@ -1356,9 +1750,10 @@ function buildChatGptRequest({
     ].join("\n"),
     `## Channel Profile\n\n${sections.get("Channel Profile") ?? ""}`,
     `## Project Bible\n\n${projectBible}`,
+    `## Character Bible\n\n${characterBible}`,
     `## Image Prompt Bible\n\n${imagePromptBible}`,
-    `## Characters Bible\n\n${characterBible}`,
     `## Visual Planner Prompt\n\n${visualPlannerPrompt}`,
+    ...(wealthVisualModeSection ? [wealthVisualModeSection] : []),
     `## Current Video Data\n\n${currentVideoData}`,
     ...segmentedSections,
     ...timingRulesSection,

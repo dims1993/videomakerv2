@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 export function JsonTextarea({
   className,
   defaultValue = "",
+  onChange,
+  onBlur,
   ...props
 }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -42,11 +44,20 @@ export function JsonTextarea({
     <div className="grid gap-2">
       <Textarea
         ref={ref}
-        className={cn(error && "border-destructive focus-visible:ring-destructive", className)}
-        defaultValue={defaultValue}
-        onChange={(event) => validate(event.currentTarget.value)}
-        onBlur={(event) => validate(event.currentTarget.value)}
         {...props}
+        className={cn(
+          error && "border-destructive focus-visible:ring-destructive",
+          className,
+        )}
+        defaultValue={defaultValue}
+        onChange={(event) => {
+          validate(event.currentTarget.value);
+          onChange?.(event);
+        }}
+        onBlur={(event) => {
+          validate(event.currentTarget.value);
+          onBlur?.(event);
+        }}
       />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </div>

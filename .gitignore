@@ -32,3 +32,22 @@ exports/
 
 # Local documentation (keep local, do not track)
 docs/
+
+data/visual-plan-failures/
+data/visual-plan-checkpoints/
+data/pipeline-errors/*.jsonl
+!data/pipeline-errors/.gitkeep
+
+data/image-library/**/*.png
+data/image-library/**/*.jpg
+data/image-library/**/*.jpeg
+data/image-library/**/*.webp
+!data/image-library/**/manifest.json
+
+Chatterbox-TTS-Server/
+
+# Local WhisperX HTTP server runtime (keep server.py / README tracked)
+WhisperX-Server/venv/
+WhisperX-Server/.cache/
+WhisperX-Server/**/__pycache__/
+WhisperX-Server/*.egg-info/

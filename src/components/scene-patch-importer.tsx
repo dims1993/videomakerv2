@@ -22,6 +22,7 @@ type ScenePatchImporterProps = {
     scriptText: string;
     visualIdea: string | null;
     imagePrompt: string | null;
+    hasGeneratedImage?: boolean;
   }[];
 };
 
@@ -36,6 +37,7 @@ export function ScenePatchImporter({
   const [allowScriptTextChanges, setAllowScriptTextChanges] = useState(false);
   const [confirmLargePatch, setConfirmLargePatch] = useState(false);
   const [confirmDuplicateTargets, setConfirmDuplicateTargets] = useState(false);
+  const [confirmClearImages, setConfirmClearImages] = useState(false);
 
   const { preview, parseError } = useMemo<{
     preview: ScenePatchPreview | null;
@@ -55,6 +57,7 @@ export function ScenePatchImporter({
           scriptText: scene.scriptText,
           visualIdea: scene.visualIdea,
           imagePrompt: scene.imagePrompt,
+          hasGeneratedImage: Boolean(scene.hasGeneratedImage),
         })),
         channelKey,
         currentVideoId: videoId,
@@ -85,12 +88,14 @@ export function ScenePatchImporter({
 
   const requiresLargePatchConfirmation = (preview?.totalCount ?? 0) > 50;
   const requiresDuplicateConfirmation = (preview?.duplicateTargetCount ?? 0) > 0;
+  const requiresClearImageConfirmation = (preview?.clearImageCount ?? 0) > 0;
   const canSubmit =
     Boolean(preview) &&
     !parseError &&
     (preview?.validCount ?? 0) > 0 &&
     (!requiresLargePatchConfirmation || confirmLargePatch) &&
-    (!requiresDuplicateConfirmation || confirmDuplicateTargets);
+    (!requiresDuplicateConfirmation || confirmDuplicateTargets) &&
+    (!requiresClearImageConfirmation || confirmClearImages);
 
   return (
     <div className="rounded-md border bg-muted/20 p-4">
@@ -98,7 +103,9 @@ export function ScenePatchImporter({
         <div className="space-y-1">
           <h3 className="text-base font-medium">Import Scene Patch</h3>
           <p className="text-sm text-muted-foreground">
-            Apply focused updates to existing scenes by `id` or `order`, with a dry-run preview before saving.
+            Apply focused updates by `id` or positive `order`. Use negative
+            `order` (e.g. -16…-1) to prepend new scenes; existing scenes shift
+            and keep their images.
           </p>
         </div>
         <Button type="button" variant="outline" onClick={() => setIsOpen((value) => !value)}>
@@ -145,9 +152,14 @@ export function ScenePatchImporter({
 
           {preview ? (
             <div className="space-y-4">
-              <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-6">
                 <PreviewMetric label="Patch items" value={preview.totalCount} />
                 <PreviewMetric label="Valid matches" value={preview.validCount} />
+                <PreviewMetric label="Prepend inserts" value={preview.prependCount} />
+                <PreviewMetric
+                  label="Will clear images"
+                  value={preview.clearImageCount}
+                />
                 <PreviewMetric label="Warnings" value={preview.warningCount} />
                 <PreviewMetric label="Invalid" value={preview.invalidCount} />
               </div>
@@ -176,7 +188,11 @@ export function ScenePatchImporter({
                     {preview.rows.map((row) => (
                       <tr key={row.key} className="border-b align-top">
                         <td className="px-3 py-2">
-                          {row.targetSceneId ? `Scene ${row.targetOrder}` : "Unknown scene"}
+                          {row.matchStatus === "insert_prepend"
+                            ? `Prepend ${row.targetOrder}`
+                            : row.targetSceneId
+                              ? `Scene ${row.targetOrder}`
+                              : "Unknown scene"}
                         </td>
                         <td className="px-3 py-2">{row.matchStatus}</td>
                         <td className="px-3 py-2">{row.fieldsToUpdate.join(", ") || "None"}</td>
@@ -220,6 +236,20 @@ export function ScenePatchImporter({
                       className="size-4"
                     />
                     Confirm applying a patch with more than 50 items
+                  </label>
+                ) : null}
+
+                {requiresClearImageConfirmation ? (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      name="confirmClearImages"
+                      checked={confirmClearImages}
+                      onChange={(event) => setConfirmClearImages(event.target.checked)}
+                      className="size-4"
+                    />
+                    Clear generated images on {preview.clearImageCount} patched
+                    scene(s); untouched scenes keep theirs
                   </label>
                 ) : null}
 

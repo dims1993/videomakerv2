@@ -1,0 +1,32 @@
+{
+  "the-gods-word": {
+    "pipelineDefaults": {
+      "script": {
+        "includeReferenceTranscripts": false,
+        "referenceDocumentIds": []
+      },
+      "visualPlan": {
+        "mode": "hybrid",
+        "generationMode": "FULL_VIDEO",
+        "libraryId": null
+      },
+      "voiceover": {
+        "voiceId": "alFofuDn3cOwyoz1i44T",
+        "voiceName": "GodWord Narrador",
+        "pauseAfterMs": 180,
+        "generateSubtitles": true,
+        "captionStylePreset": "godsword_style"
+      },
+      "render": {
+        "burnCaptions": true
+      }
+    },
+    "voiceProfiles": [
+      {
+        "voiceId": "alFofuDn3cOwyoz1i44T",
+        "voiceName": "GodWord Narrador",
+        "defaultPauseAfterMs": 180
+      }
+    ]
+  }
+}
