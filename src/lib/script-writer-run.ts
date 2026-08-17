@@ -551,6 +551,12 @@ export async function runScriptWriterViaBrowser({
             if (validation) {
               script = validation.normalizedScript;
               validationReport = formatPodcastValidationReport(validation);
+              if (!validation.ok) {
+                throw new ScriptWriterRunError(
+                  `Podcast Script Writer validation failed.\n${validationReport}`,
+                  script,
+                );
+              }
             }
             if (script.trim()) {
               script = await persistLatestScript(videoId, script);
@@ -626,6 +632,12 @@ export async function runScriptWriterViaBrowser({
           });
           script = await persistLatestScript(videoId, script);
           if (podcastSinglePassScript) {
+            if (validation && !validation.ok) {
+              throw new ScriptWriterRunError(
+                `Podcast Script Writer validation failed.\n${validationReport ?? ""}`,
+                script,
+              );
+            }
             passed = Boolean(script.trim());
           }
         }

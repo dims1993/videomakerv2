@@ -77,6 +77,13 @@ export function extractScriptFromResponse(rawResponse: string): string {
     );
   }
 
+  // Reject provider/refusal error JSON mistaken for scripts.
+  if (looksLikeErrorOnlyJson(text)) {
+    throw new Error(
+      "ChatGPT returned an error JSON instead of a narration script. Retry Script Writer Batch.",
+    );
+  }
+
   // Reject obvious JSON topic batches mistaken for scripts.
   if (/^\s*\{\s*"topics"\s*:/.test(text) || /"topics"\s*:\s*\[/.test(text)) {
     throw new Error(
@@ -111,6 +118,30 @@ function looksLikeScoreOnlyJson(text: string) {
     return parsed.score != null;
   } catch {
     return /^\s*\{\s*"score"\s*:/i.test(text) && text.length < 2000;
+  }
+}
+
+function looksLikeErrorOnlyJson(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{") || trimmed.length > 4000) {
+    return false;
+  }
+  if (
+    /\[(?:INTRO|LESSON|CLOSING|FINAL|EMMA|LEO|MAX|SARA|PART\b)/i.test(trimmed)
+  ) {
+    return false;
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      error?: unknown;
+      script?: unknown;
+    };
+    if (typeof parsed.script === "string" && parsed.script.trim()) {
+      return false;
+    }
+    return typeof parsed.error === "string" && parsed.error.trim().length > 0;
+  } catch {
+    return /^\s*\{\s*"error"\s*:/i.test(trimmed);
   }
 }
 
@@ -181,6 +212,9 @@ export function looksLikeNarrationScript(text: string): boolean {
     return false;
   }
   if (looksLikeScoreOnlyJson(cleaned)) {
+    return false;
+  }
+  if (looksLikeErrorOnlyJson(cleaned)) {
     return false;
   }
   // Podcast English Lessons: Emma/Leo challenge OR Max/Sara conversation.

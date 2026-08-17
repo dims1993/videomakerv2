@@ -549,16 +549,17 @@ export function validatePodcastEnglishScript(
       });
     }
 
-    // Soft catch-up check: enough host turns before PART 1 so the episode
-    // does not jump from cold open straight into explanation blocks.
+    // Soft catch-up check: prefer a brief natural bridge before PART 1,
+    // but allow shorter hooks when the cold open itself seeds the topic.
     const prePartTurns = countSpeakerTurnsBeforeFirstPart(
       normalizedScript,
       format,
     );
-    if (prePartTurns > 0 && prePartTurns < 8) {
+    const catchUpMin = PODCAST_MAX_SARA_GOLD_STANDARD.catchUpTurnMin;
+    if (prePartTurns > 0 && prePartTurns < catchUpMin) {
       warnings.push({
         code: "thin_catchup",
-        message: `Only ${prePartTurns} host turns before PART 1. Prefer a brief natural catch-up (~8–16 turns) before the main explanation.`,
+        message: `Only ${prePartTurns} host turns before PART 1. Prefer a flexible natural catch-up (~${catchUpMin}–${PODCAST_MAX_SARA_GOLD_STANDARD.catchUpTurnSoftTarget} turns) that seeds the topic, or a cold open that already is the catch-up.`,
         severity: "warning",
       });
     }

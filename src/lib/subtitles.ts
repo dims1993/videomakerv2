@@ -277,3 +277,41 @@ export function getCaptionStats(cues: FormattedSubtitleCue[]) {
     moreThanTwoLinesCount,
   };
 }
+
+/** Parse stored JSON cue arrays without requiring every optional field. */
+export function parseFormattedSubtitleCues(
+  value: unknown,
+): FormattedSubtitleCue[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((cue) => {
+      if (!cue || typeof cue !== "object") {
+        return null;
+      }
+
+      const item = cue as Partial<FormattedSubtitleCue>;
+
+      if (
+        typeof item.index !== "number" ||
+        typeof item.start !== "number" ||
+        typeof item.end !== "number" ||
+        typeof item.text !== "string" ||
+        typeof item.rawText !== "string"
+      ) {
+        return null;
+      }
+
+      return {
+        ...item,
+        index: item.index,
+        start: item.start,
+        end: item.end,
+        text: item.text,
+        rawText: item.rawText,
+      } as FormattedSubtitleCue;
+    })
+    .filter((cue): cue is FormattedSubtitleCue => Boolean(cue));
+}

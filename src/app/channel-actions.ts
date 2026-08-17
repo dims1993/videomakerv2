@@ -6,6 +6,7 @@ import {
   ChannelScaffoldError,
   scaffoldNewChannel,
 } from "@/lib/channel-scaffold";
+import { registerChannelMaturePack } from "@/lib/channel-mature-pack";
 import { getBuiltinChannelKeys } from "@/lib/channels";
 
 function requiredText(formData: FormData, key: string) {
@@ -35,6 +36,13 @@ export async function createChannelAction(formData: FormData) {
       { builtinKeys: getBuiltinChannelKeys() },
     );
 
+    const maturePack = await registerChannelMaturePack({
+      channelKey: profile.key,
+      channelName: profile.name,
+      pipelineMode: profile.pipelineMode ?? "full",
+      formData,
+    });
+
     revalidatePath("/");
     revalidatePath("/videos/new");
     revalidatePath("/channels/new");
@@ -44,6 +52,7 @@ export async function createChannelAction(formData: FormData) {
       key: profile.key,
       name: profile.name,
       pipelineMode: profile.pipelineMode ?? "full",
+      maturePack,
     };
   } catch (error) {
     if (error instanceof ChannelScaffoldError) {

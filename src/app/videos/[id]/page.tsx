@@ -24,17 +24,15 @@ import {
   generateSelectedSceneVoiceovers,
   getRenderDiagnostics,
   generateSubtitlesForAllReadySegments,
-  generateSubtitlesForSegment,
+  dispatchSegmentSubtitleRowAction,
   markSceneForPromptRegeneration,
   markAllSubtitleSegmentsReady,
-  markSubtitleSegmentReady,
   markVoiceoverReady,
   mergeSceneWithNext,
   mergeSceneWithPrevious,
   mockGenerateIdea,
   mockGenerateMetadata,
   mockGenerateScript,
-  regenerateSubtitlesForSegment,
   renderDraft,
   retryFailedSceneVoiceovers,
   resetSelectedImageReferences,
@@ -90,20 +88,14 @@ import {
 import { prisma } from "@/lib/prisma";
 import { getComputedVideoStatus, isSceneRejected, sceneStatuses, statusLabel } from "@/lib/status";
 import {
-  exportCuesToSrt,
-  exportCuesToVtt,
   getCaptionStats,
   isSilentSubtitleVoiceoverText,
+  parseFormattedSubtitleCues,
   secondsToTimestamp,
   type FormattedSubtitleCue,
 } from "@/lib/subtitles";
-import {
-  exportActiveWordCaptionsToAss,
-  exportActiveWordCaptionsToJson,
-} from "@/lib/subtitle-alignment";
 import { CaptionStylePicker } from "@/components/caption-style-picker";
 import { VoiceSoundBarsRenderFields } from "@/components/voice-sound-bars-render-fields";
-import { getCaptionStylePreset } from "@/lib/caption-styles";
 import { getChirp3HdUsageSummary } from "@/lib/google-tts-chirp-usage";
 import {
   assessVoiceoverSubtitleTimelineAlignment,
@@ -125,6 +117,7 @@ import {
 import { CopyPromptButton } from "@/components/copy-prompt-button";
 import { DraftVideoPlayer } from "@/components/draft-video-player";
 import { CopySubtitleButton } from "@/components/copy-subtitle-button";
+import { SubtitleSegmentRowActions } from "@/components/subtitle-segment-row-actions";
 import { ClearQueryParams } from "@/components/clear-query-params";
 import { RefreshOnQueryNotice } from "@/components/refresh-on-query-notice";
 import { SceneVoiceoverAudioPlayer } from "@/components/scene-voiceover-audio-player";
@@ -189,6 +182,9 @@ type VideoDetailPageProps = {
     hookWindowSec?: string;
     scriptNotice?: string;
     scriptNoticeType?: string;
+    editScene?: string;
+    voAll?: string;
+    voLimit?: string;
   }>;
 };
 
@@ -220,23 +216,153 @@ export default async function VideoDetailPage({
 }: VideoDetailPageProps) {
   const { id } = await params;
   const query = await searchParams;
+  const activeTab = resolveVideoDetailTab(query?.tab);
+  const editSceneOrder = (() => {
+    const raw = query?.editScene?.trim();
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+  })();
+  const voiceoverListLimit = (() => {
+    if (query?.voAll === "1") return Number.POSITIVE_INFINITY;
+    const raw = query?.voLimit?.trim();
+    if (!raw) return 40;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0
+      ? Math.min(Math.floor(parsed), 500)
+      : 40;
+  })();
+  const needsRenderDiagnostics = activeTab === "render-draft";
+  const needsHookOptimizationPacks = activeTab === "render-draft";
+  const needsVoiceoverTab = activeTab === "voiceover";
+  const needsIdeaTopicExtras = activeTab === "idea";
+  const needsScriptExtras = activeTab === "script";
+  const needsDraftPreview = activeTab === "render-draft";
+  const needsFormattedSubtitles =
+    activeTab === "voiceover" || activeTab === "render-draft";
+  const needsSegmentTimeline =
+    needsVoiceoverTab || needsFormattedSubtitles || needsRenderDiagnostics;
+  // Avoid loading every imagePrompt into HTML on visual-plan (253 scenes ≈ 10MB+).
+  const needsFullSceneFields =
+    activeTab === "assets" || activeTab === "render-draft";
+  const needsVisualPlanSceneList = activeTab === "visual-plan";
 
   const video = await prisma.video.findUnique({
     where: { id },
+    omit: {
+      // Never embed export blobs in the page; copy via /subtitle-export.
+      rawSubtitleText: true,
+      formattedSubtitleText: true,
+      styledSubtitleJson: true,
+      styledSubtitleAss: true,
+      // Combined cue JSON only for VO/render stats + short previews.
+      formattedSubtitleJson: !needsFormattedSubtitles,
+      thumbnailVariationsJson: activeTab !== "thumbnail",
+      thumbnailConceptJson: activeTab !== "thumbnail",
+      metadataJson: activeTab !== "metadata",
+      ideaJson: activeTab !== "idea" && activeTab !== "script",
+      pipelineSettingsJson: true,
+    },
     include: {
       scenes: {
         orderBy: { sortOrder: "asc" },
+        ...(needsFullSceneFields
+          ? {}
+          : {
+              select:
+                activeTab === "voiceover"
+                  ? {
+                      id: true,
+                      sortOrder: true,
+                      scriptText: true,
+                      sceneType: true,
+                      visualPurpose: true,
+                      visualIdea: true,
+                      duration: true,
+                      imageStatus: true,
+                      imageLocalPath: true,
+                      imageFileName: true,
+                      imageUrl: true,
+                      clipLocalPath: true,
+                      clipFileName: true,
+                      clipMuted: true,
+                      voiceoverStatus: true,
+                      voiceoverLocalPath: true,
+                      voiceoverFileName: true,
+                      voiceoverDuration: true,
+                      voiceoverError: true,
+                      voiceoverProvider: true,
+                      voiceoverSettingsJson: true,
+                      pauseAfterMs: true,
+                      status: true,
+                    }
+                  : needsVisualPlanSceneList
+                    ? {
+                        id: true,
+                        sortOrder: true,
+                        scriptText: true,
+                        sceneType: true,
+                        visualPurpose: true,
+                        visualIdea: true,
+                        duration: true,
+                        imageStatus: true,
+                        imageLocalPath: true,
+                        imageFileName: true,
+                        imageUrl: true,
+                        status: true,
+                      }
+                  : {
+                      id: true,
+                      sortOrder: true,
+                      sceneType: true,
+                      duration: true,
+                      imageStatus: true,
+                      imageLocalPath: true,
+                      imageFileName: true,
+                      imageUrl: true,
+                      status: true,
+                    },
+            }),
       },
       imageBatches: {
         orderBy: { createdAt: "desc" },
         take: 5,
       },
-      voiceoverSegments: {
-        orderBy: { index: "asc" },
-      },
-      subtitleSegments: {
-        orderBy: { index: "asc" },
-      },
+      voiceoverSegments: needsSegmentTimeline
+        ? {
+            orderBy: { index: "asc" },
+            select: {
+              id: true,
+              index: true,
+              sceneStartOrder: true,
+              sceneEndOrder: true,
+              text: true,
+              pacedTextUsed: true,
+              audioPath: true,
+              fileName: true,
+              durationSec: true,
+              status: true,
+              error: true,
+              updatedAt: true,
+            },
+          }
+        : false,
+      subtitleSegments: needsVoiceoverTab
+        ? {
+            orderBy: { index: "asc" },
+            select: {
+              id: true,
+              voiceoverSegmentId: true,
+              index: true,
+              sceneStartOrder: true,
+              sceneEndOrder: true,
+              localCuesJson: true,
+              status: true,
+              error: true,
+              updatedAt: true,
+            },
+          }
+        : false,
       renderDrafts: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -248,13 +374,79 @@ export default async function VideoDetailPage({
     notFound();
   }
 
-  const activeTab = resolveVideoDetailTab(query?.tab, video.channelKey);
-  const needsRenderDiagnostics = activeTab === "render-draft";
-  const needsHookOptimizationPacks = activeTab === "render-draft";
-  const needsVoiceoverTab = activeTab === "voiceover";
-  const needsIdeaTopicExtras = activeTab === "idea";
-  const needsScriptExtras = activeTab === "script";
-  const needsDraftPreview = activeTab === "render-draft";
+  const voiceoverSegments = video.voiceoverSegments ?? [];
+  const subtitleSegments = video.subtitleSegments ?? [];
+
+  // Presence-only map so status/stats stay correct without loading full prompts.
+  const imagePromptBySceneId = new Map<string, string | null>();
+  if (!needsFullSceneFields) {
+    const promptFlags = await prisma.$queryRaw<
+      Array<{ id: string; hasImagePrompt: number | bigint }>
+    >`
+      SELECT id,
+        CASE
+          WHEN length(trim(coalesce("imagePrompt", ''))) > 0 THEN 1
+          ELSE 0
+        END AS "hasImagePrompt"
+      FROM "Scene"
+      WHERE "videoId" = ${id}
+    `;
+    for (const row of promptFlags) {
+      imagePromptBySceneId.set(
+        row.id,
+        Number(row.hasImagePrompt) > 0 ? "(set)" : null,
+      );
+    }
+  }
+
+  const scenes = video.scenes.map((scene) => {
+    const withPrompt = scene as typeof scene & {
+      imagePrompt?: string | null;
+      scriptText?: string;
+      visualPurpose?: string | null;
+      visualIdea?: string | null;
+      voiceoverStatus?: string | null;
+      voiceoverLocalPath?: string | null;
+      voiceoverFileName?: string | null;
+      voiceoverDuration?: number | null;
+      voiceoverError?: string | null;
+      voiceoverProvider?: string | null;
+      voiceoverSettingsJson?: unknown;
+      pauseAfterMs?: number | null;
+      clipLocalPath?: string | null;
+      clipFileName?: string | null;
+      clipMuted?: boolean;
+    };
+    return {
+      ...withPrompt,
+      scriptText: withPrompt.scriptText ?? "",
+      visualPurpose: withPrompt.visualPurpose ?? null,
+      visualIdea: withPrompt.visualIdea ?? null,
+      imagePrompt:
+        withPrompt.imagePrompt !== undefined
+          ? withPrompt.imagePrompt
+          : (imagePromptBySceneId.get(scene.id) ?? null),
+      voiceoverStatus: withPrompt.voiceoverStatus ?? "none",
+      voiceoverLocalPath: withPrompt.voiceoverLocalPath ?? null,
+      voiceoverFileName: withPrompt.voiceoverFileName ?? null,
+      voiceoverDuration: withPrompt.voiceoverDuration ?? null,
+      voiceoverError: withPrompt.voiceoverError ?? null,
+      voiceoverProvider: withPrompt.voiceoverProvider ?? null,
+      voiceoverSettingsJson: withPrompt.voiceoverSettingsJson ?? null,
+      pauseAfterMs: withPrompt.pauseAfterMs ?? null,
+      clipLocalPath: withPrompt.clipLocalPath ?? null,
+      clipFileName: withPrompt.clipFileName ?? null,
+      clipMuted: withPrompt.clipMuted ?? true,
+    };
+  });
+
+  const editingScene =
+    needsVisualPlanSceneList && editSceneOrder != null
+      ? await prisma.scene.findFirst({
+          where: { videoId: id, sortOrder: editSceneOrder },
+        })
+      : null;
+
   const renderDiagnostics = needsRenderDiagnostics
     ? await getRenderDiagnostics(id)
     : null;
@@ -275,8 +467,8 @@ export default async function VideoDetailPage({
       })
     : [];
 
-  const computedStatus = getComputedVideoStatus(video);
-  const sceneStats = getSceneStats(video.scenes);
+  const computedStatus = getComputedVideoStatus({ ...video, ideaJson: video.ideaJson ?? null, metadataJson: video.metadataJson ?? null, scenes });
+  const sceneStats = getSceneStats(scenes);
   const channel = getChannelProfile(video.channelKey);
   const pipelineSettings = await resolvePipelineSettings(video.id);
   const imageOutputFolderDisplay = displayImageOutputFolder(
@@ -301,14 +493,14 @@ export default async function VideoDetailPage({
         })
       : null;
   const duplicateSceneGroups = needsVisualPlanExtras
-    ? findDuplicateSceneGroups(video.scenes)
+    ? findDuplicateSceneGroups(scenes)
     : [];
   const duplicateImageGroups = needsVisualPlanExtras
-    ? findDuplicateImageGroups(video.scenes)
+    ? findDuplicateImageGroups(scenes)
     : [];
   const hookWindowSec = resolveHookWindowSeconds(query?.hookWindowSec);
   const hookReview = needsVisualPlanExtras
-    ? buildHookReviewData(video.scenes, hookWindowSec)
+    ? buildHookReviewData(scenes, hookWindowSec)
     : buildHookReviewData([], hookWindowSec);
   const hookRange = {
     fromOrder: hookReview.scenes[0]?.sortOrder ?? 1,
@@ -321,7 +513,13 @@ export default async function VideoDetailPage({
     channel.key === "wealth-insights" ? "balanced" : "balanced";
   const hookOptimizationPacks = needsHookOptimizationPacks
     ? await buildHookOptimizationPacks({
-        video,
+        video: {
+          id: video.id,
+          channelKey: video.channelKey,
+          title: video.title,
+          ideaJson: video.ideaJson ?? null,
+          scenes,
+        },
         channel,
         hookReview,
         hookRange,
@@ -331,7 +529,7 @@ export default async function VideoDetailPage({
     ? JSON.stringify(
         {
           videoId: video.id,
-          patch: video.scenes
+          patch: scenes
             .filter((scene) => !scene.imagePrompt?.trim())
             .map((scene) => ({
               id: scene.id,
@@ -446,7 +644,7 @@ export default async function VideoDetailPage({
   const autoSceneSectionAssignments = video.script?.trim()
     ? groupScenesByScriptSection({
         script: video.script,
-        scenes: video.scenes.map((scene) => ({
+        scenes: scenes.map((scene) => ({
           sortOrder: scene.sortOrder,
           scriptText: scene.scriptText,
           visualIdea: scene.visualIdea,
@@ -457,7 +655,7 @@ export default async function VideoDetailPage({
     video.script?.trim()
       ? listPodcastActingCueMatches({
           script: video.script,
-          scenes: video.scenes.map((scene) => ({
+          scenes: scenes.map((scene) => ({
             sortOrder: scene.sortOrder,
             scriptText: scene.scriptText,
           })),
@@ -503,43 +701,45 @@ export default async function VideoDetailPage({
       : null;
 
   const nextSceneOrder =
-    video.scenes.length > 0
-      ? Math.max(...video.scenes.map((scene) => scene.sortOrder)) + 1
+    scenes.length > 0
+      ? Math.max(...scenes.map((scene) => scene.sortOrder)) + 1
       : 1;
-  const needsSubtitleExports =
-    activeTab === "voiceover" || activeTab === "render-draft";
   const needsThumbnailExtras = activeTab === "thumbnail";
-  const formattedSubtitleCues = needsSubtitleExports
+  const LOCAL_CUE_PREVIEW_COUNT = 3;
+  const GLOBAL_CUE_PREVIEW_MAX_START_SEC = 60;
+  const CAPTION_TABLE_PREVIEW_LIMIT = 80;
+  const formattedSubtitleCues = needsFormattedSubtitles
     ? parseFormattedSubtitleCues(video.formattedSubtitleJson)
     : [];
-  const formattedSrt = needsSubtitleExports
-    ? exportCuesToSrt(formattedSubtitleCues)
-    : "";
-  const formattedVtt = needsSubtitleExports
-    ? exportCuesToVtt(formattedSubtitleCues)
-    : "";
-  const formattedAss = needsSubtitleExports
-    ? video.styledSubtitleAss ??
-      exportActiveWordCaptionsToAss(
-        formattedSubtitleCues,
-        getCaptionStylePreset(video.captionStylePreset),
-      )
-    : "";
-  const activeWordCaptionJson = needsSubtitleExports
-    ? JSON.stringify(
-        video.styledSubtitleJson ??
-          exportActiveWordCaptionsToJson(formattedSubtitleCues),
-        null,
-        2,
-      )
-    : "[]";
-  const captionStats = needsSubtitleExports
+  const captionStats = needsFormattedSubtitles
     ? getCaptionStats(formattedSubtitleCues)
     : getCaptionStats([]);
-  const sceneTimeline = needsSubtitleExports
-    ? buildSceneTimeline(video.scenes)
-    : [];
-  const previewSubtitleCues = formattedSubtitleCues.filter((cue) => cue.start < 60);
+  const sceneTimeline = needsVoiceoverTab ? buildSceneTimeline(scenes) : [];
+  const previewSubtitleCues = formattedSubtitleCues
+    .filter((cue) => cue.start < GLOBAL_CUE_PREVIEW_MAX_START_SEC)
+    .map((cue) => ({
+      index: cue.index,
+      start: cue.start,
+      end: cue.end,
+      text: cue.text,
+      rawText: cue.rawText,
+      sceneOrder: cue.sceneOrder,
+      warnings: cue.warnings,
+      ...("style" in cue && typeof (cue as { style?: unknown }).style === "string"
+        ? { style: (cue as { style: string }).style }
+        : {}),
+    }));
+  const captionTablePreviewCues = formattedSubtitleCues
+    .slice(0, CAPTION_TABLE_PREVIEW_LIMIT)
+    .map((cue) => ({
+      index: cue.index,
+      start: cue.start,
+      end: cue.end,
+      text: cue.text,
+    }));
+  const captionTablePreviewTruncated =
+    formattedSubtitleCues.length > CAPTION_TABLE_PREVIEW_LIMIT;
+  const subtitleExportBase = `/api/videos/${encodeURIComponent(video.id)}/subtitle-export`;
   const defaultTab = activeTab;
   const savedNotice = query?.saved === "1";
   const scriptNotice = query?.scriptNotice?.trim()
@@ -552,6 +752,16 @@ export default async function VideoDetailPage({
     video.voiceoverStatus === "ready" && video.subtitleStatus === "ready";
   const elevenLabsSettingsFormId = `elevenlabs-settings-${video.id}`;
   const segmentSubtitlesFormId = `segment-subtitles-${video.id}`;
+  const voiceoverSegmentsVisible = needsVoiceoverTab
+    ? voiceoverSegments.slice(0, voiceoverListLimit)
+    : [];
+  const scenesVoiceoverVisible = needsVoiceoverTab
+    ? scenes.slice(0, voiceoverListLimit)
+    : [];
+  const voiceoverListTruncated =
+    needsVoiceoverTab &&
+    (voiceoverSegments.length > voiceoverSegmentsVisible.length ||
+      scenes.length > scenesVoiceoverVisible.length);
   const thumbnailMasters = needsThumbnailExtras
     ? await listThumbnailPromptMasters(channel.key)
     : { defaultMasterId: null, masters: [] };
@@ -565,14 +775,37 @@ export default async function VideoDetailPage({
   );
   const subtitleSegmentByVoiceoverId = new Map(
     needsVoiceoverTab
-      ? video.subtitleSegments.map((segment) => [
-          segment.voiceoverSegmentId,
-          segment,
-        ])
+      ? subtitleSegments.map((segment) => {
+          const cues = parseFormattedSubtitleCues(segment.localCuesJson);
+          return [
+            segment.voiceoverSegmentId,
+            {
+              id: segment.id,
+              voiceoverSegmentId: segment.voiceoverSegmentId,
+              index: segment.index,
+              sceneStartOrder: segment.sceneStartOrder,
+              sceneEndOrder: segment.sceneEndOrder,
+              status: segment.status,
+              error: segment.error,
+              updatedAt: segment.updatedAt,
+              cueCount: cues.length,
+              localDurationSec: cues.reduce(
+                (maxEnd, cue) => Math.max(maxEnd, cue.end),
+                0,
+              ),
+              cuePreview: cues.slice(0, LOCAL_CUE_PREVIEW_COUNT).map((cue) => ({
+                index: cue.index,
+                start: cue.start,
+                end: cue.end,
+                text: cue.text,
+              })),
+            },
+          ] as const;
+        })
       : [],
   );
   const missingSubtitleSegmentCount = needsVoiceoverTab
-    ? video.voiceoverSegments.filter((segment) => {
+    ? voiceoverSegments.filter((segment) => {
         const silent = isSilentSubtitleVoiceoverText(
           segment.pacedTextUsed || segment.text,
         );
@@ -583,17 +816,14 @@ export default async function VideoDetailPage({
             ["formatted", "ready"].includes(subtitleSegment.status)
           );
         }
-        return (
-          !subtitleSegment ||
-          parseFormattedSubtitleCues(subtitleSegment.localCuesJson).length === 0
-        );
+        return !subtitleSegment || subtitleSegment.cueCount === 0;
       }).length
     : 0;
   const hasMissingSegmentDurations = needsVoiceoverTab
-    ? video.voiceoverSegments.some((segment) => !segment.durationSec)
+    ? voiceoverSegments.some((segment) => !segment.durationSec)
     : false;
   const hasOutdatedSubtitleSegments = needsVoiceoverTab
-    ? video.voiceoverSegments.some((segment) => {
+    ? voiceoverSegments.some((segment) => {
         const subtitleSegment = subtitleSegmentByVoiceoverId.get(segment.id);
 
         return Boolean(
@@ -602,30 +832,30 @@ export default async function VideoDetailPage({
       })
     : false;
   const sceneVoiceoverGeneratedCount = needsVoiceoverTab
-    ? video.scenes.filter(
+    ? scenes.filter(
         (scene) =>
           !isSceneRejected(scene.status) &&
           ["generated", "attached"].includes(scene.voiceoverStatus ?? "none"),
       ).length
     : 0;
   const sceneVoiceoverFailedCount = needsVoiceoverTab
-    ? video.scenes.filter(
+    ? scenes.filter(
         (scene) =>
           !isSceneRejected(scene.status) &&
           ["failed", "needs_retry"].includes(scene.voiceoverStatus ?? "none"),
       ).length
     : 0;
   const sceneVoiceoverMissingCount = needsVoiceoverTab
-    ? video.scenes.filter(
+    ? scenes.filter(
         (scene) =>
           !isSceneRejected(scene.status) && !scene.voiceoverLocalPath?.trim(),
       ).length
     : 0;
   const sceneVoiceoverRejectedCount = needsVoiceoverTab
-    ? video.scenes.filter((scene) => isSceneRejected(scene.status)).length
+    ? scenes.filter((scene) => isSceneRejected(scene.status)).length
     : 0;
   const sceneVoiceoverTotalDuration = needsVoiceoverTab
-    ? video.scenes.reduce(
+    ? scenes.reduce(
         (total, scene) =>
           isSceneRejected(scene.status)
             ? total
@@ -657,25 +887,39 @@ export default async function VideoDetailPage({
         projectDraftCacheKey,
       )}`
     : null;
-  const imageReadyCount = video.scenes.filter(
+  const imageReadyCount = scenes.filter(
     (scene) =>
       !isSceneRejected(scene.status) &&
       (scene.imageLocalPath || scene.imageFileName),
   ).length;
-  const estimatedFinalDuration = video.voiceoverSegments.reduce(
+  const estimatedFinalDuration = voiceoverSegments.reduce(
     (total, segment) => total + (segment.durationSec ?? 0),
     0,
   );
   const timelineAlignment = assessVoiceoverSubtitleTimelineAlignment({
     masterDurationSec: video.voiceoverDurationSec,
-    segmentDurationSecs: video.voiceoverSegments.map(
+    segmentDurationSecs: voiceoverSegments.map(
       (segment) => segment.durationSec,
     ),
     lastCueEndSec: lastCueEndFromCues(formattedSubtitleCues),
     uncaptionedTailSec: sumTrailingUncaptionedDurationSecs(
-      video.voiceoverSegments,
+      voiceoverSegments,
     ),
   });
+  let assCaptionSourceAvailable = false;
+  if (needsRenderDiagnostics) {
+    const assPresence = await prisma.$queryRaw<
+      Array<{ present: number | bigint }>
+    >`
+      SELECT CASE
+        WHEN length(trim(coalesce("styledSubtitleAss", ''))) > 0 THEN 1
+        ELSE 0
+      END AS present
+      FROM "Video"
+      WHERE id = ${id}
+    `;
+    assCaptionSourceAvailable = Number(assPresence[0]?.present ?? 0) > 0;
+  }
 
   return (
     <div className="space-y-6">
@@ -723,7 +967,7 @@ export default async function VideoDetailPage({
             <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
               <span>Created {formatDate(video.createdAt)}</span>
               <span>Updated {formatDate(video.updatedAt)}</span>
-              <span>{video.scenes.length} scenes</span>
+              <span>{scenes.length} scenes</span>
             </div>
           </div>
 
@@ -1229,20 +1473,8 @@ export default async function VideoDetailPage({
                   characterBiblePath={channel.characterBiblePath}
                   visualPlannerPath={channel.prompts.visualPlanner}
                   scriptLength={video.script?.length ?? 0}
-                  currentSceneCount={video.scenes.length}
-                  currentScenesJson={JSON.stringify(
-                    video.scenes.map((scene) => ({
-                      scriptText: scene.scriptText,
-                      sceneType: scene.sceneType,
-                      visualPurpose: scene.visualPurpose ?? "",
-                      visualIdea: scene.visualIdea ?? "",
-                      duration: scene.duration ?? 8,
-                      imagePrompt: scene.imagePrompt ?? "",
-                      status: "planned",
-                    })),
-                    null,
-                    2,
-                  )}
+                  currentSceneCount={scenes.length}
+                  currentScenesJsonUrl={`/api/videos/${encodeURIComponent(video.id)}/scenes-json`}
                   hybridCheckpoint={hybridCheckpoint}
                   clearHybridProgressAction={clearVisualPlanHybridProgress.bind(
                     null,
@@ -1269,7 +1501,7 @@ export default async function VideoDetailPage({
                   <Badge variant="outline">{hookReview.criticalCount} critical</Badge>
                 ) : hookReview.over55Count > 0 ? (
                   <Badge variant="outline">{hookReview.over55Count} over 5.5s</Badge>
-                ) : video.scenes.length > 0 ? (
+                ) : scenes.length > 0 ? (
                   <Badge variant="muted">Pacing OK</Badge>
                 ) : null
               }
@@ -1349,23 +1581,12 @@ export default async function VideoDetailPage({
                   </div>
                 )}
 
-                {video.scenes.length > 0 ? (
+                {scenes.length > 0 ? (
                   <HookAutoFixPanel
                     action={importScenePatch.bind(null, video.id)}
                     videoId={video.id}
                     channelKey={channel.key}
-                    scenes={video.scenes.map((scene) => ({
-                      id: scene.id,
-                      sortOrder: scene.sortOrder,
-                      scriptText: scene.scriptText,
-                      visualIdea: scene.visualIdea,
-                      imagePrompt: scene.imagePrompt,
-                      hasGeneratedImage: Boolean(
-                        scene.imageLocalPath ||
-                          scene.imageFileName ||
-                          scene.imageUrl,
-                      ),
-                    }))}
+                    scenesJsonUrl={`/api/videos/${encodeURIComponent(video.id)}/scenes-json?for=patch`}
                   />
                 ) : null}
 
@@ -1394,7 +1615,9 @@ export default async function VideoDetailPage({
                                 {scene.endTimeSec.toFixed(1)}s
                               </td>
                               <td className="px-3 py-2">{scene.duration ?? 0}s</td>
-                              <td className="px-3 py-2">{scene.scriptText}</td>
+                              <td className="px-3 py-2">
+                                {truncatePreview(scene.scriptText, 140)}
+                              </td>
                               <td className="px-3 py-2">
                                 {scene.warnings.length > 0
                                   ? scene.warnings.map((warning) => warning.text).join(", ")
@@ -1489,7 +1712,7 @@ export default async function VideoDetailPage({
                       name="deleteFromOrder"
                       type="number"
                       min="1"
-                      max={video.scenes.length}
+                      max={scenes.length}
                     />
                   </div>
                   <div className="grid gap-2">
@@ -1499,7 +1722,7 @@ export default async function VideoDetailPage({
                       name="deleteToOrder"
                       type="number"
                       min="1"
-                      max={video.scenes.length}
+                      max={scenes.length}
                     />
                   </div>
                   <label className="flex items-end gap-2 pb-2 text-sm">
@@ -1634,18 +1857,7 @@ export default async function VideoDetailPage({
                   action={importScenePatch.bind(null, video.id)}
                   videoId={video.id}
                   channelKey={channel.key}
-                  scenes={video.scenes.map((scene) => ({
-                    id: scene.id,
-                    sortOrder: scene.sortOrder,
-                    scriptText: scene.scriptText,
-                    visualIdea: scene.visualIdea,
-                    imagePrompt: scene.imagePrompt,
-                    hasGeneratedImage: Boolean(
-                      scene.imageLocalPath ||
-                        scene.imageFileName ||
-                        scene.imageUrl,
-                    ),
-                  }))}
+                  scenesJsonUrl={`/api/videos/${encodeURIComponent(video.id)}/scenes-json?for=patch`}
                 />
             </CollapsibleCard>
 
@@ -1661,51 +1873,114 @@ export default async function VideoDetailPage({
             </CollapsibleCard>
 
             <CollapsibleCard
-              title={`All scenes (${video.scenes.length})`}
-              description="Edit individual scenes when you need one-off fixes. Keep this closed during import and patch workflows."
+              title={`All scenes (${scenes.length})`}
+              description="Open one scene at a time to edit. Avoids loading every image prompt into the page (important on 8GB machines)."
             >
-              <div className="grid gap-4">
-{video.scenes.map((scene) => (
-              <Card key={scene.id} id={`scene-${scene.sortOrder}`}>
-                <CardHeader>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <CardTitle>Scene {scene.sortOrder}</CardTitle>
-                      <CardDescription>{scene.sceneType}</CardDescription>
-                    </div>
+              <div className="grid gap-3">
+                {editingScene ? (
+                  <Card id={`scene-${editingScene.sortOrder}`}>
+                    <CardHeader>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <CardTitle>Scene {editingScene.sortOrder}</CardTitle>
+                          <CardDescription>{editingScene.sceneType}</CardDescription>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="muted">
+                            {statusLabel(editingScene.status)}
+                          </Badge>
+                          <Button asChild variant="outline" size="sm">
+                            <a href={`/videos/${video.id}?tab=visual-plan`}>
+                              Close editor
+                            </a>
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <SceneForm
+                        action={updateScene.bind(null, editingScene.id, video.id)}
+                        submitLabel="Save scene"
+                        defaultOrder={editingScene.sortOrder}
+                        defaultScriptText={editingScene.scriptText}
+                        defaultSceneType={editingScene.sceneType}
+                        defaultVisualPurpose={editingScene.visualPurpose ?? ""}
+                        defaultVisualIdea={editingScene.visualIdea ?? ""}
+                        defaultImagePrompt={editingScene.imagePrompt ?? ""}
+                        defaultDuration={editingScene.duration?.toString() ?? ""}
+                        defaultImageUrl={editingScene.imageUrl ?? ""}
+                        defaultStatus={editingScene.status}
+                        footer={
+                          <Button
+                            type="submit"
+                            variant="outline"
+                            size="sm"
+                            formAction={deleteScene.bind(
+                              null,
+                              editingScene.id,
+                              video.id,
+                            )}
+                          >
+                            <Trash2 />
+                            Delete scene
+                          </Button>
+                        }
+                      />
+                    </CardContent>
+                  </Card>
+                ) : null}
 
-                    <Badge variant="muted">{statusLabel(scene.status)}</Badge>
-                  </div>
-                </CardHeader>
-
-                <CardContent>
-                  <SceneForm
-                    action={updateScene.bind(null, scene.id, video.id)}
-                    submitLabel="Save scene"
-                    defaultOrder={scene.sortOrder}
-                    defaultScriptText={scene.scriptText}
-                    defaultSceneType={scene.sceneType}
-                    defaultVisualPurpose={scene.visualPurpose ?? ""}
-                    defaultVisualIdea={scene.visualIdea ?? ""}
-                    defaultImagePrompt={scene.imagePrompt ?? ""}
-                    defaultDuration={scene.duration?.toString() ?? ""}
-                    defaultImageUrl={scene.imageUrl ?? ""}
-                    defaultStatus={scene.status}
-                    footer={
-                      <Button
-                        type="submit"
-                        variant="outline"
-                        size="sm"
-                        formAction={deleteScene.bind(null, scene.id, video.id)}
-                      >
-                        <Trash2 />
-                        Delete scene
-                      </Button>
-                    }
-                  />
-                </CardContent>
-              </Card>
-            ))}
+                <div className="max-h-[520px] overflow-auto rounded-md border">
+                  <table className="w-full min-w-[720px] text-left text-sm">
+                    <thead className="sticky top-0 z-10 bg-muted text-xs uppercase text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2">Order</th>
+                        <th className="px-3 py-2">Type</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Script preview</th>
+                        <th className="px-3 py-2">Prompt</th>
+                        <th className="px-3 py-2">Edit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scenes.map((scene) => (
+                        <tr
+                          key={scene.id}
+                          className={
+                            editSceneOrder === scene.sortOrder
+                              ? "border-t bg-muted/40"
+                              : "border-t"
+                          }
+                        >
+                          <td className="px-3 py-2 font-medium">
+                            {scene.sortOrder}
+                          </td>
+                          <td className="px-3 py-2">{scene.sceneType}</td>
+                          <td className="px-3 py-2">
+                            <Badge variant="outline">
+                              {statusLabel(scene.status)}
+                            </Badge>
+                          </td>
+                          <td className="max-w-xs px-3 py-2 text-muted-foreground">
+                            {truncatePreview(scene.scriptText, 120)}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">
+                            {scene.imagePrompt ? "Set" : "Missing"}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Button asChild size="sm" variant="outline">
+                              <a
+                                href={`/videos/${video.id}?tab=visual-plan&editScene=${scene.sortOrder}`}
+                              >
+                                Edit
+                              </a>
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </CollapsibleCard>
           </div>
@@ -1725,7 +2000,7 @@ export default async function VideoDetailPage({
                 ? await getPodcastImageLibrarySummary()
                 : null
             }
-            scenes={video.scenes.map((scene) => ({
+            scenes={scenes.map((scene) => ({
               id: scene.id,
               sortOrder: scene.sortOrder,
               scriptText: scene.scriptText,
@@ -1932,14 +2207,14 @@ export default async function VideoDetailPage({
                 </div>
               </CardHeader>
               <CardContent className="space-y-5">
-                {video.scenes.length === 0 ? (
+                {scenes.length === 0 ? (
                   <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     Generate or import a Visual Plan before using voiceover by scene.
                   </div>
                 ) : null}
 
                 <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                  <SummaryItem label="Scenes" value={video.scenes.length} />
+                  <SummaryItem label="Scenes" value={scenes.length} />
                   <SummaryItem label="Generated" value={sceneVoiceoverGeneratedCount} />
                   <SummaryItem label="Missing" value={sceneVoiceoverMissingCount} />
                   <SummaryItem label="Failed" value={sceneVoiceoverFailedCount} />
@@ -1978,7 +2253,7 @@ export default async function VideoDetailPage({
                   sectionVoices={voiceoverSectionVoices}
                   sceneAssignments={autoSceneSectionAssignments}
                   maxSortOrder={
-                    video.scenes.reduce(
+                    scenes.reduce(
                       (max, scene) => Math.max(max, scene.sortOrder),
                       0,
                     )
@@ -2003,20 +2278,30 @@ export default async function VideoDetailPage({
                     />
                     Update scene durations from audio
                   </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      name="autoStitchMasterVoiceover"
+                      form={elevenLabsSettingsFormId}
+                      defaultChecked
+                    />
+                    Auto-stitch master voiceover
+                  </label>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="submit"
                     form={elevenLabsSettingsFormId}
-                    disabled={video.scenes.length === 0}
+                    disabled={scenes.length === 0}
                     formAction={generateSceneVoiceovers.bind(null, video.id)}
                   >
                     Generate all scene voiceovers
                   </Button>
                   <p className="w-full text-xs text-muted-foreground">
-                    When every scene audio is ready, the master voiceover is
-                    stitched automatically.
+                    With auto-stitch on, the master voiceover is built when every
+                    scene audio is ready. Turn it off to generate clips only —
+                    then use Stitch master voiceover manually.
                   </p>
                   <Button
                     type="submit"
@@ -2031,7 +2316,7 @@ export default async function VideoDetailPage({
                     type="submit"
                     variant="outline"
                     form={elevenLabsSettingsFormId}
-                    disabled={video.scenes.length === 0}
+                    disabled={scenes.length === 0}
                     formAction={generateSelectedSceneVoiceovers.bind(null, video.id)}
                   >
                     Generate selected scene voiceovers
@@ -2040,7 +2325,7 @@ export default async function VideoDetailPage({
                     type="submit"
                     variant="outline"
                     form={elevenLabsSettingsFormId}
-                    disabled={video.scenes.length === 0}
+                    disabled={scenes.length === 0}
                     formAction={retryFailedSceneVoiceovers.bind(null, video.id)}
                   >
                     Retry failed scenes
@@ -2062,27 +2347,29 @@ export default async function VideoDetailPage({
                   formId={elevenLabsSettingsFormId}
                   presets={listMusicBedPresets()}
                   hasFreesoundKey={Boolean(getFreesoundApiKey())}
-                  scenes={video.scenes.map((scene) => ({
-                    id: scene.id,
-                    sortOrder: scene.sortOrder,
-                    scriptText: scene.scriptText,
-                    visualIdea: scene.visualIdea,
-                    visualPurpose: scene.visualPurpose,
-                    duration: scene.duration,
-                    voiceoverLocalPath: scene.voiceoverLocalPath,
-                    voiceoverStatus: scene.voiceoverStatus,
-                    voiceoverProvider: scene.voiceoverProvider,
-                    clipLocalPath: scene.clipLocalPath,
-                    clipFileName: scene.clipFileName,
-                    clipMuted: scene.clipMuted,
-                  }))}
+                  scenes={scenes
+                    .filter((scene) => isMusicBedVisualIdea(scene.visualIdea))
+                    .map((scene) => ({
+                      id: scene.id,
+                      sortOrder: scene.sortOrder,
+                      scriptText: "",
+                      visualIdea: scene.visualIdea,
+                      visualPurpose: scene.visualPurpose,
+                      duration: scene.duration,
+                      voiceoverLocalPath: scene.voiceoverLocalPath,
+                      voiceoverStatus: scene.voiceoverStatus,
+                      voiceoverProvider: scene.voiceoverProvider,
+                      clipLocalPath: scene.clipLocalPath,
+                      clipFileName: scene.clipFileName,
+                      clipMuted: scene.clipMuted,
+                    }))}
                 />
 
                 <VoiceoverScenePausePanel
                   formId={elevenLabsSettingsFormId}
-                  disabled={video.scenes.length === 0}
+                  disabled={scenes.length === 0}
                   applyAction={updateSelectedScenePauses.bind(null, video.id)}
-                  scenes={video.scenes.map((scene) => ({
+                  scenes={scenes.map((scene) => ({
                     sortOrder: scene.sortOrder,
                     sceneType: scene.sceneType,
                     visualIdea: scene.visualIdea,
@@ -2104,8 +2391,8 @@ export default async function VideoDetailPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {video.scenes.length > 0 ? (
-                        video.scenes.map((scene) => {
+                      {scenesVoiceoverVisible.length > 0 ? (
+                        scenesVoiceoverVisible.map((scene) => {
                           const rejected = isSceneRejected(scene.status);
                           const preview = sceneAudioPreview({
                             clipLocalPath: scene.clipLocalPath,
@@ -2142,7 +2429,7 @@ export default async function VideoDetailPage({
                               </td>
                               <td className="max-w-sm px-3 py-3">
                                 <div className="line-clamp-3 whitespace-pre-line">
-                                  {scene.scriptText}
+                                  {truncatePreview(scene.scriptText, 220)}
                                 </div>
                                 {rejected ? (
                                   <p className="mt-1 text-xs font-medium text-destructive">
@@ -2223,6 +2510,19 @@ export default async function VideoDetailPage({
                     </tbody>
                   </table>
                 </div>
+                {voiceoverListTruncated ? (
+                  <p className="text-xs text-muted-foreground">
+                    Showing first {scenesVoiceoverVisible.length} of {scenes.length}{" "}
+                    scenes.{" "}
+                    <a
+                      className="underline"
+                      href={`/videos/${video.id}?tab=voiceover&voAll=1`}
+                    >
+                      Show all
+                    </a>{" "}
+                    (heavier on memory).
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
 
@@ -2245,7 +2545,13 @@ export default async function VideoDetailPage({
                 </div>
               </CardHeader>
               <CardContent className="space-y-5">
-                <form id={segmentSubtitlesFormId} className="hidden" />
+                <form
+                  id={segmentSubtitlesFormId}
+                  className="hidden"
+                  action={dispatchSegmentSubtitleRowAction}
+                >
+                  <input type="hidden" name="videoId" value={video.id} />
+                </form>
 
                 {video.voiceoverStatus !== "ready" ? (
                   <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -2266,7 +2572,7 @@ export default async function VideoDetailPage({
                 <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                   <SummaryItem
                     label="Scene subtitle jobs"
-                    value={video.subtitleSegments.length}
+                    value={subtitleSegments.length}
                   />
                   <SummaryItem
                     label="Combined cues"
@@ -2342,12 +2648,21 @@ export default async function VideoDetailPage({
                     >
                       Mark Subtitles Ready
                     </Button>
-                    <CopySubtitleButton label="Copy Combined SRT" text={formattedSrt} />
-                    <CopySubtitleButton label="Copy Combined VTT" text={formattedVtt} />
-                    <CopySubtitleButton label="Copy Combined ASS" text={formattedAss} />
+                    <CopySubtitleButton
+                      label="Copy Combined SRT"
+                      fetchUrl={`${subtitleExportBase}?format=srt`}
+                    />
+                    <CopySubtitleButton
+                      label="Copy Combined VTT"
+                      fetchUrl={`${subtitleExportBase}?format=vtt`}
+                    />
+                    <CopySubtitleButton
+                      label="Copy Combined ASS"
+                      fetchUrl={`${subtitleExportBase}?format=ass`}
+                    />
                     <CopySubtitleButton
                       label="Copy Active Word JSON"
-                      text={activeWordCaptionJson}
+                      fetchUrl={`${subtitleExportBase}?format=active-word-json`}
                     />
                   </div>
                 </div>
@@ -2367,20 +2682,17 @@ export default async function VideoDetailPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {video.voiceoverSegments.length > 0 ? (
-                        video.voiceoverSegments.map((segment) => {
+                      {voiceoverSegmentsVisible.length > 0 ? (
+                        voiceoverSegmentsVisible.map((segment) => {
                           const subtitleSegment =
                             subtitleSegmentByVoiceoverId.get(segment.id);
                           const silent = isSilentSubtitleVoiceoverText(
                             segment.pacedTextUsed || segment.text,
                           );
-                          const localCues = parseFormattedSubtitleCues(
-                            subtitleSegment?.localCuesJson,
-                          );
-                          const localDuration = localCues.reduce(
-                            (maxEnd, cue) => Math.max(maxEnd, cue.end),
-                            0,
-                          );
+                          const localCues = subtitleSegment?.cuePreview ?? [];
+                          const localDuration =
+                            subtitleSegment?.localDurationSec ?? 0;
+                          const localCueCount = subtitleSegment?.cueCount ?? 0;
 
                           return (
                             <tr key={segment.id} className="border-t align-top">
@@ -2421,7 +2733,7 @@ export default async function VideoDetailPage({
                                   </p>
                                 ) : null}
                               </td>
-                              <td className="px-3 py-3">{localCues.length}</td>
+                              <td className="px-3 py-3">{localCueCount}</td>
                               <td className="px-3 py-3">
                                 {silent
                                   ? segment.durationSec != null
@@ -2433,7 +2745,7 @@ export default async function VideoDetailPage({
                               </td>
                               <td className="max-w-sm px-3 py-3">
                                 <div className="space-y-2">
-                                  {localCues.slice(0, 3).map((cue) => (
+                                  {localCues.map((cue) => (
                                     <div
                                       key={cue.index}
                                       className="rounded-md border bg-muted/30 p-2"
@@ -2447,55 +2759,25 @@ export default async function VideoDetailPage({
                                       </div>
                                     </div>
                                   ))}
-                                  {localCues.length === 0 ? (
+                                  {localCueCount === 0 ? (
                                     <span className="text-muted-foreground">
                                       {silent
                                         ? "No captions (structural / video bumper)."
                                         : "No local captions yet."}
                                     </span>
+                                  ) : localCueCount > localCues.length ? (
+                                    <span className="text-xs text-muted-foreground">
+                                      +{localCueCount - localCues.length} more cues
+                                    </span>
                                   ) : null}
                                 </div>
                               </td>
                               <td className="px-3 py-3">
-                                <div className="flex flex-wrap gap-2">
-                                  <Button
-                                    type="submit"
-                                    size="sm"
-                                    form={segmentSubtitlesFormId}
-                                    formAction={generateSubtitlesForSegment.bind(
-                                      null,
-                                      segment.id,
-                                    )}
-                                  >
-                                    Generate Subtitles
-                                  </Button>
-                                  <Button
-                                    type="submit"
-                                    size="sm"
-                                    variant="outline"
-                                    form={segmentSubtitlesFormId}
-                                    formAction={regenerateSubtitlesForSegment.bind(
-                                      null,
-                                      segment.id,
-                                    )}
-                                  >
-                                    Regenerate Subtitles
-                                  </Button>
-                                  {subtitleSegment ? (
-                                    <Button
-                                      type="submit"
-                                      size="sm"
-                                      variant="outline"
-                                      form={segmentSubtitlesFormId}
-                                      formAction={markSubtitleSegmentReady.bind(
-                                        null,
-                                        subtitleSegment.id,
-                                      )}
-                                    >
-                                      Mark Subtitle Ready
-                                    </Button>
-                                  ) : null}
-                                </div>
+                                <SubtitleSegmentRowActions
+                                  videoId={video.id}
+                                  voiceoverSegmentId={segment.id}
+                                  subtitleSegmentId={subtitleSegment?.id}
+                                />
                               </td>
                             </tr>
                           );
@@ -2513,6 +2795,20 @@ export default async function VideoDetailPage({
                     </tbody>
                   </table>
                 </div>
+                {voiceoverListTruncated ? (
+                  <p className="text-xs text-muted-foreground">
+                    Showing first {voiceoverSegmentsVisible.length} of{" "}
+                    {voiceoverSegments.length} subtitle jobs.{" "}
+                    <a
+                      className="underline"
+                      href={`/videos/${video.id}?tab=voiceover&voAll=1`}
+                    >
+                      Show all
+                    </a>{" "}
+                    (heavier on memory). Bulk actions above still cover every
+                    segment.
+                  </p>
+                ) : null}
 
                 <div className="max-h-[420px] overflow-auto rounded-md border">
                   <table className="w-full min-w-[720px] text-left text-sm">
@@ -2587,8 +2883,14 @@ export default async function VideoDetailPage({
                     </CardDescription>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <CopySubtitleButton label="Copy SRT" text={formattedSrt} />
-                    <CopySubtitleButton label="Copy VTT" text={formattedVtt} />
+                    <CopySubtitleButton
+                      label="Copy SRT"
+                      fetchUrl={`${subtitleExportBase}?format=srt`}
+                    />
+                    <CopySubtitleButton
+                      label="Copy VTT"
+                      fetchUrl={`${subtitleExportBase}?format=vtt`}
+                    />
                   </div>
                 </div>
               </CardHeader>
@@ -2626,8 +2928,8 @@ export default async function VideoDetailPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {formattedSubtitleCues.length > 0 ? (
-                        formattedSubtitleCues.map((cue) => (
+                      {captionTablePreviewCues.length > 0 ? (
+                        captionTablePreviewCues.map((cue) => (
                           <tr key={cue.index} className="border-t">
                             <td className="px-3 py-2 font-medium">
                               {cue.index}
@@ -2656,6 +2958,13 @@ export default async function VideoDetailPage({
                     </tbody>
                   </table>
                 </div>
+                {captionTablePreviewTruncated ? (
+                  <p className="text-xs text-muted-foreground">
+                    Showing first {CAPTION_TABLE_PREVIEW_LIMIT} of{" "}
+                    {formattedSubtitleCues.length} cues. Use Copy SRT/VTT for the
+                    full track.
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
           </div>
@@ -2700,20 +3009,20 @@ export default async function VideoDetailPage({
                   <SummaryItem
                     label="Scenes"
                     value={`${
-                      video.scenes.filter((scene) => !isSceneRejected(scene.status))
+                      scenes.filter((scene) => !isSceneRejected(scene.status))
                         .length
-                    } active / ${video.scenes.length}`}
+                    } active / ${scenes.length}`}
                   />
                   <SummaryItem
                     label="Images ready"
                     value={`${imageReadyCount} / ${
-                      video.scenes.filter((scene) => !isSceneRejected(scene.status))
+                      scenes.filter((scene) => !isSceneRejected(scene.status))
                         .length
                     }`}
                   />
                   <SummaryItem
                     label="Voiceover segments"
-                    value={video.voiceoverSegments.length}
+                    value={voiceoverSegments.length}
                   />
                   <SummaryItem
                     label="Voiceover"
@@ -2725,7 +3034,7 @@ export default async function VideoDetailPage({
                   />
                   <SummaryItem
                     label="ASS captions"
-                    value={video.styledSubtitleAss ? "Available" : "Missing"}
+                    value={assCaptionSourceAvailable ? "Available" : "Missing"}
                   />
                   <SummaryItem
                     label="Estimated duration"
@@ -2890,7 +3199,7 @@ export default async function VideoDetailPage({
               <RenderDiagnosticsCard
                 diagnostics={renderDiagnostics}
                 burnCaptionsEnabled={renderDiagnostics.lastBurnCaptions ?? true}
-                assCaptionSourceAvailable={Boolean(video.styledSubtitleAss)}
+                assCaptionSourceAvailable={assCaptionSourceAvailable}
                 timelineAlignment={timelineAlignment}
               />
             ) : null}
@@ -3064,6 +3373,14 @@ export default async function VideoDetailPage({
   );
 }
 
+function truncatePreview(text: string, maxChars: number) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxChars).trim()}…`;
+}
+
 function parseBatchLogs(logsJson: string | null) {
   if (!logsJson) {
     return [];
@@ -3075,41 +3392,6 @@ function parseBatchLogs(logsJson: string | null) {
   } catch {
     return [];
   }
-}
-
-function parseFormattedSubtitleCues(value: unknown): FormattedSubtitleCue[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .map((cue) => {
-      if (!cue || typeof cue !== "object") {
-        return null;
-      }
-
-      const item = cue as Partial<FormattedSubtitleCue>;
-
-      if (
-        typeof item.index !== "number" ||
-        typeof item.start !== "number" ||
-        typeof item.end !== "number" ||
-        typeof item.text !== "string" ||
-        typeof item.rawText !== "string"
-      ) {
-        return null;
-      }
-
-      return {
-        ...item,
-        index: item.index,
-        start: item.start,
-        end: item.end,
-        text: item.text,
-        rawText: item.rawText,
-      } as FormattedSubtitleCue;
-    })
-    .filter((cue): cue is FormattedSubtitleCue => Boolean(cue));
 }
 
 function buildSceneTimeline(

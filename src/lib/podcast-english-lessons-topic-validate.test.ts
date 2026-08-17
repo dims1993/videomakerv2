@@ -12,7 +12,7 @@ import {
 } from "@/lib/podcast-english-lessons-topic-validate";
 import { buildTopicBatchPrompt } from "@/lib/topic-batch-prompt";
 
-test("podcast prompt includes anti-copy, multi-topic balance, and politeness spelling", () => {
+test("podcast prompt includes big-human editorial shift and anti-copy", () => {
   const channel = getChannelProfile("podcast-english-lessons");
   const prompt = buildTopicBatchPrompt({
     channelName: channel.name,
@@ -24,27 +24,32 @@ test("podcast prompt includes anti-copy, multi-topic balance, and politeness spe
 
   assert.match(prompt, /EXAMPLE ANTI-COPY RULE/i);
   assert.match(prompt, /MULTI-TOPIC BALANCE/i);
-  assert.match(prompt, /EMOTIONAL SPECIFICITY PREFERENCE/i);
+  assert.match(prompt, /EMOTIONAL SIGNIFICANCE PREFERENCE/i);
+  assert.match(prompt, /BIG HUMAN CONVERSATION HOOK FIRST/i);
+  assert.match(prompt, /GROUNDED EVERYDAY EXAMPLES SECOND/i);
+  assert.match(prompt, /TITLE QUALITY TEST/i);
+  assert.match(prompt, /CRITICAL SELF-AUDIT/i);
   assert.match(prompt, /Why One Notification Breaks Your Whole Morning/i);
+  assert.match(prompt, /The Power Of Starting Again/i);
   assert.match(
     prompt,
-    /Prefer emotionally specific titles over flat topic labels/i,
+    /Prefer BIG HUMAN CONVERSATION HOOK titles over micro-object titles/i,
   );
   assert.match(
     prompt,
-    /at least one title should include a concrete everyday scene or moment/i,
+    /at least one life-lesson topic/i,
   );
   assert.match(prompt, /Treat examples as forbidden outputs/i);
   assert.match(prompt, /How To Say No Politely/);
   assert.doesNotMatch(prompt, /How To Say No Politly/);
-  assert.match(
-    prompt,
-    /Titles may be simple and searchable, but they must not be copied from the examples/i,
-  );
   assert.match(prompt, /NOT available outputs/i);
   assert.match(
     prompt,
     /Do not let the first batch after this prompt default to job interviews/i,
+  );
+  assert.doesNotMatch(
+    prompt,
+    /at least one topic based on a concrete object or moment/i,
   );
 });
 
@@ -57,9 +62,9 @@ test("forbidden example title detection covers pipes, SEO suffixes, and normaliz
   );
   assert.equal(
     findForbiddenPodcastExampleTitle(
-      "English Podcast For Learning English | Stop Wasting Time | Easy English Podcast",
+      "English Podcast For Easy English Conversation | The Power Of Starting Again | Learn English Fast",
     ),
-    "Stop Wasting Time",
+    "The Power Of Starting Again",
   );
   assert.equal(
     findForbiddenPodcastExampleTitle("stop wasting time!!!"),
@@ -75,12 +80,16 @@ test("forbidden example title detection covers pipes, SEO suffixes, and normaliz
     findForbiddenPodcastExampleTitle("Easy English Podcast"),
     null,
   );
+  assert.equal(
+    findForbiddenPodcastExampleTitle("Learn English Fast"),
+    null,
+  );
 
   assert.deepEqual(
     extractPodcastEditorialTitleCores(
-      "English Podcast For Learning English | Why Some Conversations Die After One-Word Answers | Easy English Podcast",
+      "English Podcast For Easy English Conversation | Why Comparison Quietly Steals Joy | Learn English Fast",
     ),
-    ["Why Some Conversations Die After One-Word Answers"],
+    ["Why Comparison Quietly Steals Joy"],
   );
 
   assert.equal(
@@ -105,56 +114,62 @@ test("assertPodcastTopicBatchAvoidsPromptExamples rejects known example titles",
     assertPodcastTopicBatchAvoidsPromptExamples([
       {
         title:
-          "Why Small Tasks Stay Unfinished All Week | Easy English Podcast",
+          "Why Comparison Quietly Steals Joy | Easy English Podcast For Conversation Practice | Learn English Fast",
       },
       {
         title:
-          "Why Some Conversations Die After One-Word Answers | Natural English Conversation",
+          "English Podcast For Easy English Conversation | When Saying No Feels Selfish | Learn English Fast",
       },
     ]),
   );
 
   assert.ok(FORBIDDEN_PODCAST_EXAMPLE_TITLES.includes("How To Say No Politely"));
+  assert.ok(
+    FORBIDDEN_PODCAST_EXAMPLE_TITLES.includes("The Power Of Starting Again"),
+  );
 });
 
 test("simulated 2-topic podcast batch passes anti-copy acceptance criteria", () => {
   const raw = JSON.stringify({
     topics: [
       {
-        category: "technology_media",
-        title: "Why One Notification Breaks Your Focus | Easy English Podcast",
+        category: "feelings_mindset",
+        title:
+          "English Podcast For Easy English Conversation | Why Comparison Quietly Steals Joy | Learn English Fast",
         topic:
-          "Max and Sara talk about how a single phone buzz can pull you out of a calm morning.",
+          "Max and Sara talk about why comparing your life to other people can make ordinary days feel smaller.",
         angle:
-          "Focus on the first interruption of the day, not on deleting all apps.",
+          "Explore quiet comparison through social feeds, friends' updates, and success stories, not generic positivity advice.",
         uniqueMechanism:
-          "The First Buzz Drift: one early notification feels small, but it opens a chain of replies and checks that quietly replaces the morning plan.",
-        trigger: "recognition of losing the morning after one buzz",
+          "The Quiet Scoreboard: a person keeps ranking their progress against other people's highlights even when nobody asked them to compete.",
+        trigger:
+          "The viewer has felt suddenly less happy after seeing someone else's update.",
         promise:
-          "Listeners recognize the interruption pattern and hear natural phrases for focus, phones, and starting again.",
+          "Listeners will explore why comparison can shrink joy while hearing clear everyday English for talking about feelings, pressure, and personal choices.",
         visualHook:
-          "Sara holds a phone with one bright notification while Max's coffee and notebook sit untouched beside him.",
+          "Sara looks at floating highlight bubbles while Max points to a card that says 'YOUR DAY'.",
         thumbnailIdea:
-          "Studio desk with one glowing phone alert and untouched coffee; on-image text: 'JUST ONE BUZZ'",
+          "Studio scene with highlight bubbles and a personal card; on-image text: 'WHOSE LIFE?'",
         repetitionRisk: "low",
       },
       {
-        category: "food_lifestyle",
+        category: "social_relationships",
         title:
-          "Why You Buy Five Things You Did Not Need | English Podcast For Learning English | Easy English Podcast",
+          "When Saying No Feels Selfish | Easy English Podcast For Conversation Practice | Learn English Fast",
         topic:
-          "Max and Sara discuss walking into a store for one item and leaving with extras.",
+          "Max and Sara discuss why saying no can feel rude even when the request is too much.",
         angle:
-          "Explore impulse extras after the main item is already in the basket, not general budgeting lectures.",
+          "Focus on ordinary invitations and favors where guilt appears before the answer, with different experiences from Max and Sara.",
         uniqueMechanism:
-          "The Extra Basket Slide: once the needed item is found, the brain relaxes and nearby extras feel harmless, so the basket grows without a new decision.",
-        trigger: "remembering a receipt with surprise extras",
+          "The Guilt-First No: before the person evaluates time or energy, they feel selfish for considering a refusal.",
+        trigger:
+          "The viewer has agreed to something they did not want because saying no felt mean.",
         promise:
-          "Listeners recognize the shopping slide and absorb natural phrases for wanting, choosing, and saying enough.",
+          "Listeners will recognize the guilt pattern around saying no while absorbing natural English for boundaries, plans, and honest answers.",
         visualHook:
-          "Max holds one milk carton while Sara points at four small snacks already in a studio shopping basket.",
+          "Max holds an invitation card while Sara gently pushes a 'NO' card forward with an unsure face.",
         thumbnailIdea:
-          "Studio basket with one needed item and four extras; on-image text: 'JUST ONE MORE?'",
+          "Invitation card versus a simple NO card between hosts; on-image text: 'IS IT SELFISH?'",
         repetitionRisk: "medium",
       },
     ],
@@ -164,14 +179,14 @@ test("simulated 2-topic podcast batch passes anti-copy acceptance criteria", () 
   assert.equal(topics.length, 2);
   assertPodcastTopicBatchAvoidsPromptExamples(topics);
 
-  const scenefulTitleCount = topics.filter((topic) =>
-    /\b(why|when|before|after|one|five|whole|breaks|becomes|takes)\b/i.test(
+  const bigHumanTitleCount = topics.filter((topic) =>
+    /\b(why|when|what|how|courage|truth|power|care|comparison|friend|life|mind|peace|busy|start|again)\b/i.test(
       topic.title,
     ),
   ).length;
   assert.ok(
-    scenefulTitleCount >= 1,
-    "at least one title should create a concrete everyday scene",
+    bigHumanTitleCount >= 1,
+    "at least one title should feel like a big human conversation hook",
   );
 
   for (const topic of topics) {
@@ -184,13 +199,12 @@ test("simulated 2-topic podcast batch passes anti-copy acceptance criteria", () 
     assert.match(topic.repetitionRisk ?? "", /^(low|medium|high)$/);
     assert.doesNotMatch(topic.title, /Job Interview Questions And Answers/i);
     assert.doesNotMatch(topic.title, /Stop Wasting Time/i);
-    assert.doesNotMatch(topic.title, /Making Plans With Friends/i);
-    assert.doesNotMatch(topic.title, /^Too Many Notifications\b/i);
-    assert.doesNotMatch(topic.title, /^Grocery Shopping\b/i);
+    assert.doesNotMatch(topic.title, /The Power Of Starting Again/i);
+    assert.doesNotMatch(topic.title, /Why One Notification Breaks Your Whole Morning/i);
   }
 
-  assert.equal(topics[0]?.category, "technology_media");
-  assert.equal(topics[1]?.category, "food_lifestyle");
+  assert.equal(topics[0]?.category, "feelings_mindset");
+  assert.equal(topics[1]?.category, "social_relationships");
   assert.ok(
     !/english learning|interview|fluency|speaking challenge/i.test(
       topics[1]?.topic ?? "",

@@ -436,10 +436,11 @@ Do not drift into other categories unless the connection to the selected categor
 ${rotation}
 
 Across repeated generations:
-- approximately 25–30% of accepted topics may be directly about English or communication;
-- approximately 70–75% should be broader daily-life topics discussed in accessible English.
+- approximately 15–20% of accepted topics may be directly about English or communication;
+- approximately 80–85% should be broader human topics (life lessons, growth, mindset, relationships, peace, society beliefs, success/failure, modern life) discussed in accessible English.
 
-Do not let english_communication dominate the channel.`;
+Do not let english_communication dominate the channel.
+Do not let tiny productivity micro-habits dominate either.`;
 
   const recentAcceptedTopics = recentTopics.map((topic) => ({
     category: topic.category,
@@ -516,10 +517,29 @@ ${countText}
 Goal:
 Generate highly clickable, conversation-worthy topics for daily publishing that can naturally sustain approximately 20–30 minutes of Max & Sara dialogue.
 
+Fundamental editorial shift (read carefully):
+
+OLD philosophy (do NOT default to this):
+SPECIFIC LIVED EXPERIENCE FIRST — micro-situations and tiny daily objects driving the title.
+
+NEW philosophy (required):
+BIG HUMAN CONVERSATION HOOK FIRST,
+GROUNDED EVERYDAY EXAMPLES SECOND.
+
+The TITLE sells a big human idea.
+The ANGLE and UNIQUE MECHANISM make that conversation concrete and sustainable for 20–30 minutes.
+Do NOT force the full everyday mechanism into the title.
+
 The viewer should think:
-'That is something I experience or think about. I want to hear them talk about it.'
+'That is a meaningful conversation about life. I want to hear Max and Sara talk about it.'
 
 The viewer should also absorb useful English naturally while listening.
+
+The topic should pass this test:
+
+"If this were a normal lifestyle or self-development podcast and not an English-learning channel, would the conversation still sound interesting?"
+
+If no, reject it.
 
 --------------------------------------------------
 CATEGORY ROTATION
@@ -567,30 +587,36 @@ TOPIC VIABILITY REQUIREMENT
 
 Every topic must be strong enough to support a 20–30 minute conversation without padding.
 
-Before selecting the idea, internally verify that Max and Sara could naturally explore at least 5 distinct conversational beats such as:
+Before selecting the idea, internally verify that Max and Sara could naturally discuss at least 5–7 of:
 
-- a relatable opening situation;
+- what the big idea means;
+- whether they agree;
 - different personal experiences;
-- why the situation happens;
-- common mistakes or misunderstandings;
-- different opinions or approaches;
-- realistic examples;
-- useful expressions or vocabulary;
-- a small story;
+- a story from Max;
+- a story from Sara;
+- a common belief about the topic;
+- when that belief is useful or wrong;
+- realistic daily-life examples;
+- a small disagreement;
+- different choices people make;
+- useful English phrases;
 - a practical takeaway;
-- a viewer question.
+- a viewer reflection question.
 
 Do not output these beats.
 
 Use them only to reject ideas that are too thin.
 
 Reject topics that would mostly become:
-- a vocabulary list;
+- motivational slogans;
+- a generic list of advice;
+- a vocabulary list / dictionary lesson;
 - a grammar lesson;
+- one short transactional scenario;
+- repeated positive statements;
+- abstract philosophy with no ordinary examples;
 - a listicle;
-- repeated advice;
-- one short transactional role-play;
-- generic motivation.
+- generic motivation without a conversational engine.
 
 --------------------------------------------------
 EDITORIAL ORIGINALITY
@@ -599,49 +625,58 @@ EDITORIAL ORIGINALITY
 Editorial originality rules:
 ${editorialInstructions.originalityRules.map((item) => `- ${item}`).join("\n")}
 
+Additional editorial originality rules:
+
+- The central topic should feel like a meaningful podcast conversation, not a tiny behavioral observation.
+- Prefer strong human themes with emotional, philosophical, social, relational, or personal-growth value.
+- Broad topics are encouraged when the angle and uniqueMechanism make the actual conversation specific.
+- A topic may deal with life, happiness, fear, peace, confidence, truth, relationships, identity, motivation, change, society, dreams, time, regret, self-respect, success, failure, or personal growth.
+- The title should create curiosity about the IDEA, not necessarily describe the exact everyday mechanism.
+- Ground broad topics in simple everyday examples inside angle and uniqueMechanism.
+- Avoid vague motivational filler. A broad topic still needs a concrete conversational engine.
+- The viewer should want to hear Max and Sara's opinions, experiences, disagreements, and stories about the topic.
+- The English-learning benefit should be secondary to the human interest of the topic.
+
 Do not propose generic titles such as:
 - Learn English Easily
 - Improve Your English
 - Speak English Better
 - Daily English Conversation
 
-The topic itself must be interesting even before the English-learning benefit is considered.
+Bad (old micro-default):
+Why You Open Your Laptop And Do Everything Except Start
 
-Every idea needs one clear human tension, question, behavior, situation, or conversational mechanism.
-
-Prefer:
-specific lived experiences
-
-over:
-broad virtues or abstract themes.
+Better (big human hook + specific mechanism underneath):
+The Power Of Starting Again
+with a uniqueMechanism about restart resistance after a failed attempt
 
 Bad:
 How to Be More Confident
 
 Better:
-Why You Rehearse a Simple Sentence in Your Head Before Saying It
+What Makes Someone Truly Confident?
+with a concrete uniqueMechanism about comparison, posture, or speaking up in ordinary moments
 
 Bad:
 Improve Your Communication
 
 Better:
-Why Some Conversations Die After One-Word Answers
-
-Bad:
-Be More Productive
-
-Better:
-Why a Five-Minute Task Can Stay on Your List for Three Days
-
-The title should make the viewer recognize an experience.
+Why We Care Too Much About What People Think
+with a uniqueMechanism about an imagined audience
 
 --------------------------------------------------
 UNIQUE MECHANISM
 --------------------------------------------------
 
-uniqueMechanism must describe the actual observable pattern, tension, conversational dynamic, decision loop, or everyday mechanism that makes the topic interesting.
+The TITLE sells the big human idea.
 
-It is NOT a lesson activity anymore.
+The UNIQUE MECHANISM explains the specific tension that gives Max and Sara enough material for 20–30 minutes.
+
+Do NOT force the uniqueMechanism wording into the title.
+
+uniqueMechanism must still be specific and observable: an everyday pattern, tension, decision loop, relational dynamic, or conversational mechanism.
+
+It is NOT a lesson activity.
 
 Do NOT use mechanisms such as:
 - listen-and-repeat;
@@ -652,17 +687,15 @@ Do NOT use mechanisms such as:
 - role-play ladders;
 - speaking challenges.
 
-Good uniqueMechanism examples:
+Good uniqueMechanism examples (STYLE ONLY — do not copy into titles or reuse as outputs):
 
-'The Reply Gap: the learner understands the question immediately but needs several extra seconds to organize a simple spoken answer.'
+'The Imagined Audience: a person changes what they say or do because they picture other people judging them, even when nobody has actually reacted negatively.'
 
-'The Tiny Task Delay: a task feels so small that there is never enough urgency to start it, so it keeps moving to tomorrow.'
+'The Restart Resistance: beginning again can feel harder than beginning the first time because the person now carries memories of the previous failed attempt.'
 
-'The Social Battery Tradeoff: someone genuinely enjoys seeing friends but also starts wanting quiet time after too much social activity.'
+'The Busy Without Progress Loop: many small activities create a full day without moving the one important thing forward.'
 
-'The Message Rewrite Loop: a person rewrites a simple text several times because each version sounds slightly too cold, too formal, or too direct.'
-
-The mechanism must be easy to visualize in one scene.
+'The Quiet Distance: neither person decides to end the friendship, but delayed replies, changed routines, and fewer invitations slowly create distance.'
 
 Avoid unsupported scientific or psychological claims.
 
@@ -672,81 +705,66 @@ Prefer ordinary observable behavior and conversational dynamics.
 TITLE STRATEGY
 --------------------------------------------------
 
-The YouTube title and the editorial mechanism have different jobs.
+The title has three jobs:
 
-The TITLE should maximize:
-- immediate clarity;
-- searchability;
-- curiosity;
-- broad viewer recognition;
-- consistency with the Easy English Podcast niche.
+1. Make the human topic instantly interesting.
+2. Position the video clearly inside the easy-English podcast niche.
+3. Create enough emotional curiosity to earn the click.
 
-The UNIQUE MECHANISM should provide the deeper editorial originality that makes the actual episode interesting.
+The title does NOT need to explain the full uniqueMechanism.
+
+A broad emotionally strong title is GOOD when angle and uniqueMechanism make the episode concrete.
 
 Do NOT force the full uniqueMechanism into the title.
 
-A relatively broad or simple title is acceptable when the underlying angle and uniqueMechanism are specific.
-
-For example:
+For example (STYLE ONLY — not an available output):
 
 Title:
-English Podcast For Learning English | Stop Wasting Time | Easy English Podcast
+The Power Of Starting Again | English Podcast For Easy English Conversation | Learn English Fast
 
-Possible uniqueMechanism:
-The Tiny Task Delay: small tasks feel too unimportant to start immediately, so they repeatedly move to later until they become a source of stress.
+Angle:
+Max and Sara explore what it feels like to restart after abandoning a goal, changing plans, having a bad week, or realizing an old approach no longer works.
 
-This is GOOD because the title is simple and clickable while the episode itself has a specific conversational mechanism.
+uniqueMechanism:
+The Restart Resistance: beginning again can feel harder than beginning the first time because the person now carries memories of the previous failed attempt.
+
+This is GOOD because the title is broad and emotional while the episode has a specific conversational engine.
 
 --------------------------------------------------
-EMOTIONAL SPECIFICITY PREFERENCE
+EMOTIONAL SIGNIFICANCE PREFERENCE
 --------------------------------------------------
 
-When two titles are equally clear and searchable, prefer the one that creates a stronger everyday scene in the viewer's mind.
+EMOTIONAL SIGNIFICANCE > OBJECT SPECIFICITY.
 
-A title should ideally suggest:
-- a specific moment;
-- a small conflict;
-- a recognizable feeling;
-- a concrete object or action;
-- or a question the viewer has experienced.
+Titles should tend to capture:
+- a big question;
+- an uncomfortable truth;
+- a human tension;
+- a life decision;
+- a universal emotion;
+- a belief worth discussing;
+- an idea with debate potential;
+- a problem many people recognize.
+
+Do not default to "Why One..." structures.
+
+Do not default to titles built around:
+- a coffee cup;
+- a laptop;
+- a notification;
+- a grocery bag;
+- a messy desk;
+- a forgotten object;
+- a tiny task;
+- an unanswered message.
+
+These can still appear inside the episode, angle, uniqueMechanism, or visualHook, but should not dominate the title strategy.
 
 Do not make every title dramatic.
 
 Do not use fake urgency, fear, or clickbait.
 
-But avoid flat labels when a more vivid title is available.
-
-Flat but acceptable:
-Too Many Notifications | English Podcast For Learning English | Easy English Podcast
-
-Stronger:
-Why One Notification Breaks Your Whole Morning | Easy English Podcast
-
-Flat but acceptable:
-Cleaning Your Room | English Podcast For Learning English | Easy English Podcast
-
-Stronger:
-Why Cleaning One Room Takes All Afternoon | Easy English Podcast
-
-Flat but acceptable:
-Making Plans With Friends | English Podcast For Learning English | Easy English Podcast
-
-Stronger:
-Why One Coffee Plan Becomes Six Messages | Easy English Podcast
-
-Flat but acceptable:
-Grocery Shopping | English Podcast For Learning English | Easy English Podcast
-
-Stronger:
-Why You Buy Five Things You Did Not Need | Easy English Podcast
-
-Flat but acceptable:
-Feeling Tired | English Podcast For Learning English | Easy English Podcast
-
-Stronger:
-Why You Feel Tired Before The Day Even Starts | Easy English Podcast
-
-Use the stronger version when it still remains simple, natural, and understandable for A1–B1 learners.
+Prefer podcast-scale human ideas over productivity-blog micro-headlines.
 
 --------------------------------------------------
 PREFERRED TITLE FORMATS
@@ -754,96 +772,110 @@ PREFERRED TITLE FORMATS
 
 Use a varied mixture of these title structures across repeated generations.
 
-PRIMARY FORMAT — approximately 50–60%:
+PRIMARY FORMAT — approximately 40%:
 
-[Specific Topic] | English Podcast For Learning English | Easy English Podcast
-
-Format examples only (NOT available outputs — see EXAMPLE ANTI-COPY RULE):
-
-Job Interview Questions And Answers | English Podcast For Learning English | Easy English Podcast
-
-How To Make Small Talk | English Podcast For Learning English | Easy English Podcast
-
-Talking About Your Weekend | English Podcast For Learning English | Easy English Podcast
-
-How To Stop Overthinking | English Podcast For Learning English | Easy English Podcast
-
-
-SECONDARY FORMAT — approximately 20–30%:
-
-English Podcast For Learning English | [Strong Topic or Hook] | Easy English Podcast
+English Podcast For Easy English Conversation | [BIG HUMAN TOPIC] | Learn English Fast
 
 Format examples only (NOT available outputs — see EXAMPLE ANTI-COPY RULE):
 
-English Podcast For Learning English | Stop Wasting Time | Easy English Podcast
+English Podcast For Easy English Conversation | The Truth About Always Being Busy | Learn English Fast
 
-English Podcast For Learning English | Making Friends As An Adult | Easy English Podcast
+English Podcast For Easy English Conversation | Why We Care Too Much About Other People’s Opinions | Learn English Fast
 
-English Podcast For Learning English | Why Are We Always So Busy? | Easy English Podcast
+English Podcast For Easy English Conversation | The Courage To Start Again | Learn English Fast
 
 
-EDITORIAL FORMAT — approximately 20%:
+SECONDARY FORMAT — approximately 30%:
 
-[Curiosity-Driven Topic] | Easy English Podcast
-
-or
-
-[Curiosity-Driven Topic] | English Listening Practice
-
-or
-
-[Curiosity-Driven Topic] | Natural English Conversation
+[BIG HUMAN TOPIC] | Easy English Podcast For Conversation Practice | Learn English Fast
 
 Format examples only (NOT available outputs — see EXAMPLE ANTI-COPY RULE):
 
-Why Weekends Feel Too Short | Easy English Podcast
+The Power Of Starting Again | Easy English Podcast For Conversation Practice | Learn English Fast
 
-What Makes A Good Friend? | Natural English Conversation
+Learning To Enjoy Your Own Company | Easy English Podcast For Conversation Practice | Learn English Fast
 
-Why We Keep Checking Our Phones | English Listening Practice
+Why Some Friendships Slowly Disappear | Easy English Podcast For Conversation Practice | Learn English Fast
 
-Is It Better To Live Alone? | Easy English Conversation
+
+DAILY LIFE CONVERSATION FORMAT — approximately 15%:
+
+[BIG HUMAN TOPIC] | English Podcast For Easy Conversation in Daily Life | Learn English Fast
+
+Format examples only (NOT available outputs — see EXAMPLE ANTI-COPY RULE):
+
+Don’t Let One Bad Day Control Your Week | English Podcast For Easy Conversation in Daily Life | Learn English Fast
+
+When Being Busy Stops Feeling Productive | English Podcast For Easy Conversation in Daily Life | Learn English Fast
+
+
+ENGLISH-SKILL FORMAT — approximately 15%:
+
+How To Talk About [USEFUL HUMAN TOPIC] In English | Learn English Fast | Podcast English For Easy Conversation
+
+or:
+
+Talking About [USEFUL HUMAN TOPIC] | Easy English Podcast For Conversation Practice | Learn English Fast
+
+Format examples only (NOT available outputs — see EXAMPLE ANTI-COPY RULE):
+
+How To Talk About Your Future In English | Learn English Fast | Podcast English For Easy Conversation
+
+Talking About Difficult Decisions | Easy English Podcast For Conversation Practice | Learn English Fast
+
+Do NOT output these examples verbatim.
 
 --------------------------------------------------
-TITLE PRINCIPLES
+TITLE QUALITY TEST
 --------------------------------------------------
 
-Titles may be simple and searchable, but they must not be copied from the examples.
+Before accepting a title, check internally:
 
-Do not make every title overly clever or psychologically complex.
+A. BIG IDEA TEST — Does this sound like a conversation about something meaningful enough for 20–30 minutes?
+B. HUMAN INTEREST TEST — Would someone potentially click even if they were not specifically searching for an English lesson?
+C. PODCAST TEST — Does it sound like a podcast episode title rather than a productivity blog headline?
+D. SEO WRAPPER TEST — Does the title clearly fit the easy-English podcast niche?
+E. SIMPLICITY TEST — Can an A1–B1 learner understand the core title concept?
+F. CURIOSITY TEST — Does it make the viewer want Max and Sara’s perspective?
+G. MICRO-TOPIC TEST — Is the title unnecessarily focused on a tiny action/object when a bigger human framing would be stronger?
 
-A broad title is allowed only when the angle and uniqueMechanism make the episode specific.
-
-Strong simple topics are valuable when they have:
-- clear search intent;
-- strong everyday relevance;
-- enough conversational depth;
-- a specific underlying uniqueMechanism.
-
-Do not approve an idea only because the title is searchable.
-
-Before outputting, ask internally:
-- Is this title copied from the prompt examples?
-- Is this a cosmetic rewrite of a prompt example?
-- Does the uniqueMechanism create a genuinely different 20–30 minute conversation?
-- Could Max and Sara tell different stories and have different opinions about this?
-- Is the visualHook distinct from previous examples?
-
-If any answer fails, regenerate the topic.
-
-Before outputting a title, ask internally:
-- Does the title create a clear everyday scene?
-- Could the title be visualized in one thumbnail without extra explanation?
-- Is there a more vivid version that is still simple and searchable?
-- Is the title emotional because it is specific, not because it exaggerates?
-
-If the current title is only a flat label, improve it unless the flat SEO version is clearly stronger for search intent.
+If G = yes, rewrite.
 
 Also ask:
-
 'What will Max and Sara actually have to talk about for 20–30 minutes?'
 
 If there is no specific conversational engine behind the title, reject it.
+
+--------------------------------------------------
+OLD STYLE VS NEW STYLE
+--------------------------------------------------
+
+OLD STYLE — DO NOT DEFAULT TO THIS:
+
+Why You Open Your Laptop And Do Everything Except Start
+Why Your Coffee Gets Cold Before You Drink It
+Why One Missing Sock Can Ruin Your Morning
+Why Your Desk Gets Messy Again So Fast
+Why A Simple Group Chat Becomes Complicated
+Why One Notification Breaks Your Whole Morning
+Why A Five-Minute Task Can Stay On Your List For Three Days
+
+These are not always forbidden as episode material, but they represent the OLD editorial bias.
+
+Do not generate batches dominated by this structure.
+
+NEW STYLE — PREFERRED DIRECTION (STYLE ONLY — do not copy):
+
+The Truth About Always Being Busy
+The Power Of Starting Again
+Why We Care Too Much About What People Think
+Are We Chasing The Wrong Things?
+Learning To Enjoy Your Own Company
+When Is It Time To Let Go?
+What Makes Someone Truly Confident?
+Why Some Friendships Slowly Disappear
+The Things We Understand Too Late
+The Courage To Change Your Mind
 
 --------------------------------------------------
 EXAMPLE ANTI-COPY RULE
@@ -880,35 +912,42 @@ Forbidden exact example titles include, but are not limited to:
 - What Makes A Good Friend?
 - Why We Keep Checking Our Phones
 - Is It Better To Live Alone?
+- Why You Open Your Laptop And Do Everything Except Start
+- Why Your Coffee Gets Cold Before You Drink It
+- Why One Missing Sock Can Ruin Your Morning
+- Why Your Desk Gets Messy Again So Fast
+- Why A Simple Group Chat Becomes Complicated
+- Why One Notification Breaks Your Whole Morning
+- Why A Five-Minute Task Can Stay On Your List For Three Days
+- The Truth About Always Being Busy
+- The Power Of Starting Again
+- Why We Care Too Much About What People Think
+- Are We Chasing The Wrong Things?
+- Learning To Enjoy Your Own Company
+- When Is It Time To Let Go?
+- What Makes Someone Truly Confident?
+- Why Some Friendships Slowly Disappear
+- The Things We Understand Too Late
+- The Courage To Change Your Mind
+- The Power Of Positivity
+- Don’t Waste Your Life
+- Big Lies Society Told Us
+- The Real Superpower That Can Change Your Life
+- Truth Or Dare
+- How To Talk About Yourself in English
+- Finding Peace
 
-You may generate topics in the same title style, SEO structure, and editorial spirit, but the specific example topics above must not be reused unless the user explicitly provides one of them as a seed topic.
+You may generate topics in the same title style, SEO structure, scale, emotional ambition, and editorial spirit, but the specific example topics above must not be reused unless the user explicitly provides one of them as a seed topic.
+
+Important distinction:
+
+COPYING (not allowed):
+"The Power Of Positivity" → "The Amazing Power Of Positivity"
+
+LEARNING THE PATTERN (allowed):
+"The Power Of Positivity" → a different conversation, such as changing your mind after failure, with a different core claim.
 
 Do not create cosmetic rewrites of forbidden examples.
-
-Bad:
-Stop Wasting Time
-How To Stop Wasting Time
-Why You Waste So Much Time
-Stop Losing Time Every Day
-
-Better:
-Why Small Tasks Stay Unfinished All Week
-
-Bad:
-Job Interview Questions And Answers
-Common Job Interview Answers
-How To Answer Interview Questions
-
-Better:
-Why Talking About Your Experience Feels Awkward
-
-Bad:
-How To Make Small Talk
-How To Keep Small Talk Going
-Small Talk In English
-
-Better:
-Why Some Conversations Die After One-Word Answers
 
 If the generated idea feels like a direct rewrite of an example, reject it and generate a different idea.
 
@@ -918,25 +957,34 @@ SEO PHRASES
 
 The following phrases may intentionally recur across videos:
 
+English Podcast For Easy English Conversation
+English Podcast For Easy Conversation in Daily Life
+Easy English Podcast For Conversation Practice
+Easy English Podcast Conversation in Daily Life
+Podcast English For Easy Conversation
+English Listening Practice
+B1 English Listening Practice
+Learn English Fast
+Easy English Conversation
+Natural English Conversation
 English Podcast For Learning English
 Easy English Podcast
-English Listening Practice
-Natural English Conversation
-Easy English Conversation
 
 This repetition is allowed because these phrases describe the channel format and search intent.
 
 Do NOT treat these repeated SEO phrases as editorial repetition.
 
-Editorial repetition should instead be judged from:
-- the central topic;
+Editorial originality should be judged from the BIG HUMAN TOPIC in the center, plus:
 - angle;
 - uniqueMechanism;
 - stories;
 - conversational questions;
 - visual metaphor.
 
-Do not include A1, A2, B1, Day numbers, or episode numbers in the title unless explicitly requested.
+"Learn English Fast" may be used as an SEO/title phrase, but do not make unsupported promises inside the promise field such as guaranteeing fluency in a specific number of days.
+
+Do not include A1, A2, Day numbers, or episode numbers in the title unless explicitly requested.
+B1 English Listening Practice may appear as an SEO wrapper when natural.
 
 --------------------------------------------------
 ORIGINALITY MIX
@@ -944,11 +992,11 @@ ORIGINALITY MIX
 
 Across repeated generations:
 
-- around 30% may be safe, immediately clickable topics;
-- around 40% should use fresher, less obvious everyday mechanisms;
+- around 30% may be safe, immediately clickable human topics;
+- around 40% should use fresher, less obvious human angles with strong mechanisms underneath;
 - around 30% may be higher-risk, higher-upside ideas that feel surprising but remain instantly understandable.
 
-Even safe topics need a specific mechanism.
+Even safe topics need a specific uniqueMechanism.
 
 Do not add an originality-level field.
 
@@ -959,16 +1007,31 @@ MULTI-TOPIC BALANCE
 --------------------------------------------------
 
 When generating 2 topics:
-- one may be a safe, searchable topic;
-- one should be a fresher everyday-life mechanism that is less obvious but still instantly understandable.
-- at least one title should include a concrete everyday scene or moment, not only a broad topic label.
+- one may be a safer searchable human topic;
+- one should be a fresher life/mindset/relationship/society angle that is less obvious but still instantly understandable.
+- at least one title should feel like a podcast-scale human idea, not only a tiny object scene.
 
-When generating 3 or more topics:
-- include no more than one very safe SEO topic;
-- include at least one everyday-life topic that is not directly about English learning, speaking, fluency, interviews, or study;
-- include at least one topic based on a concrete object or moment, such as a phone notification, a messy desk, an unanswered message, a calendar, a coffee cup, a grocery bag, a noisy neighbor, a delayed plan, or a forgotten task.
+When generating 5 or more topics, require approximately:
+- at least one life-lesson topic;
+- at least one mindset/confidence topic;
+- at least one relationships/social topic;
+- at least one higher-curiosity society or belief topic;
+- optionally one directly English-related topic.
 
-Do not output multiple topics with the same emotional engine, such as all being about nervousness, all about procrastination, or all about confidence.
+Do NOT require a title based on a concrete object.
+
+Do NOT require a phone notification, messy desk, coffee cup, grocery bag, laptop, or tiny task as a central topic.
+
+Objects may appear in visualHook but are not required as central topics.
+
+Also ensure emotional variety.
+
+Do not produce a batch where all topics are:
+- productivity;
+- confidence;
+- sadness;
+- overthinking;
+- English fluency.
 
 --------------------------------------------------
 RECENT ACCEPTED TOPICS
@@ -979,10 +1042,15 @@ Recent accepted/used topics to avoid repeating:
 ${JSON.stringify(recentAcceptedTopics, null, 2)}
 
 When this list is populated:
-- avoid the same central question;
+- avoid the same central question or conceptual engine;
 - avoid the same lived mechanism;
 - avoid cosmetic title rewrites;
-- avoid merely changing the setting while teaching the same idea.
+- avoid merely changing SEO wrappers while keeping the same claim;
+- judge duplication at the conceptual level, not from SEO phrases.
+
+Examples of conceptual duplicates to avoid:
+- "The Power Of Starting Again" and "Why You Should Give Yourself Another Chance"
+- "Why We Care What People Think" and "How To Stop Living For Other People"
 
 --------------------------------------------------
 RECENT MECHANISMS / VISUAL HOOKS
@@ -1002,37 +1070,57 @@ visualHook and thumbnailIdea must use Max and Sara in the established podcast st
 
 Do not build the thumbnail around a completely new illustrated world.
 
-The topic may be represented inside the studio using:
-- facial expressions;
+The thumbnail does NOT need to literally illustrate a tiny daily action.
+
+It should communicate the BIG IDEA with:
+- facial expression;
 - body language;
-- phones;
-- coffee cups;
-- clocks;
-- notebooks;
-- cards;
-- simple signs;
-- thought bubbles;
-- message bubbles;
-- calendars;
-- simple symbolic props;
-- one strong visual metaphor.
+- one symbolic prop;
+- thought bubble;
+- split choice;
+- broken/whole symbol;
+- road signs;
+- clock;
+- mask;
+- mirror;
+- open door;
+- scale;
+- heart;
+- social bubbles;
+- simple cards;
+- one strong metaphor.
 
-The visualHook should show the mechanism, not merely show Max and Sara talking.
+Keep it simple.
 
-Examples:
+Examples (STYLE ONLY):
 
-For a message-rewriting topic:
-Sara holds a phone showing several crossed-out message bubbles while Max looks amused.
+Why We Care Too Much About What People Think:
+Sara looks toward several floating opinion bubbles while Max points toward a card that says 'YOUR LIFE'.
 
-For a procrastination topic:
-Max has one tiny unchecked task on a giant calendar while Sara points at three crossed-out days.
+Starting Again:
+Max holds a crumpled old plan while Sara opens a clean new notebook.
 
-For a social-energy topic:
-Sara holds an invitation card while Max looks happily social on one side and exhausted on the other.
+Friendships Growing Apart:
+Max and Sara hold two phones with a widening gap between message bubbles.
+
+Do not force every thumbnail to use:
+- laptop;
+- notification;
+- coffee;
+- calendar;
+- tiny task.
 
 Thumbnail text must complement the YouTube title rather than repeat it word for word.
 
 Keep on-image text short, ideally 2–5 words.
+
+Preferred emotional thumbnail phrase style (STYLE ONLY — do not copy):
+'WHAT REALLY MATTERS?'
+'START AGAIN'
+'WHO ARE YOU LIVING FOR?'
+'TIME TO LET GO?'
+'WHY DO WE CARE?'
+'IS THIS SUCCESS?'
 
 Do not use Day badges.
 
@@ -1046,7 +1134,7 @@ The underlying IDEA must contain a specific mechanism the viewer has probably ex
 
 The title itself does NOT need to explicitly name that mechanism.
 
-The title may use a broader, simpler, more searchable framing as long as uniqueMechanism clearly defines what Max and Sara will actually explore.
+The title may use a broader, simpler, more emotionally ambitious framing as long as uniqueMechanism clearly defines what Max and Sara will actually explore.
 
 Each topic must answer:
 
@@ -1063,11 +1151,12 @@ RULES
 - Generate only one strong idea, not one safe idea by default${countText === "1" ? "" : " (when generating multiple, each must still be strong)"}.
 - Treat examples as forbidden outputs. Examples are not candidate topics.
 - Avoid near-duplicates of example titles, not only exact duplicates.
-- When generating multiple topics, at least one topic must come from a less obvious everyday-life mechanism, not from the safe example-topic family.
+- Prefer BIG HUMAN CONVERSATION HOOK titles over micro-object titles.
+- Do not let batches default to laptop/task/notification/message/coffee micro-topics.
 - Do not let the first batch after this prompt default to job interviews, stopping time waste, small talk, talking about yourself, or generic fluency topics unless explicitly requested by the user.
-- Prefer emotionally specific titles over flat topic labels when clarity and searchability remain similar.
-- Do not make titles artificially dramatic. The emotion should come from a concrete daily moment.
-- Avoid repeating the exact title pattern “Why One...” too often across batches. Use it when it is the best natural title, not as a default formula.
+- Prefer emotionally significant titles over object-specific micro-headlines when clarity remains similar.
+- Do not make titles artificially dramatic. Emotion should come from a meaningful human idea.
+- Avoid repeating the exact title pattern “Why One...” across batches.
 - Prefer a strong human topic over a narrow language syllabus item.
 - Keep English-learning value naturally embedded.
 - Avoid turning every topic into advice about fluency.
@@ -1079,7 +1168,8 @@ RULES
 - Max and Sara should have genuine room for different opinions or experiences.
 - The topic should generate natural questions between the hosts.
 - Include an emotional trigger, but do not use manipulative fear.
-- The promise must be realistic.
+- The promise must be realistic and must include both human conversation payoff and natural English listening payoff.
+- Do not make guaranteed psychological, financial, health, or language-learning claims.
 - Make each visualHook meaningfully different from recent episodes.
 - Keep the topic understandable for A1–B1 English.
 - Avoid academic, political, highly technical, or specialist topics unless they can be discussed through ordinary daily experience.
@@ -1090,6 +1180,29 @@ RULES
   high
 
 --------------------------------------------------
+CRITICAL SELF-AUDIT
+--------------------------------------------------
+
+Before returning each topic, internally verify:
+
+- Is the title built around a meaningful human conversation?
+- Is the idea interesting outside English learning?
+- Does it feel more like a podcast episode than a micro-productivity article?
+- Is the title broader than the uniqueMechanism?
+- Is the uniqueMechanism still specific enough to prevent generic motivation?
+- Can Max and Sara disagree or have different experiences?
+- Can the subject sustain 20–30 minutes?
+- Can it be explained using simple A1–B1 English?
+- Does the angle include ordinary examples?
+- Is the English-learning benefit naturally embedded?
+- Does the title use one of the preferred SEO structures?
+- Is it distinct from reference examples and recent topics?
+- Is the thumbnail idea emotionally clear?
+- Is this another laptop/task/notification/message micro-topic?
+
+If the last answer is yes without a strong reason, regenerate.
+
+--------------------------------------------------
 REQUIRED TOPIC FIELDS
 --------------------------------------------------
 
@@ -1098,28 +1211,35 @@ ${editorialInstructions.requiredTopicFields.map((field) => `- ${field}`).join("\
 Field meanings:
 
 category:
-One valid category key from the rotation above.
+Exactly one valid category key from the rotation above.
+Allowed keys only:
+english_communication, daily_life, habits_productivity, work_study, social_relationships, feelings_mindset, food_lifestyle, home_city, travel_culture, technology_media.
+Do not invent new category keys such as peace_happiness, personal_growth, or mindset_confidence.
+Map peace/happiness/mindset ideas to feelings_mindset.
+Map life-lesson ideas to daily_life.
+Map growth/restart ideas to habits_productivity.
+Map society/belief ideas to travel_culture.
 
 title:
-The proposed YouTube title.
+The proposed YouTube title (big human idea + SEO wrappers).
 
 topic:
 One sentence describing what Max and Sara will talk about.
 
 angle:
-The focused editorial perspective that keeps the episode from becoming generic.
+The focused editorial perspective that keeps the episode from becoming generic, including ordinary examples.
 
 uniqueMechanism:
-The concrete lived mechanism, tension, pattern, or dynamic the episode explores.
+The concrete tension, pattern, or dynamic that gives Max and Sara enough material — more specific than the title.
 
 trigger:
-The recognizable feeling or experience that makes the viewer click.
+A provocative question, recognizable fear, life tension, uncomfortable truth, aspiration, relationship experience, disagreement, or strong curiosity. It does NOT always need to be a tiny observable object event.
 
 promise:
-What the listener will understand, recognize, or feel clearer about after listening, plus the natural English exposure they receive.
+BOTH (1) human conversation payoff and (2) natural English listening payoff. Realistic. No guaranteed fluency/life-change claims.
 
 visualHook:
-One studio-based visual scene that makes the central mechanism immediately visible.
+One studio-based visual scene that communicates the big idea with expression, body language, or one clear metaphor.
 
 thumbnailIdea:
 Thumbnail composition plus short complementary on-image text using single quotes.
@@ -1142,7 +1262,7 @@ JSON string rules are critical:
 - Never put raw double quotes inside a string value.
 - For on-image thumbnail text, use single quotes.
 - Example:
-  on-image text: 'WHY DID I SAY YES?'
+  on-image text: 'WHY DO WE CARE?'
 - Escape any genuinely required double quote as \\"
 
 Return exactly this JSON shape:
@@ -1151,13 +1271,13 @@ Return exactly this JSON shape:
   "topics": [
     {
       "category": "${exampleCategory}",
-      "title": "Example Title That Names a Specific Everyday Mechanism",
+      "title": "Example Big Human Idea | Easy English Podcast For Conversation Practice | Learn English Fast",
       "topic": "One-sentence summary of the conversation topic.",
-      "angle": "The focused editorial angle that gives Max and Sara enough material for a natural long-form conversation.",
+      "angle": "The focused editorial angle with ordinary examples that gives Max and Sara enough material for a natural long-form conversation.",
       "uniqueMechanism": "The concrete everyday mechanism or conversational dynamic this episode explores.",
-      "trigger": "The recognizable emotional or everyday trigger for the viewer.",
+      "trigger": "The recognizable emotional, relational, or life tension that makes the viewer click.",
       "promise": "What the viewer will understand or recognize after listening while absorbing useful natural English.",
-      "visualHook": "One clear studio-based visual scene that makes the mechanism visible.",
+      "visualHook": "One clear studio-based visual scene that communicates the big idea.",
       "thumbnailIdea": "Thumbnail composition + short complementary on-image text: 'EXAMPLE TEXT'",
       "repetitionRisk": "low"
     }

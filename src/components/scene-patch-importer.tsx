@@ -1,13 +1,14 @@
 "use client";
 
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   buildScenePatchPreview,
   summarizePatchItemPreview,
   type ScenePatchPreview,
 } from "@/lib/scene-patch";
+import { fetchPatchScenes } from "@/lib/fetch-patch-scenes";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,21 +17,14 @@ type ScenePatchImporterProps = {
   action: (formData: FormData) => void | Promise<void>;
   videoId: string;
   channelKey: string;
-  scenes: {
-    id: string;
-    sortOrder: number;
-    scriptText: string;
-    visualIdea: string | null;
-    imagePrompt: string | null;
-    hasGeneratedImage?: boolean;
-  }[];
+  scenesJsonUrl: string;
 };
 
 export function ScenePatchImporter({
   action,
   videoId,
   channelKey,
-  scenes,
+  scenesJsonUrl,
 }: ScenePatchImporterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [rawText, setRawText] = useState("");
@@ -38,43 +32,65 @@ export function ScenePatchImporter({
   const [confirmLargePatch, setConfirmLargePatch] = useState(false);
   const [confirmDuplicateTargets, setConfirmDuplicateTargets] = useState(false);
   const [confirmClearImages, setConfirmClearImages] = useState(false);
+  const [preview, setPreview] = useState<ScenePatchPreview | null>(null);
+  const [parseError, setParseError] = useState("");
+  const [loadingScenes, setLoadingScenes] = useState(false);
 
-  const { preview, parseError } = useMemo<{
-    preview: ScenePatchPreview | null;
-    parseError: string;
-  }>(() => {
+  useEffect(() => {
     if (!rawText.trim()) {
-      return { preview: null, parseError: "" };
+      setPreview(null);
+      setParseError("");
+      setLoadingScenes(false);
+      return;
     }
 
-    try {
-      return {
-        preview: buildScenePatchPreview({
-        rawText,
-        scenes: scenes.map((scene) => ({
-          id: scene.id,
-          order: scene.sortOrder,
-          scriptText: scene.scriptText,
-          visualIdea: scene.visualIdea,
-          imagePrompt: scene.imagePrompt,
-          hasGeneratedImage: Boolean(scene.hasGeneratedImage),
-        })),
-        channelKey,
-        currentVideoId: videoId,
-        allowScriptTextChanges,
-        }),
-        parseError: "",
-      };
-    } catch (error) {
-      return {
-        preview: null,
-        parseError:
+    let cancelled = false;
+    setLoadingScenes(true);
+
+    void (async () => {
+      try {
+        const scenes = await fetchPatchScenes(scenesJsonUrl);
+        if (cancelled) return;
+        setPreview(
+          buildScenePatchPreview({
+            rawText,
+            scenes: scenes.map((scene) => ({
+              id: scene.id,
+              order: scene.sortOrder,
+              scriptText: scene.scriptText,
+              visualIdea: scene.visualIdea,
+              imagePrompt: scene.imagePrompt,
+              hasGeneratedImage: Boolean(scene.hasGeneratedImage),
+            })),
+            channelKey,
+            currentVideoId: videoId,
+            allowScriptTextChanges,
+          }),
+        );
+        setParseError("");
+      } catch (error) {
+        if (cancelled) return;
+        setPreview(null);
+        setParseError(
           error instanceof Error
             ? error.message
             : "Could not parse patch JSON.",
-      };
-    }
-  }, [allowScriptTextChanges, channelKey, rawText, scenes, videoId]);
+        );
+      } finally {
+        if (!cancelled) setLoadingScenes(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    allowScriptTextChanges,
+    channelKey,
+    rawText,
+    scenesJsonUrl,
+    videoId,
+  ]);
 
   async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -92,6 +108,7 @@ export function ScenePatchImporter({
   const canSubmit =
     Boolean(preview) &&
     !parseError &&
+    !loadingScenes &&
     (preview?.validCount ?? 0) > 0 &&
     (!requiresLargePatchConfirmation || confirmLargePatch) &&
     (!requiresDuplicateConfirmation || confirmDuplicateTargets) &&
@@ -145,6 +162,10 @@ export function ScenePatchImporter({
               />
             </label>
           </div>
+
+          {loadingScenes ? (
+            <p className="text-sm text-muted-foreground">Loading scene context…</p>
+          ) : null}
 
           {parseError ? (
             <p className="text-sm text-destructive">{parseError}</p>

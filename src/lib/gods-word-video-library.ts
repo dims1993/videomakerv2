@@ -95,7 +95,7 @@ export async function attachGodsWordFinalClipToScene({
   const clipLocalPath = sceneClipRelativePath(videoId, fileName);
   const destAbs = path.join(process.cwd(), clipLocalPath);
   await copyFile(libraryFile.absolutePath, destAbs);
-  await removePreviousSceneClip(previousClipLocalPath);
+  await removePreviousSceneClip(previousClipLocalPath, clipLocalPath);
 
   const durationSec = Math.max(1, Math.ceil(probe.durationSec));
   const exclusiveAudio = await ensureExclusiveSceneVoiceoverAudio({

@@ -681,6 +681,9 @@ async function buildVoiceoverFormData(videoId: string) {
       JSON.stringify(video.voiceoverSectionVoicesJson),
     );
   }
+  // Pipeline expects voiceoverStatus "ready" (master stitched). Match UI defaults.
+  formData.set("autoStitchMasterVoiceover", "on");
+  formData.set("updateSceneDurationsFromAudio", "on");
   return formData;
 }
 

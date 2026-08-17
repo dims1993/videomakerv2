@@ -69,6 +69,19 @@ test("extractScriptFromResponse rejects score JSON", () => {
   );
 });
 
+test("extractScriptFromResponse rejects error-only JSON", () => {
+  assert.throws(
+    () =>
+      extractScriptFromResponse(
+        JSON.stringify({
+          error:
+            'The attached request file does not define a JSON output format. It explicitly requires plain script text and says: "No JSON wrapper."',
+        }),
+      ),
+    /error JSON/i,
+  );
+});
+
 test("extractScriptFromResponse accepts Max & Sara plain podcast scripts", () => {
   const script = extractScriptFromResponse(
     [

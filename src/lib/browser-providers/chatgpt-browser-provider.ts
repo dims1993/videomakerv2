@@ -468,7 +468,9 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
       const userBaselineCount = await this.page!.locator(USER_SELECTOR).count();
       const assistantBaselineText = (await this.readLastAssistantText()).trim();
 
-      await this.insertPrompt(input.prompt);
+      await this.insertPrompt(input.prompt, {
+        expectReplyKind: input.expectReplyKind ?? "any",
+      });
       await this.waitForSendEnabled(15000, {
         required: true,
         context: "before clicking Send",
@@ -2224,7 +2226,10 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     }
   }
 
-  private async insertPrompt(prompt: string) {
+  private async insertPrompt(
+    prompt: string,
+    options?: { expectReplyKind?: BrowserExpectReplyKind },
+  ) {
     if (!this.page) {
       throw new Error("ChatGPT session is not open.");
     }
@@ -2235,7 +2240,9 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     // must NOT go into the ProseMirror composer: insertText/execCommand freezes
     // or OOMs the ChatGPT tab, then Send appears to click but no message lands.
     if (prompt.length >= 8000) {
-      await this.insertLargePromptAsAttachment(prompt);
+      await this.insertLargePromptAsAttachment(prompt, {
+        expectReplyKind: options?.expectReplyKind ?? "any",
+      });
       this.lastPromptUsedAttachment = true;
       return;
     }
@@ -2289,7 +2296,10 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
    * Attach a large request as a .md file and only put a short instruction
    * in the composer. Avoids ProseMirror OOM on ~100k visual-plan prompts.
    */
-  private async insertLargePromptAsAttachment(prompt: string) {
+  private async insertLargePromptAsAttachment(
+    prompt: string,
+    options?: { expectReplyKind?: BrowserExpectReplyKind },
+  ) {
     if (!this.page) {
       throw new Error("ChatGPT session is not open.");
     }
@@ -2302,6 +2312,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     console.info("[chatgpt-browser] attaching large prompt as file", {
       promptChars: prompt.length,
       tmpPath,
+      expectReplyKind: options?.expectReplyKind ?? "any",
     });
 
     try {
@@ -2358,13 +2369,24 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
         );
       }
 
-      const shortInstruction = [
-        "Read the attached request file completely and follow it exactly.",
-        "Return only the JSON output format required by that attached file.",
-        "Paste the JSON inline in the assistant message.",
-        "Do not attach, upload, or link a response file.",
-        "Do not return markdown or explanations.",
-      ].join("\n");
+      // Script Writer / podcast drafts require plain narration. Topic/visual-plan
+      // batches require JSON. Do not force JSON when the attached file forbids it.
+      const shortInstruction =
+        options?.expectReplyKind === "script"
+          ? [
+              "Read the attached request file completely and follow it exactly.",
+              "Return ONLY the plain script text required by that attached file (bracket labels + dialogue).",
+              "Paste the script inline in the assistant message.",
+              "Do not attach, upload, or link a response file.",
+              "Do not return JSON, markdown fences, or explanations.",
+            ].join("\n")
+          : [
+              "Read the attached request file completely and follow it exactly.",
+              "Return only the JSON output format required by that attached file.",
+              "Paste the JSON inline in the assistant message.",
+              "Do not attach, upload, or link a response file.",
+              "Do not return markdown or explanations.",
+            ].join("\n");
 
       await this.insertComposerText(shortInstruction);
 

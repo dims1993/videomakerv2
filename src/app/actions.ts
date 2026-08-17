@@ -227,6 +227,7 @@ import {
   normalizePauseAfterMs,
 } from "@/lib/podcast-pause-cues";
 import {
+  DEFAULT_SCENE_PAUSE_AFTER_MS,
   ensureSceneVoiceoversDir,
   getPauseAfterScene,
   normalizeSceneVoiceoverText,
@@ -244,6 +245,14 @@ import {
   normalizeVoiceoverSectionVoices,
   resolveSceneVoiceoverSettings,
 } from "@/lib/voiceover-section-voices";
+import {
+  PODCAST_INTRO_SCENE_PAUSE_AFTER_MS,
+  mapScenesToPodcastDeliveryModes,
+  resolvePodcastHostKey,
+  resolvePodcastSectionSpeakingRate,
+  type PodcastDeliveryMode,
+} from "@/lib/podcast-voice-profiles";
+import { resolvePodcastEpisodeFormat } from "@/lib/podcast-english-lessons-script-shared";
 import {
   buildBibleOneYearDayConfigFromPlan,
   extractBibleOneYearDayConfig,
@@ -3567,11 +3576,38 @@ function redirectToVoiceover(
   type: "error" | "success",
   message: string,
 ): never {
+  const id = videoId.trim();
+  if (!id) {
+    throw new Error(
+      `Voiceover redirect missing video id: ${message}`,
+    );
+  }
   redirect(
-    `/videos/${videoId}?tab=voiceover&voiceoverNoticeType=${type}&voiceoverNotice=${encodeURIComponent(
+    `/videos/${id}?tab=voiceover&voiceoverNoticeType=${type}&voiceoverNotice=${encodeURIComponent(
       message,
     )}`,
   );
+}
+
+function voiceoverSegmentIdFromActionArgs(
+  segmentIdOrFormData: string | FormData,
+  formData?: FormData,
+) {
+  if (typeof segmentIdOrFormData === "string") {
+    return {
+      segmentId: segmentIdOrFormData.trim(),
+      formData,
+      videoIdHint: formData?.get("videoId")?.toString().trim() || "",
+    };
+  }
+
+  // formAction sometimes delivers FormData as the only argument.
+  return {
+    segmentId:
+      segmentIdOrFormData.get("voiceoverSegmentId")?.toString().trim() || "",
+    formData: segmentIdOrFormData,
+    videoIdHint: segmentIdOrFormData.get("videoId")?.toString().trim() || "",
+  };
 }
 
 function redirectToRenderDraft(
@@ -4476,6 +4512,11 @@ async function generateVoiceoverForScenes(
     select: {
       script: true,
       voiceoverSectionVoicesJson: true,
+      channelKey: true,
+      title: true,
+      topic: true,
+      topicCategory: true,
+      ideaJson: true,
     },
   });
   const selectedOrders = new Set(options.selectedOrders ?? []);
@@ -4561,6 +4602,22 @@ async function generateVoiceoverForScenes(
       assignment,
     ]),
   );
+  const channel = getChannelProfile(video?.channelKey);
+  const podcastEpisodeFormat =
+    video?.channelKey === PODCAST_ENGLISH_LESSONS_CHANNEL_KEY
+      ? resolvePodcastEpisodeFormat({
+          channelKey: video.channelKey,
+          ideaJson: video.ideaJson,
+          topicEngine: channel.editorialInstructions?.topicEngine,
+          title: video.title,
+          topic: video.topic,
+        })
+      : null;
+  const applyMaxSaraVoiceProfiles =
+    podcastEpisodeFormat === "max_sara_conversation";
+  const podcastDeliveryBySortOrder = applyMaxSaraVoiceProfiles
+    ? mapScenesToPodcastDeliveryModes(allScenesForSections)
+    : null;
   const actingCuesBySortOrder = video?.script?.trim()
     ? mapPodcastActingCuesToScenes({
         script: video.script,
@@ -4697,17 +4754,29 @@ async function generateVoiceoverForScenes(
       existingPauseAfterMs: scene.pauseAfterMs,
     });
 
+    const sectionAssignment = sectionBySortOrder.get(scene.sortOrder);
+    const deliveryMode: PodcastDeliveryMode =
+      podcastDeliveryBySortOrder?.get(scene.sortOrder) ?? "main";
+    const introGapMs =
+      applyMaxSaraVoiceProfiles &&
+      deliveryMode === "intro" &&
+      (scene.pauseAfterMs == null ||
+        !Number.isFinite(scene.pauseAfterMs) ||
+        scene.pauseAfterMs <= DEFAULT_SCENE_PAUSE_AFTER_MS)
+        ? PODCAST_INTRO_SCENE_PAUSE_AFTER_MS
+        : null;
+    const effectivePauseAfterMs = introGapMs ?? pauseAfterMs;
+
     await prisma.scene.update({
       where: { id: scene.id },
       data: {
         voiceoverStatus: "pending",
         voiceoverError: null,
-        pauseAfterMs,
+        pauseAfterMs: effectivePauseAfterMs,
       },
     });
 
     try {
-      const sectionAssignment = sectionBySortOrder.get(scene.sortOrder);
       const resolvedVoice = resolveSceneVoiceoverSettings({
         sectionKind: sectionAssignment?.sectionKind ?? "other",
         sectionVoices,
@@ -4722,6 +4791,21 @@ async function generateVoiceoverForScenes(
         namedVoices,
         resolvedVoice.voiceId || generationOptions.voiceId || "",
       );
+      const podcastHost = applyMaxSaraVoiceProfiles
+        ? resolvePodcastHostKey({
+            voiceId: resolvedVoice.voiceId || generationOptions.voiceId,
+            sectionKind: sectionAssignment?.sectionKind,
+          })
+        : null;
+      const podcastSectionSpeed =
+        podcastHost != null
+          ? resolvePodcastSectionSpeakingRate({
+              host: podcastHost,
+              mode: deliveryMode,
+              explicitSpeed: resolvedVoice.speed,
+              spokenText: speech.spokenText,
+            })
+          : null;
       const sceneGenerationOptions = {
         ...generationOptions,
         voiceId: resolvedVoice.voiceId || generationOptions.voiceId,
@@ -4730,11 +4814,12 @@ async function generateVoiceoverForScenes(
         // Otherwise prefer per-speaker/section speed (e.g. slower Leo) over global.
         ...(actingCues.length > 0 && voiceProvider === "elevenlabs"
           ? { speed: null }
-          : resolvedVoice.speed != null
-            ? { speed: resolvedVoice.speed }
-            : {}),
+          : podcastSectionSpeed != null
+            ? { speed: podcastSectionSpeed }
+            : resolvedVoice.speed != null
+              ? { speed: resolvedVoice.speed }
+              : {}),
       };
-
       const abortController = new AbortController();
       const cancelPoll = setInterval(() => {
         void isCanceledNow().then((canceled) => {
@@ -4767,9 +4852,11 @@ async function generateVoiceoverForScenes(
             referenceFileName:
               chatterboxMode === "clone" ? referenceFileName : undefined,
             speed:
-              resolvedVoice.speed != null
-                ? resolvedVoice.speed
-                : generationOptions.speed,
+              podcastSectionSpeed != null
+                ? podcastSectionSpeed
+                : resolvedVoice.speed != null
+                  ? resolvedVoice.speed
+                  : generationOptions.speed,
             signal: abortController.signal,
           });
         } else if (voiceProvider === GOOGLE_TTS_PROVIDER) {
@@ -4783,12 +4870,16 @@ async function generateVoiceoverForScenes(
               googleConfig?.languageCode ||
               namedVoice?.googleLanguageCode ||
               languageCodeFromVoiceName(googleVoiceId),
+            // Max/Sara section rates beat flat catalog speakingRate so intro
+            // can be livelier than Word Tour / closing without one flat style.
             speed:
-              googleConfig?.speakingRate != null
-                ? googleConfig.speakingRate
-                : resolvedVoice.speed != null
-                  ? resolvedVoice.speed
-                  : generationOptions.speed,
+              podcastSectionSpeed != null
+                ? podcastSectionSpeed
+                : googleConfig?.speakingRate != null
+                  ? googleConfig.speakingRate
+                  : resolvedVoice.speed != null
+                    ? resolvedVoice.speed
+                    : generationOptions.speed,
             audioEncoding: googleConfig?.audioEncoding,
             signal: abortController.signal,
           });
@@ -4861,19 +4952,26 @@ async function generateVoiceoverForScenes(
             speed:
               actingCues.length > 0 && voiceProvider === "elevenlabs"
                 ? null
-                : (resolvedVoice.speed ?? generationOptions.speed),
+                : (podcastSectionSpeed ??
+                  resolvedVoice.speed ??
+                  generationOptions.speed),
             sectionKind: sectionAssignment?.sectionKind ?? "other",
             sectionLabel: sectionAssignment?.sectionLabel ?? null,
+            podcastDeliveryMode: applyMaxSaraVoiceProfiles
+              ? deliveryMode
+              : undefined,
+            podcastHost: podcastHost ?? undefined,
             actingCues:
               voiceProvider === "elevenlabs"
                 ? actingCues.map((cue: { audioTag: string }) => cue.audioTag)
                 : [],
           } as Prisma.InputJsonValue,
-          pauseAfterMs,
+          pauseAfterMs: effectivePauseAfterMs,
         },
       });
       generated += 1;
-      cumulativeTimeSec += (durationSec ?? 0) + pauseAfterMs / 1000;
+      cumulativeTimeSec +=
+        (durationSec ?? 0) + effectivePauseAfterMs / 1000;
       const voiceLabel =
         resolvedVoice.voiceName?.trim() ||
         namedVoice?.name?.trim() ||
@@ -4883,8 +4981,17 @@ async function generateVoiceoverForScenes(
         voiceProvider === "elevenlabs" && actingCues.length > 0
           ? ` + ${actingCues.map((cue: { audioTag: string }) => cue.audioTag).join(" ")} via ${modelId}`
           : "";
+      const deliveryLabel =
+        applyMaxSaraVoiceProfiles && podcastHost
+          ? ` · ${podcastHost}/${deliveryMode}@${(
+              podcastSectionSpeed ??
+              resolvedVoice.speed ??
+              generationOptions.speed ??
+              1
+            ).toFixed(2)}`
+          : "";
       await updateProcess(options.processId, {
-        logMessage: `Generated scene ${scene.sortOrder} with ${voiceProvider} · ${voiceLabel} [${sectionAssignment?.sectionKind ?? "other"}]${cueLabel} (${(durationSec ?? 0).toFixed(1)}s).`,
+        logMessage: `Generated scene ${scene.sortOrder} with ${voiceProvider} · ${voiceLabel} [${sectionAssignment?.sectionKind ?? "other"}]${deliveryLabel}${cueLabel} (${(durationSec ?? 0).toFixed(1)}s).`,
         logLevel: "success",
       });
     } catch (error) {
@@ -4970,6 +5077,7 @@ export async function generateSceneVoiceovers(videoId: string, formData: FormDat
   let result: Awaited<ReturnType<typeof generateVoiceoverForScenes>>;
   let autoStitch: Awaited<ReturnType<typeof maybeAutoStitchAfterSceneVoiceovers>> =
     null;
+  const stitchOptions = autoStitchOptionsFromForm(formData);
   try {
     result = await generateVoiceoverForScenes(videoId, formData, {
       overwrite: formData.get("overwriteSceneVoiceovers") === "on",
@@ -4983,6 +5091,7 @@ export async function generateSceneVoiceovers(videoId: string, formData: FormDat
       videoId,
       result,
       processId,
+      stitchOptions,
     );
   } catch (error) {
     if (isRedirectError(error)) {
@@ -5006,11 +5115,11 @@ export async function generateSceneVoiceovers(videoId: string, formData: FormDat
   redirectToVoiceover(
     videoId,
     result.failed > 0 ? "error" : "success",
-    `Scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${
-      autoStitch
-        ? ` Auto-stitched master (${autoStitch.durationSec.toFixed(1)}s).`
-        : ""
-    }`,
+    `Scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${autoStitchStatusSuffix(
+      autoStitch,
+      stitchOptions,
+      result.failed,
+    )}`,
   );
 }
 
@@ -5036,6 +5145,7 @@ export async function generateSelectedSceneVoiceovers(
   let result: Awaited<ReturnType<typeof generateVoiceoverForScenes>>;
   let autoStitch: Awaited<ReturnType<typeof maybeAutoStitchAfterSceneVoiceovers>> =
     null;
+  const stitchOptions = autoStitchOptionsFromForm(formData);
   try {
     result = await generateVoiceoverForScenes(videoId, formData, {
       selectedOrders,
@@ -5047,6 +5157,7 @@ export async function generateSelectedSceneVoiceovers(
       videoId,
       result,
       processId,
+      stitchOptions,
     );
   } catch (error) {
     if (isRedirectError(error)) {
@@ -5070,11 +5181,11 @@ export async function generateSelectedSceneVoiceovers(
   redirectToVoiceover(
     videoId,
     result.failed > 0 ? "error" : "success",
-    `Selected scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${
-      autoStitch
-        ? ` Auto-stitched master (${autoStitch.durationSec.toFixed(1)}s).`
-        : ""
-    }`,
+    `Selected scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${autoStitchStatusSuffix(
+      autoStitch,
+      stitchOptions,
+      result.failed,
+    )}`,
   );
 }
 
@@ -5477,7 +5588,7 @@ export async function attachSceneClipVideo(
       // ignore temp cleanup
     }
 
-    await removePreviousSceneClip(scene.clipLocalPath);
+    await removePreviousSceneClip(scene.clipLocalPath, stored.relativePath);
     await prisma.scene.update({
       where: { id: scene.id },
       data: {
@@ -5687,6 +5798,7 @@ export async function generateMissingSceneVoiceovers(
   let result: Awaited<ReturnType<typeof generateVoiceoverForScenes>>;
   let autoStitch: Awaited<ReturnType<typeof maybeAutoStitchAfterSceneVoiceovers>> =
     null;
+  const stitchOptions = autoStitchOptionsFromForm(formData);
   try {
     result = await generateVoiceoverForScenes(videoId, formData, {
       missingOnly: true,
@@ -5698,6 +5810,7 @@ export async function generateMissingSceneVoiceovers(
       videoId,
       result,
       processId,
+      stitchOptions,
     );
   } catch (error) {
     if (isRedirectError(error)) {
@@ -5721,13 +5834,11 @@ export async function generateMissingSceneVoiceovers(
   redirectToVoiceover(
     videoId,
     result.failed > 0 ? "error" : "success",
-    `Missing scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${
-      autoStitch
-        ? ` Auto-stitched master (${autoStitch.durationSec.toFixed(1)}s).`
-        : result.failed === 0
-          ? " Master not auto-stitched yet — run Stitch when all scenes are ready."
-          : ""
-    }`,
+    `Missing scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${autoStitchStatusSuffix(
+      autoStitch,
+      stitchOptions,
+      result.failed,
+    )}`,
   );
 }
 
@@ -5750,6 +5861,7 @@ export async function retryFailedSceneVoiceovers(
   let result: Awaited<ReturnType<typeof generateVoiceoverForScenes>>;
   let autoStitch: Awaited<ReturnType<typeof maybeAutoStitchAfterSceneVoiceovers>> =
     null;
+  const stitchOptions = autoStitchOptionsFromForm(formData);
   try {
     result = await generateVoiceoverForScenes(videoId, formData, {
       retryFailedOnly: true,
@@ -5761,6 +5873,7 @@ export async function retryFailedSceneVoiceovers(
       videoId,
       result,
       processId,
+      stitchOptions,
     );
   } catch (error) {
     if (isRedirectError(error)) {
@@ -5784,11 +5897,11 @@ export async function retryFailedSceneVoiceovers(
   redirectToVoiceover(
     videoId,
     result.failed > 0 ? "error" : "success",
-    `Retried scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${
-      autoStitch
-        ? ` Auto-stitched master (${autoStitch.durationSec.toFixed(1)}s).`
-        : ""
-    }`,
+    `Retried scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${autoStitchStatusSuffix(
+      autoStitch,
+      stitchOptions,
+      result.failed,
+    )}`,
   );
 }
 
@@ -6128,7 +6241,14 @@ async function runStitchSceneVoiceovers(
 async function maybeAutoStitchAfterSceneVoiceovers(
   videoId: string,
   generation: { failed: number },
+  options: {
+    enabled?: boolean;
+    updateSceneDurationsFromAudio?: boolean;
+  } = {},
 ) {
+  if (options.enabled === false) {
+    return null;
+  }
   if (generation.failed > 0) {
     return null;
   }
@@ -6136,7 +6256,8 @@ async function maybeAutoStitchAfterSceneVoiceovers(
     return null;
   }
   return runStitchSceneVoiceovers(videoId, {
-    updateSceneDurationsFromAudio: true,
+    updateSceneDurationsFromAudio:
+      options.updateSceneDurationsFromAudio === true,
     processTitle: "Auto-stitching scene voiceover",
   });
 }
@@ -6146,9 +6267,17 @@ async function safeMaybeAutoStitchAfterSceneVoiceovers(
   videoId: string,
   generation: { failed: number },
   processId?: string,
+  options: {
+    enabled?: boolean;
+    updateSceneDurationsFromAudio?: boolean;
+  } = {},
 ) {
   try {
-    return await maybeAutoStitchAfterSceneVoiceovers(videoId, generation);
+    return await maybeAutoStitchAfterSceneVoiceovers(
+      videoId,
+      generation,
+      options,
+    );
   } catch (stitchError) {
     if (isRedirectError(stitchError)) {
       throw stitchError;
@@ -6164,6 +6293,31 @@ async function safeMaybeAutoStitchAfterSceneVoiceovers(
     }
     return null;
   }
+}
+
+function autoStitchOptionsFromForm(formData: FormData) {
+  return {
+    enabled: formData.get("autoStitchMasterVoiceover") === "on",
+    updateSceneDurationsFromAudio:
+      formData.get("updateSceneDurationsFromAudio") === "on",
+  };
+}
+
+function autoStitchStatusSuffix(
+  autoStitch: { durationSec: number } | null,
+  options: { enabled?: boolean },
+  generationFailed: number,
+) {
+  if (autoStitch) {
+    return ` Auto-stitched master (${autoStitch.durationSec.toFixed(1)}s).`;
+  }
+  if (options.enabled === false) {
+    return " Auto-stitch off — run Stitch master voiceover when ready.";
+  }
+  if (generationFailed === 0) {
+    return " Master not auto-stitched yet — run Stitch when all scenes are ready.";
+  }
+  return "";
 }
 
 export async function stitchSceneVoiceovers(videoId: string, formData: FormData) {
@@ -7379,13 +7533,24 @@ async function persistAlignmentProviderPreference(
 }
 
 export async function generateSubtitlesForSegment(
-  voiceoverSegmentId: string,
+  voiceoverSegmentIdOrFormData: string | FormData,
   formData?: FormData,
 ) {
+  const {
+    segmentId: voiceoverSegmentId,
+    formData: data,
+    videoIdHint,
+  } = voiceoverSegmentIdFromActionArgs(voiceoverSegmentIdOrFormData, formData);
+
   let result: { videoId: string; segmentIndex: number; cueCount: number };
-  const preferred = alignmentProviderFromFormData(formData);
+  const preferred = alignmentProviderFromFormData(data);
 
   try {
+    if (!voiceoverSegmentId) {
+      throw new Error(
+        "Voiceover segment not found — refresh the page (stitch may have rebuilt segments).",
+      );
+    }
     const segment = await prisma.voiceoverSegment.findUnique({
       where: { id: voiceoverSegmentId },
       select: { videoId: true },
@@ -7397,17 +7562,31 @@ export async function generateSubtitlesForSegment(
       alignmentProvider: preferred,
     });
   } catch (error) {
-    const segment = await prisma.voiceoverSegment.findUnique({
-      where: { id: voiceoverSegmentId },
-      select: { videoId: true, index: true },
-    });
+    if (isRedirectError(error)) {
+      throw error;
+    }
+    const segment = voiceoverSegmentId
+      ? await prisma.voiceoverSegment.findUnique({
+          where: { id: voiceoverSegmentId },
+          select: { videoId: true, index: true },
+        })
+      : null;
+
+    const videoId = segment?.videoId || videoIdHint;
+    if (!videoId) {
+      throw new Error(
+        error instanceof Error
+          ? error.message
+          : "Subtitle generation failed (missing video context). Refresh and try again.",
+      );
+    }
 
     redirectToVoiceover(
-      segment?.videoId ?? "",
+      videoId,
       "error",
       `Segment ${segment?.index ?? ""} subtitle generation failed: ${
         error instanceof Error ? error.message : "alignment failed"
-      }`,
+      }`.replace(/\s+/g, " ").trim(),
     );
   }
 
@@ -7420,10 +7599,43 @@ export async function generateSubtitlesForSegment(
 }
 
 export async function regenerateSubtitlesForSegment(
-  voiceoverSegmentId: string,
+  voiceoverSegmentIdOrFormData: string | FormData,
   formData?: FormData,
 ) {
-  await generateSubtitlesForSegment(voiceoverSegmentId, formData);
+  await generateSubtitlesForSegment(voiceoverSegmentIdOrFormData, formData);
+}
+
+/** Single form action for per-row subtitle buttons (avoids N bound actions in RSC HTML). */
+export async function dispatchSegmentSubtitleRowAction(formData: FormData) {
+  const raw = formData.get("subtitleRowAction")?.toString().trim() || "";
+  const separator = raw.indexOf("|");
+  const intent = separator >= 0 ? raw.slice(0, separator) : raw;
+  const targetId = separator >= 0 ? raw.slice(separator + 1) : "";
+
+  switch (intent) {
+    case "generate":
+    case "regenerate": {
+      if (targetId) {
+        formData.set("voiceoverSegmentId", targetId);
+      }
+      return intent === "generate"
+        ? generateSubtitlesForSegment(formData)
+        : regenerateSubtitlesForSegment(formData);
+    }
+    case "mark-ready": {
+      if (targetId) {
+        formData.set("subtitleSegmentId", targetId);
+      }
+      return markSubtitleSegmentReady(formData);
+    }
+    default: {
+      const videoId = formData.get("videoId")?.toString().trim() || "";
+      if (videoId) {
+        redirectToVoiceover(videoId, "error", "Unknown subtitle row action.");
+      }
+      throw new Error("Unknown subtitle row action.");
+    }
+  }
 }
 
 export async function generateSubtitlesForAllReadySegments(
@@ -7592,7 +7804,35 @@ export async function combineSegmentSubtitles(videoId: string) {
   );
 }
 
-export async function markSubtitleSegmentReady(subtitleSegmentId: string) {
+export async function markSubtitleSegmentReady(
+  subtitleSegmentIdOrFormData: string | FormData,
+  formData?: FormData,
+) {
+  const subtitleSegmentId =
+    typeof subtitleSegmentIdOrFormData === "string"
+      ? subtitleSegmentIdOrFormData.trim()
+      : subtitleSegmentIdOrFormData.get("subtitleSegmentId")?.toString().trim() ||
+        "";
+
+  if (!subtitleSegmentId) {
+    const videoIdHint =
+      (typeof subtitleSegmentIdOrFormData === "string"
+        ? formData
+        : subtitleSegmentIdOrFormData
+      )
+        ?.get("videoId")
+        ?.toString()
+        .trim() || "";
+    if (videoIdHint) {
+      redirectToVoiceover(
+        videoIdHint,
+        "error",
+        "Subtitle segment not found — refresh the page.",
+      );
+    }
+    throw new Error("Subtitle segment not found.");
+  }
+
   const subtitleSegment = await prisma.subtitleSegment.findUnique({
     where: { id: subtitleSegmentId },
     select: {
@@ -9001,6 +9241,9 @@ export async function attachPodcastSectionVideoLibrary(videoId: string) {
       }`,
     );
   } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
     redirectToAssets(
       videoId,
       "error",

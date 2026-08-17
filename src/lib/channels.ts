@@ -811,6 +811,11 @@ export const BUILTIN_CHANNELS: ChannelProfile[] = [
       pacePreset: "slightly_slower",
       pauseStyle: "balanced",
     },
+    /**
+     * Global form default for legacy Emma/Leo. Max & Sara Chirp episodes use
+     * section-based rates from `podcast-voice-profiles.ts` (intro livelier,
+     * Word Tour / closing slightly slower) when format is max_sara_conversation.
+     */
     voiceoverSpeedDefault: 0.9,
     pipelineDefaults: {
       script: {
@@ -855,13 +860,16 @@ export const BUILTIN_CHANNELS: ChannelProfile[] = [
       ],
       originalityRules: [
         "Do not propose generic Learn English / Improve Your English / Speak English Better / Daily English Conversation titles.",
-        "The topic itself must be interesting even before the English-learning benefit is considered.",
-        "Every idea needs one clear human tension, question, behavior, situation, or conversational mechanism.",
-        "Prefer specific lived experiences over broad virtues or abstract themes.",
+        "Prefer BIG HUMAN CONVERSATION HOOK FIRST, with grounded everyday examples SECOND in angle and uniqueMechanism.",
+        "The topic itself must be interesting even as a lifestyle/self-development podcast, before the English-learning benefit is considered.",
+        "Every idea needs one clear human tension, question, belief, decision, relationship dynamic, or conversational mechanism.",
+        "Broad human themes are encouraged when angle and uniqueMechanism make the conversation concrete.",
+        "Do not force uniqueMechanism wording into the title; the title sells the big idea.",
         "uniqueMechanism must name an observable everyday pattern or conversational dynamic — not a lesson activity.",
         "Do not use listen-and-repeat, shadowing, quizzes, name swaps, correction loops, role-play ladders, or speaking challenges as mechanisms.",
-        "visualHook / thumbnailIdea must use Max and Sara in the established podcast studio and show the mechanism, not merely hosts talking.",
-        "Approximately 25–30% of topics may be directly about English or communication; 70–75% should be broader daily-life topics in accessible English.",
+        "visualHook / thumbnailIdea must use Max and Sara in the established podcast studio and communicate the big idea with expression, body language, or one clear metaphor.",
+        "Approximately 15–20% of topics may be directly about English or communication; 80–85% should be broader human topics in accessible English.",
+        "Do not default to laptop/notification/coffee/tiny-task micro-titles.",
       ],
       overusedAngles: [
         "training your brain to speak fluently by stopping freezing and translating",
@@ -870,6 +878,9 @@ export const BUILTIN_CHANNELS: ChannelProfile[] = [
         "listen-and-repeat speaking challenges",
         "teacher-student correction loops",
         "generic fluency motivation without a lived mechanism",
+        "laptop / notification / coffee / tiny unfinished task micro-situations as the title strategy",
+        "The Power Of Positivity as a near-duplicate motivational slogan",
+        "Don’t Waste Your Life as a near-duplicate motivational slogan",
       ],
       requiredTopicFields: [
         "category",
@@ -891,61 +902,61 @@ export const BUILTIN_CHANNELS: ChannelProfile[] = [
           id: "english_communication",
           label: "English / Communication / Fluency",
           description:
-            "Natural conversation, understanding people, finding words, confidence, misunderstandings, useful conversational habits, and communication problems.",
+            "English, speaking, understanding, conversation confidence, expressing yourself, misunderstandings, and useful conversational habits. Maps to english_communication.",
         },
         {
           id: "daily_life",
-          label: "Everyday Life / Routines / Weekends",
+          label: "Life Lessons / Everyday Reflection",
           description:
-            "Mornings, evenings, errands, weekends, schedules, ordinary decisions, being busy, rest, and everyday experiences.",
+            "Time, regrets, choices, priorities, mistakes, what matters in life, and ordinary routines that open into a bigger human conversation. Prefer life-lesson framing over tiny task titles.",
         },
         {
           id: "habits_productivity",
-          label: "Habits / Time / Productivity",
+          label: "Personal Growth / Change / Goals",
           description:
-            "Procrastination, routines, planning, phone habits, motivation, organization, focus, starting and finishing things.",
+            "Change, discipline, courage, starting again, growth, comfort zones, goals, identity, and meaningful habits. Prefer growth conversations over micro-productivity objects.",
         },
         {
           id: "work_study",
-          label: "Work / Study / Adult Life",
+          label: "Work / Success / Purpose",
           description:
-            "Coworkers, meetings, studying, learning, career changes, working from home, workplace habits, difficult days, and professional communication.",
+            "Career, ambition, success, failure, purpose, work-life balance, money and meaning, studying, and adult work pressures discussed as human conversations.",
         },
         {
           id: "social_relationships",
-          label: "Friends / Family / Social Life",
+          label: "Relationships / Connection / Boundaries",
           description:
-            "Friendship, invitations, making plans, keeping in touch, meeting new people, boundaries, social situations, and everyday relationship dynamics.",
+            "Friends, family, dating, loneliness, boundaries, trust, distance, conflict, connection, invitations, and everyday relationship dynamics.",
         },
         {
           id: "feelings_mindset",
-          label: "Feelings / Confidence / Everyday Mindset",
+          label: "Mindset / Confidence / Peace / Happiness",
           description:
-            "Nervousness, confidence, embarrassment, overthinking, comparison, motivation, boredom, stress, indecision, and everyday emotional experiences.",
+            "Confidence, fear, self-doubt, comparison, overthinking, positivity, attitude, resilience, peace, happiness, rest, gratitude, slowing down, and balance.",
         },
         {
           id: "food_lifestyle",
-          label: "Food / Healthful Daily Living / Leisure",
+          label: "Lifestyle / Simple Living / Leisure",
           description:
-            "Cooking, eating out, grocery habits, coffee, comfort food, weekends, exercise as everyday life, relaxing, entertainment, and lifestyle preferences.",
+            "Simple living, leisure, comfort routines, weekends, healthful daily living, enjoyment, and lifestyle choices that lead into bigger conversations about happiness and balance.",
         },
         {
           id: "home_city",
-          label: "Home / Neighborhood / City Life",
+          label: "Home / Belonging / Place",
           description:
-            "Living alone, roommates, neighbors, apartments, commuting, noise, favorite places, city versus quiet life, and everyday home situations.",
+            "Living alone, belonging, home, neighborhood, city versus quiet life, and place-based reflections that open into identity, peace, or connection.",
         },
         {
           id: "travel_culture",
-          label: "Travel / Culture / Experiences",
+          label: "Society / Beliefs / Culture",
           description:
-            "Trips, airports, hotels, culture differences, tourist mistakes, local habits, travel decisions, and experiences away from home.",
+            "Social expectations, popular beliefs, culture differences, status, success myths, things society teaches us, travel experiences, and belief-challenging conversations.",
         },
         {
           id: "technology_media",
-          label: "Phones / Internet / Entertainment",
+          label: "Modern Life / Phones / Attention",
           description:
-            "Social media, messaging, streaming, online habits, notifications, screen time, videos, apps, AI in everyday life, and digital communication.",
+            "Phones, social media, AI, online comparison, attention, modern communication, digital habits, and how technology shapes identity, relationships, and peace of mind.",
         },
       ],
       weeklyRotation: [

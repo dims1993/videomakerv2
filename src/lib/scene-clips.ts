@@ -284,11 +284,19 @@ export async function mixClipAudioOntoMaster(
 
 export async function removePreviousSceneClip(
   previousLocalPath: string | null | undefined,
+  keepLocalPath?: string | null,
 ) {
   if (!previousLocalPath?.trim()) {
     return;
   }
   const absolute = path.resolve(process.cwd(), previousLocalPath);
+  if (keepLocalPath?.trim()) {
+    const keepAbsolute = path.resolve(process.cwd(), keepLocalPath);
+    if (absolute === keepAbsolute) {
+      // Re-attach to the same scene/path must not delete the file just written.
+      return;
+    }
+  }
   const root = path.resolve(sceneClipsRootDir());
   if (!absolute.startsWith(`${root}${path.sep}`)) {
     return;

@@ -10,15 +10,22 @@
         "generationMode": "FULL_VIDEO",
         "libraryId": null
       },
+      "assets": {
+        "imageOutputFolder": null
+      },
       "voiceover": {
         "voiceId": "alFofuDn3cOwyoz1i44T",
         "voiceName": "GodWord Narrador",
+        "ttsProvider": "elevenlabs",
         "pauseAfterMs": 180,
         "generateSubtitles": true,
+        "alignmentProvider": "elevenlabs",
         "captionStylePreset": "godsword_style"
       },
       "render": {
-        "burnCaptions": true
+        "burnCaptions": true,
+        "voiceSoundBars": false,
+        "voiceSoundBarsStyle": "bars"
       }
     },
     "voiceProfiles": [

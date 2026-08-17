@@ -123,7 +123,7 @@ export function ImportScenesForm({
   visualPlannerPath,
   scriptLength,
   currentSceneCount,
-  currentScenesJson,
+  currentScenesJsonUrl,
   hybridCheckpoint = null,
   clearHybridProgressAction,
   buildFromScriptAction,
@@ -145,7 +145,7 @@ export function ImportScenesForm({
   visualPlannerPath: string;
   scriptLength: number;
   currentSceneCount: number;
-  currentScenesJson: string;
+  currentScenesJsonUrl: string;
   hybridCheckpoint?: {
     filled: number;
     total: number;
@@ -959,7 +959,7 @@ export function ImportScenesForm({
           />
           <CopyPromptButton
             label="Copy Current Scenes JSON"
-            prompt={currentScenesJson}
+            promptUrl={currentScenesJsonUrl}
           />
           <Button type="button" variant="outline" onClick={parseManualScenesJson}>
             Parse & Validate Manual JSON

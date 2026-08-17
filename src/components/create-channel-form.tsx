@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import { useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import { createChannelAction } from "@/app/channel-actions";
@@ -11,6 +11,37 @@ import { Textarea } from "@/components/ui/textarea";
 import { slugifyChannelKey } from "@/lib/channel-key";
 
 type PipelineMode = "full" | "audio_only";
+
+function PackRow({
+  title,
+  source,
+  purpose,
+  children,
+  suggested = true,
+}: {
+  title: string;
+  source: string;
+  purpose: string;
+  children: ReactNode;
+  suggested?: boolean;
+}) {
+  return (
+    <div className="space-y-2 rounded-md border bg-background/80 p-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-medium">{title}</p>
+        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+          {suggested ? "Suggested" : "Optional"}
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        <span className="font-medium text-foreground/80">From:</span> {source}
+        {" · "}
+        <span className="font-medium text-foreground/80">For:</span> {purpose}
+      </p>
+      {children}
+    </div>
+  );
+}
 
 export function CreateChannelForm() {
   const router = useRouter();
@@ -38,7 +69,13 @@ export function CreateChannelForm() {
     startTransition(async () => {
       try {
         const result = await createChannelAction(formData);
-        router.push(`/videos/new?channelKey=${encodeURIComponent(result.key)}`);
+        const params = new URLSearchParams({
+          channelKey: result.key,
+        });
+        if (result.maturePack.saved.length > 0) {
+          params.set("packSaved", String(result.maturePack.saved.length));
+        }
+        router.push(`/videos/new?${params.toString()}`);
         router.refresh();
       } catch (submitError) {
         setError(
@@ -51,7 +88,7 @@ export function CreateChannelForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
+    <form onSubmit={onSubmit} className="space-y-6" encType="multipart/form-data">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-2 sm:col-span-2">
           <Label htmlFor="channel-name">Channel name</Label>
@@ -172,16 +209,214 @@ export function CreateChannelForm() {
         </div>
       ) : null}
 
+      <fieldset className="space-y-4 rounded-md border border-dashed p-4">
+        <legend className="px-1 text-sm font-medium">
+          Mature channel pack
+          <span className="ml-2 font-normal text-muted-foreground">
+            (suggested — not required)
+          </span>
+        </legend>
+        <p className="text-xs text-muted-foreground">
+          Upload what you already have from reference videos and transcripts.
+          Missing items stay as stubs you can fill later. Uploaded files replace
+          the starter stubs and register assets for this channel.
+        </p>
+
+        <div className="space-y-3">
+          <PackRow
+            title="Project Bible"
+            source="Editorial"
+            purpose="Voz, misión, reglas"
+          >
+            <Input
+              type="file"
+              name="projectBibleFile"
+              accept=".md,.txt,text/markdown,text/plain"
+            />
+          </PackRow>
+
+          <PackRow
+            title="Character Bible"
+            source="Frames + brief"
+            purpose="Identidad de hosts"
+          >
+            <Input
+              type="file"
+              name="characterBibleFile"
+              accept=".md,.txt,text/markdown,text/plain"
+            />
+          </PackRow>
+
+          <PackRow
+            title="Image Prompt Bible"
+            source="Frames + estilo"
+            purpose="Locks visuales"
+          >
+            <Input
+              type="file"
+              name="imagePromptBibleFile"
+              accept=".md,.txt,text/markdown,text/plain"
+            />
+          </PackRow>
+
+          <PackRow
+            title="Prompts (angle / script / visual / metadata)"
+            source="Transcripts + estilo"
+            purpose="Generación"
+          >
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-1">
+                <Label className="text-xs">Angle Builder</Label>
+                <Input
+                  type="file"
+                  name="angleBuilderFile"
+                  accept=".md,.txt,text/markdown,text/plain"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-xs">Script Writer</Label>
+                <Input
+                  type="file"
+                  name="scriptWriterFile"
+                  accept=".md,.txt,text/markdown,text/plain"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-xs">Visual Planner</Label>
+                <Input
+                  type="file"
+                  name="visualPlannerFile"
+                  accept=".md,.txt,text/markdown,text/plain"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-xs">Metadata Writer</Label>
+                <Input
+                  type="file"
+                  name="metadataWriterFile"
+                  accept=".md,.txt,text/markdown,text/plain"
+                />
+              </div>
+            </div>
+          </PackRow>
+
+          <PackRow
+            title="Transcripts de referencia"
+            source="Competidores / propios"
+            purpose="Script Writer (Reference Library)"
+          >
+            <div className="grid gap-2">
+              <Input
+                type="file"
+                name="referenceTranscriptFiles"
+                accept=".md,.txt,text/markdown,text/plain"
+                multiple
+              />
+              <Input
+                name="referenceTranscriptTitle"
+                placeholder="Title for pasted / primary transcript"
+              />
+              <Textarea
+                name="referenceTranscriptText"
+                placeholder="Or paste one transcript here…"
+                className="min-h-24"
+              />
+            </div>
+          </PackRow>
+
+          <PackRow
+            title="Frames / stills de host"
+            source="Video de referencia"
+            purpose="Diseño humano (docs/.../references/)"
+          >
+            <Input
+              type="file"
+              name="hostReferenceImages"
+              accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+              multiple
+            />
+          </PackRow>
+
+          <PackRow
+            title="Video-library bumpers"
+            source="Clips prehechos"
+            purpose="INTRO / LESSON / CLOSING / FINAL"
+            suggested={pipelineMode === "audio_only"}
+          >
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-1">
+                <Label className="text-xs">INTRO</Label>
+                <Input
+                  type="file"
+                  name="videoLibraryIntro"
+                  accept="video/mp4,video/quicktime,.mp4,.mov,.webm,.m4v"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-xs">LESSON</Label>
+                <Input
+                  type="file"
+                  name="videoLibraryLesson"
+                  accept="video/mp4,video/quicktime,.mp4,.mov,.webm,.m4v"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-xs">CLOSING</Label>
+                <Input
+                  type="file"
+                  name="videoLibraryClosing"
+                  accept="video/mp4,video/quicktime,.mp4,.mov,.webm,.m4v"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-xs">FINAL</Label>
+                <Input
+                  type="file"
+                  name="videoLibraryFinal"
+                  accept="video/mp4,video/quicktime,.mp4,.mov,.webm,.m4v"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Saved under{" "}
+              <code className="text-[10px]">
+                data/image-library/&#123;channelKey&#125;/video-library/
+              </code>
+              . Podcast attach still expects known filenames when wired.
+            </p>
+          </PackRow>
+
+          <PackRow
+            title="Editorial + topics brief"
+            source="Brief"
+            purpose="Topic Batch / estrategia"
+            suggested={pipelineMode === "full"}
+          >
+            <Input
+              type="file"
+              name="editorialBriefFile"
+              accept=".md,.txt,text/markdown,text/plain"
+            />
+            <Textarea
+              name="editorialBriefText"
+              placeholder="Or paste audience rules, overused angles, topic notes…"
+              className="min-h-20"
+            />
+          </PackRow>
+        </div>
+      </fieldset>
+
       {error ? (
         <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Creates starter prompt + bible files under{" "}
+          Always creates starter files under{" "}
           <code className="text-[11px]">prompts/channels/</code> and{" "}
-          <code className="text-[11px]">docs/channels/</code>, then opens Create
-          video with this channel selected.
+          <code className="text-[11px]">docs/channels/</code>. Uploads in the
+          pack above replace stubs and register transcripts / references when
+          provided.
         </p>
       )}
 

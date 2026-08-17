@@ -118,15 +118,12 @@ export async function attachPodcastSectionClipToScene({
   const ext = path.extname(libraryFile.fileName).toLowerCase() || ".mov";
   const fileName = sceneClipFileName(sceneId, ext);
   await ensureSceneClipsDir(videoId);
-  const destAbs = path.join(
-    process.cwd(),
-    sceneClipRelativePath(videoId, fileName),
-  );
+  const clipLocalPath = sceneClipRelativePath(videoId, fileName);
+  const destAbs = path.join(process.cwd(), clipLocalPath);
   await copyFile(libraryFile.absolutePath, destAbs);
-  await removePreviousSceneClip(previousClipLocalPath);
+  await removePreviousSceneClip(previousClipLocalPath, clipLocalPath);
 
   const durationSec = Math.max(1, Math.ceil(probe.durationSec));
-  const clipLocalPath = sceneClipRelativePath(videoId, fileName);
 
   // Extract exclusive clip audio into the scene-voiceover slot so subtitle
   // offsets include these silent bumpers (empty scriptText → silent_skip).

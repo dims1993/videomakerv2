@@ -3,7 +3,7 @@ import { FileVideo, Plus } from "lucide-react";
 
 import { prisma } from "@/lib/prisma";
 import { formatDate } from "@/lib/format";
-import { getComputedVideoStatus, statusLabel } from "@/lib/status";
+import { statusLabel } from "@/lib/status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,34 +11,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  // Keep the list light: never pull ideaJson / script / imagePrompt blobs here.
   const videos = await prisma.video.findMany({
     orderBy: { updatedAt: "desc" },
-    include: {
-      scenes: {
-        select: {
-          imagePrompt: true,
-        },
-      },
+    select: {
+      id: true,
+      title: true,
+      topic: true,
+      status: true,
+      updatedAt: true,
       _count: {
-        select: { scenes: true }
-      }
-    }
+        select: { scenes: true },
+      },
+    },
   });
-
-  const videosWithComputedStatus = await Promise.all(
-    videos.map(async (video) => {
-      const computedStatus = getComputedVideoStatus(video);
-
-      if (video.status !== computedStatus) {
-        await prisma.video.update({
-          where: { id: video.id },
-          data: { status: computedStatus },
-        });
-      }
-
-      return { ...video, computedStatus };
-    }),
-  );
 
   return (
     <div className="space-y-6">
@@ -86,7 +72,7 @@ export default async function DashboardPage() {
         </Card>
       ) : (
         <div className="grid gap-3">
-          {videosWithComputedStatus.map((video) => (
+          {videos.map((video) => (
             <Link key={video.id} href={`/videos/${video.id}`} className="block">
               <Card className="transition-colors hover:bg-muted/40">
                 <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -98,7 +84,7 @@ export default async function DashboardPage() {
                     <p className="line-clamp-2 text-sm text-muted-foreground">{video.topic}</p>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    <Badge>{statusLabel(video.computedStatus)}</Badge>
+                    <Badge>{statusLabel(video.status)}</Badge>
                     <span>{video._count.scenes} scenes</span>
                     <span>Updated {formatDate(video.updatedAt)}</span>
                   </div>

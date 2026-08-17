@@ -217,19 +217,23 @@ ${validationBlock}
 Score honestly from 0 to 10 (one decimal allowed).
 
 Score these dimensions (0–10 each):
-- hook: cold-open curiosity and episode promise
-- architecture: exact spine [INTRO]→[LESSON]→[PART N - TITLE]→[CLOSING]→thanks→[FINAL], [FINAL] last after [MAX] thank-you + [SARA] hope line, no music cues
-- conversation: uniqueMechanism explored through natural dialogue, examples, and mini-stories (NOT drills)
-- dialogue: Max and Sara as equal co-hosts — neither permanent teacher; short turns, light humor, natural reactions
-- catchUp: brief natural catch-up (~8–16 turns) after welcome that bridges into the topic without sounding like a lesson setup
-- vocabularyChunks: useful phrases are collected organically from earlier dialogue — not a dictionary list or classroom drill; exactly one explicit phrase-collection section (a later section may apply phrases in context, not re-list them)
-- level: A1–B1 speakability and clarity
-- completeness: cold open, catch-up, mechanism, both hosts' examples, organic phrases, recap, comment question, goodbye (~3200–4000 spoken words, ~8–11 PARTs)
+- hook: animated show opening — live mini-scene + short lively turns + vivid detail before topic reveal; warm branded welcome; emotional why-it-matters; concrete stay-promise; ~250–450 spoken words before [LESSON]; first 90s entertaining as podcast audio, not a lesson objective (maps: hookAndPromise)
+- architecture: exact spine [INTRO]→[LESSON]→[PART N - TITLE]→[CLOSING]→thanks→[FINAL], continuous PART progression, [FINAL] last after [MAX] thank-you + [SARA] hope line, no music cues (maps: conversationalProgression)
+- conversation: uniqueMechanism organizes discovery; stories, metaphor/model, counterpoint, emotional progression; not tip-list or drill (maps: storySpecificity + metaphorClarity + emotionalProgression)
+- dialogue: Max and Sara distinct personalities; equal co-hosts; friction/reframe; short turns; natural reactions; no permanent teacher (maps: hostChemistry + naturalDialogue)
+- catchUp: flexible natural catch-up (~4–12 turns when useful) or cold-open-as-catch-up that seeds the topic without lesson setup
+- vocabularyChunks: phrases appear before Word Tour, recur naturally, stretch language explained in context; exactly one Word Tour payoff — not dictionary list (maps: lexicalIntegration + lexicalRecurrence + comprehensibleStretch)
+- level: A2–B1 speakable core with careful stretch; concrete→abstract→concrete; comprehensible input
+- completeness: hook, mechanism, both hosts' stories, metaphor, counterpoint, organic phrases, Word Tour, recap, comment question, goodbye (~3500–4400 spoken words, ~8–11 PARTs) (maps: closingPayoff + repetitionControl)
 
 Score caps (apply the lowest relevant cap as a ceiling on overall score):
 - short script / far below soft word floor → overall score ≤ 7.5
 - includes Listen and Repeat / Your Turn / Quiz / Mission / learner pauses / Emma / Leo → overall score ≤ 6.5
-- jumps from cold open/welcome straight into teaching with no natural catch-up → overall score ≤ 8.0
+- cold open is only a topic label with no tension/story/curiosity → overall score ≤ 7.8
+- both hosts always agree / “Exactly” after nearly every turn / interchangeable voices → overall score ≤ 7.8
+- no meaningful personal story from Max or Sara / only generic examples → overall score ≤ 7.8
+- abstract philosophy for long stretches without ordinary examples → overall score ≤ 7.8
+- vocabulary appears only in the Word Tour / never earlier → overall score ≤ 7.5
 - vocabulary section reads like a dictionary list / "today we will study vocabulary" / "repeat these phrases" → overall score ≤ 7.8
 - more than one late PART mainly listing/explaining the same phrases (duplicate phrase-collection) → overall score ≤ 8.0
 - closing recap re-teaches the full phrase list after a phrase-collection section → overall score ≤ 8.2
@@ -239,7 +243,9 @@ Score caps (apply the lowest relevant cap as a ceiling on overall score):
 - missing comment question or vocabulary/chunks section → overall score ≤ 8.2
 - any spine/FINAL/music/wrong-cast validation errors → overall score ≤ 8.0
 
-Do NOT penalize merely because a vocabulary/chunks section exists — that section is required; only penalize classroom/list framing or duplicated phrase-collection sections.
+Do NOT pass a script only because structure and word count are correct if the dialogue is flat.
+
+Do NOT penalize merely because a vocabulary/chunks section exists — that section is required; only penalize classroom/list framing, missing earlier exposure, or duplicated phrase-collection sections.
 
 Reply with ONLY valid JSON (no markdown fences, no extra text):
 {"score": 8.4, "briefReason": "one short sentence naming the main weakness or strength", "dimensionScores": {"hook": 8.0, "architecture": 8.5, "conversation": 8.0, "dialogue": 8.0, "catchUp": 8.0, "vocabularyChunks": 7.5, "level": 8.5, "completeness": 8.0}, "strengths": ["..."], "mustFix": ["concrete fix 1", "concrete fix 2"], "rewritePriority": ["highest-leverage rewrite move first", "..."]}
@@ -663,10 +669,12 @@ Hard structure rules (must keep):
 - Labels are not spoken and must not appear inside dialogue
 - No music cues of any kind
 - No Listen and Repeat, Your Turn, Quiz, Mission, learner pauses, Emma, Leo, or teacher/student dynamic
-- Include a brief natural catch-up (~8–16 turns) after welcome before jumping into explanation
-- Vocabulary/chunks must feel like organic phrase collection, not a dictionary list or “today we will study vocabulary”
+- Include a flexible natural catch-up (~4–12 turns when useful) that seeds the topic, or let the cold open itself be the catch-up
+- Vocabulary/chunks must feel like an organic Word Tour payoff, not a dictionary list or “today we will study vocabulary”
+- Important phrases should appear before the Word Tour and recur naturally
 - Use only one explicit phrase-collection section; any later late-episode section should apply phrases in context, not re-list them
 - Closing recap may mention 3–5 key phrases briefly — do not re-teach the full phrase section
+- Include concrete stories from both hosts, a simple metaphor/model, and at least one mild counterpoint/reframe
 - Acting tags whitelist only: [laughs], [sighs], [hungry], [confused], [nervous], [excited], [proud], [whispers]
 - Expand via richer examples, stories, and natural dialogue — NEVER via drills or filler
 
