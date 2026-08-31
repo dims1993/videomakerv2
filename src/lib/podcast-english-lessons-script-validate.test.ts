@@ -137,10 +137,10 @@ Bye from Leo wrongly.
   );
 });
 
-function buildMinimalMaxSaraScript(options?: {
+function buildMinimalConversationScript(options?: {
   parts?: number;
   includePracticeLanguage?: boolean;
-  includeEmma?: boolean;
+  includeLegacyMaxCast?: boolean;
   pad?: string;
 }) {
   const parts = options?.parts ?? 9;
@@ -157,10 +157,10 @@ function buildMinimalMaxSaraScript(options?: {
           : `BEAT ${n}`;
     return `[PART ${n} - ${title}]
 
-[MAX]
+[LEO]
 ${pad}
 
-[SARA]
+[EMMA]
 ${pad} That makes sense. Can you give me an example?
 `;
   }).join("\n");
@@ -169,16 +169,16 @@ ${pad} That makes sense. Can you give me an example?
     ? "Now do Listen and Repeat, then Your Turn, then Today's Mission."
     : "Have you ever had a group chat that made a simple plan more confusing? Write one short sentence in the comments.";
 
-  const castLine = options?.includeEmma
-    ? `[EMMA]\nWrong cast line.\n`
+  const castLine = options?.includeLegacyMaxCast
+    ? `[MAX]\nWrong cast line.\n`
     : "";
 
   return `[INTRO]
 
-[MAX]
-Sara, I opened the group chat to check one simple plan.
+[LEO]
+Emma, I opened the group chat to check one simple plan.
 
-[SARA]
+[EMMA]
 And you found twenty messages that somehow make the plan less clear?
 
 [LESSON]
@@ -186,25 +186,25 @@ And you found twenty messages that somehow make the plan less clear?
 ${castLine}${partBlocks}
 [CLOSING]
 
-[MAX]
+[LEO]
 So the Group Chat Spiral is when each new maybe, delay, or question makes the plan harder. Useful phrases today: What's the plan, That works for me, I can't make it, Let's decide.
 
-[SARA]
+[EMMA]
 ${practiceLine}
 
-[MAX]
+[LEO]
 Thank you for listening to Podcast English Lessons.
 
-[SARA]
+[EMMA]
 We hope this conversation helped you feel understood and learn useful natural English for group chats, plans, and clear messages.
 
 [FINAL]
 `;
 }
 
-test("validatePodcastEnglishScript accepts Max & Sara conversation spine", () => {
+test("validatePodcastEnglishScript accepts Emma & Leo conversation spine", () => {
   const result = validatePodcastEnglishScript(
-    buildMinimalMaxSaraScript(),
+    buildMinimalConversationScript(),
     "max_sara_conversation",
   );
   assert.equal(result.ok, true, JSON.stringify(result.errors, null, 2));
@@ -213,16 +213,16 @@ test("validatePodcastEnglishScript accepts Max & Sara conversation spine", () =>
   assert.ok(result.metrics.spokenWordCount > 200);
 });
 
-test("validatePodcastEnglishScript rejects Emma/Leo and practice language for Max & Sara", () => {
-  const withEmma = validatePodcastEnglishScript(
-    buildMinimalMaxSaraScript({ includeEmma: true }),
+test("validatePodcastEnglishScript rejects MAX/SARA tags and practice language for conversation format", () => {
+  const withLegacyCast = validatePodcastEnglishScript(
+    buildMinimalConversationScript({ includeLegacyMaxCast: true }),
     "max_sara_conversation",
   );
-  assert.equal(withEmma.ok, false);
-  assert.ok(withEmma.errors.some((issue) => issue.code === "wrong_cast"));
+  assert.equal(withLegacyCast.ok, false);
+  assert.ok(withLegacyCast.errors.some((issue) => issue.code === "wrong_cast"));
 
   const withPractice = validatePodcastEnglishScript(
-    buildMinimalMaxSaraScript({ includePracticeLanguage: true }),
+    buildMinimalConversationScript({ includePracticeLanguage: true }),
     "max_sara_conversation",
   );
   assert.equal(withPractice.ok, false);
@@ -231,8 +231,8 @@ test("validatePodcastEnglishScript rejects Emma/Leo and practice language for Ma
   );
 });
 
-test("validatePodcastEnglishScript rejects learner pauses for Max & Sara", () => {
-  const script = buildMinimalMaxSaraScript().replace(
+test("validatePodcastEnglishScript rejects learner pauses for Emma & Leo", () => {
+  const script = buildMinimalConversationScript().replace(
     "[PART 1 - BEAT 1]",
     "[PART 1 - BEAT 1]\n\n[PAUSE: 4s]",
   );
@@ -240,30 +240,30 @@ test("validatePodcastEnglishScript rejects learner pauses for Max & Sara", () =>
   assert.ok(result.errors.some((issue) => issue.code === "learner_pause"));
 });
 
-test("validatePodcastEnglishScript warns on didactic vocab and thin catch-up for Max & Sara", () => {
+test("validatePodcastEnglishScript warns on didactic vocab and thin catch-up for Emma & Leo", () => {
   const thin = `[INTRO]
 
-[MAX]
+[LEO]
 Today we will study vocabulary for group chats.
 
-[SARA]
+[EMMA]
 The first vocabulary word is maybe.
 
 [LESSON]
 
-${Array.from({ length: 9 }, (_, i) => `[PART ${i + 1} - ${i === 7 ? "VOCABULARY LIST" : `BEAT ${i + 1}`}]\n\n[MAX]\nWe talk about everyday English in a natural way so listeners can follow and learn useful phrases in context today.\n\n[SARA]\nThat makes sense. Can you give me an example?\n`).join("\n")}
+${Array.from({ length: 9 }, (_, i) => `[PART ${i + 1} - ${i === 7 ? "VOCABULARY LIST" : `BEAT ${i + 1}`}]\n\n[LEO]\nWe talk about everyday English in a natural way so listeners can follow and learn useful phrases in context today.\n\n[EMMA]\nThat makes sense. Can you give me an example?\n`).join("\n")}
 [CLOSING]
 
-[MAX]
+[LEO]
 So the Group Chat Spiral is when each new maybe makes the plan harder.
 
-[SARA]
+[EMMA]
 Have you ever had a group chat that made a simple plan more confusing? Write one short sentence in the comments.
 
-[MAX]
+[LEO]
 Thank you for listening to Podcast English Lessons.
 
-[SARA]
+[EMMA]
 We hope this conversation helped you feel understood and learn useful natural English for group chats, plans, and clear messages.
 
 [FINAL]
@@ -278,101 +278,101 @@ We hope this conversation helped you feel understood and learn useful natural En
   );
 });
 
-test("validatePodcastEnglishScript warns on duplicate phrase-collection PARTs for Max & Sara", () => {
+test("validatePodcastEnglishScript warns on duplicate phrase-collection PARTs for Emma & Leo", () => {
   const pad =
     "We talk about everyday English in a natural way so listeners can follow and learn useful phrases in context today. ";
   const script = `[INTRO]
 
-[MAX]
+[LEO]
 You looked focused before we started recording.
 
-[SARA]
+[EMMA]
 I was reading the group chat on my phone.
 
-[MAX]
+[LEO]
 That sounds dangerous.
 
-[SARA]
+[EMMA]
 I needed a map, a calendar, and maybe a lawyer.
 
-[MAX]
+[LEO]
 A lawyer?
 
-[SARA]
+[EMMA]
 Emotionally, yes.
 
-[MAX]
+[LEO]
 Welcome back. Today we talk about confusing plans.
 
-[SARA]
+[EMMA]
 Yes, the Group Chat Spiral.
 
 [LESSON]
 
 [PART 1 - THE GROUP CHAT PROBLEM]
-[MAX]
+[LEO]
 ${pad}
-[SARA]
+[EMMA]
 ${pad}
 
 [PART 2 - WHY A SIMPLE PLAN GETS HARDER]
-[MAX]
+[LEO]
 ${pad}
-[SARA]
+[EMMA]
 ${pad}
 
 [PART 3 - THE GROUP CHAT SPIRAL]
-[MAX]
+[LEO]
 ${pad}
-[SARA]
+[EMMA]
 ${pad}
 
 [PART 4 - WHEN EVERYONE ANSWERS]
-[MAX]
+[LEO]
 ${pad}
-[SARA]
+[EMMA]
 ${pad}
 
 [PART 5 - POLITE BUT UNCLEAR]
-[MAX]
+[LEO]
 ${pad}
-[SARA]
+[EMMA]
 ${pad}
 
 [PART 6 - MAXS STORY]
-[MAX]
+[LEO]
 ${pad}
-[SARA]
+[EMMA]
 ${pad}
 
 [PART 7 - SARAS STORY]
-[MAX]
+[LEO]
 ${pad}
-[SARA]
+[EMMA]
 ${pad}
 
 [PART 8 - MESSAGES THAT ACTUALLY HELP]
-[MAX]
+[LEO]
 ${pad}
-[SARA]
+[EMMA]
 ${pad}
 
 [PART 9 - CLEAR PHRASES FROM THE CONVERSATION]
-[MAX]
+[LEO]
 ${pad}
-[SARA]
+[EMMA]
 ${pad}
 
 [CLOSING]
-[MAX]
+[LEO]
 So today we talked about The Group Chat Spiral.
-[SARA]
+[EMMA]
 Have you ever had a group chat that made a simple plan more confusing? Write one short sentence in the comments.
 
-[MAX]
+[LEO]
 Thank you for listening to Podcast English Lessons.
 
-[SARA]
+[EMMA]
 We hope this conversation helped you feel understood and learn useful natural English for group chats, plans, and clear messages.
 
 [FINAL]
@@ -384,7 +384,7 @@ We hope this conversation helped you feel understood and learn useful natural En
   );
 });
 
-test("resolvePodcastEpisodeFormat prefers Max & Sara for conversational topics", async () => {
+test("resolvePodcastEpisodeFormat prefers Emma & Leo for conversational topics", async () => {
   const { resolvePodcastEpisodeFormat } = await import(
     "@/lib/podcast-english-lessons-script-shared"
   );
@@ -397,7 +397,7 @@ test("resolvePodcastEpisodeFormat prefers Max & Sara for conversational topics",
         workingTitle:
           "When A Simple Group Chat Becomes Complicated | Natural English Conversation",
         uniqueMechanism: "The Group Chat Spiral",
-        seriesConcept: "Natural Daily English Conversations with Max & Sara",
+        seriesConcept: "Natural Daily English Conversations with Emma & Leo",
       },
     }),
     "max_sara_conversation",

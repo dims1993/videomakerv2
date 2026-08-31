@@ -6,9 +6,14 @@
 import { PODCAST_ENGLISH_LESSONS_CHANNEL_KEY } from "@/lib/podcast-english-lessons-visual";
 import { buildPodcastHybridFillBrief } from "@/lib/podcast-english-lessons-image-prompt-contract";
 import { isBibleOneYearCategory } from "@/lib/the-bible-in-one-year-shared";
-import { buildBibleOneYearSectionHybridContext } from "@/lib/the-bible-in-one-year-visual-brief";
+import { GODS_WORD_FISH_SPEECH_FILL_NOTES } from "@/lib/fish-speech-tags";
 import { THE_GODS_WORD_CHANNEL_KEY } from "@/lib/the-gods-word-script-prompt";
-import { buildTheGodsWordSectionHybridContext } from "@/lib/the-gods-word-visual-brief";
+import {
+  buildTheGodsWordFillHybridContext,
+} from "@/lib/the-gods-word-visual-brief";
+import {
+  buildBibleOneYearFillHybridContext,
+} from "@/lib/the-bible-in-one-year-visual-brief";
 import { normalizeGodsWordScenes } from "@/lib/the-gods-word-image-prompt";
 import {
   buildGodsWordVisualPlanSkeleton,
@@ -65,13 +70,31 @@ const FILL_MODE_NOTES = [
   "Keep identity/style locks consistent with Continuity and this context.",
 ].join("\n");
 
-function withFillModeNotes(context: string) {
+const GODS_WORD_FILL_MODE_NOTES = [
+  "## Fill-chunk mode notes",
+  "",
+  "The scene skeleton was built locally by the app (scriptText + duration are authoritative).",
+  "Fill visualPurpose, visualIdea, imagePrompt, sceneType, and optional fishSpeechText for the listed orders.",
+  "Do NOT rewrite scriptText.",
+  "Do NOT invent extra scenes or omit any order.",
+  "Keep identity/style locks consistent with Continuity and this context.",
+  "",
+  GODS_WORD_FISH_SPEECH_FILL_NOTES,
+].join("\n");
+
+function withFillModeNotes(
+  context: string,
+  options?: { godsWordFishSpeech?: boolean },
+) {
   const trimmed = context.trim();
   // Drop legacy section-chunk footers if present.
   const withoutSectionNotes = trimmed
     .replace(/\n*## Section-chunk mode notes\n[\s\S]*$/i, "")
     .trim();
-  return [withoutSectionNotes, FILL_MODE_NOTES]
+  return [
+    withoutSectionNotes,
+    options?.godsWordFishSpeech ? GODS_WORD_FILL_MODE_NOTES : FILL_MODE_NOTES,
+  ]
     .filter(Boolean)
     .join("\n\n");
 }
@@ -201,7 +224,9 @@ export function resolveVisualPlanFillProfile(options: {
     );
     return {
       kind: "bible-one-year",
-      contextPrompt: withFillModeNotes(buildBibleOneYearSectionHybridContext()),
+      contextPrompt: withFillModeNotes(buildBibleOneYearFillHybridContext(), {
+        godsWordFishSpeech: true,
+      }),
       contextKind: "bible-one-year-fill",
       chunkSize: VISUAL_PLAN_FILL_CHUNK_SIZE,
       scenes: skeleton.scenes,
@@ -226,7 +251,9 @@ export function resolveVisualPlanFillProfile(options: {
     );
     return {
       kind: "gods-word",
-      contextPrompt: withFillModeNotes(buildTheGodsWordSectionHybridContext()),
+      contextPrompt: withFillModeNotes(buildTheGodsWordFillHybridContext(), {
+        godsWordFishSpeech: true,
+      }),
       contextKind: "gods-word-fill",
       chunkSize: VISUAL_PLAN_FILL_CHUNK_SIZE,
       scenes: skeleton.scenes,

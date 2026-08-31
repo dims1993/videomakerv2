@@ -3,11 +3,14 @@ import test from "node:test";
 
 import {
   applyVisualPlanFillPatches,
+  buildVisualPlanFillChunkPrompt,
   isVisualPlanMegaSceneCollapse,
   isVisualPlanOutputTooLarge,
   slimHybridVisualPlanContext,
   validateVisualPlanFillResponse,
+  VISUAL_PLAN_FILL_INLINE_MAX_CHARS,
 } from "@/lib/visual-plan-fill";
+import { buildTheGodsWordFillHybridContext } from "@/lib/the-gods-word-visual-brief";
 import {
   buildPodcastVisualPlanSkeleton,
   chunkPodcastSkeletonScenes,
@@ -179,4 +182,36 @@ test("slimHybridVisualPlanContext drops Current Video Data script blob", () => {
   assert.ok(slim.includes("flat 2D studio continuity"));
   assert.ok(!slim.includes("Current Video Data"));
   assert.ok(slim.length < 5_000);
+});
+
+test("buildTheGodsWordFillHybridContext stays inline-safe", () => {
+  const ctx = buildTheGodsWordFillHybridContext();
+  assert.ok(ctx.length < 6000);
+  assert.ok(ctx.includes("visualIdea format prefixes"));
+  assert.ok(!ctx.includes("Hard hook segmentation (HOOK ONLY)"));
+});
+
+test("godsWord fill chunk prompt stays under inline composer limit", () => {
+  const chunk = Array.from({ length: 10 }, (_, i) => ({
+    order: i + 1,
+    speaker: null,
+    scriptText:
+      "The Bible suggests that recognition in heaven remains a mystery woven through grace. ".repeat(
+        2,
+      ),
+    sceneType: "insert" as const,
+    duration: 6,
+    pauseAfterMs: 0,
+    visualIdea: "",
+  }));
+  const prompt = buildVisualPlanFillChunkPrompt({
+    contextPrompt: buildTheGodsWordFillHybridContext(),
+    chunk,
+    chunkIndex: 0,
+    totalChunks: 26,
+    previousTail: [],
+    channelKey: "the-gods-word",
+  });
+  assert.ok(prompt.length <= VISUAL_PLAN_FILL_INLINE_MAX_CHARS);
+  assert.ok(prompt.length < 8000);
 });

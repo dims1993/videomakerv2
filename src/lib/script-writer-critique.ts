@@ -207,7 +207,7 @@ ${options.validationReport.trim()}
     : "";
 
   if (format === "max_sara_conversation") {
-    return `You are scoring a Podcast English Lessons script (Natural Daily English Conversations with Max & Sara).
+    return `You are scoring a Podcast English Lessons script (Natural Daily English Conversations with Emma & Leo).
 
 ${PRECEDING_ASSISTANT_SCRIPT_SCORE_RULES}
 
@@ -218,9 +218,9 @@ Score honestly from 0 to 10 (one decimal allowed).
 
 Score these dimensions (0–10 each):
 - hook: animated show opening — live mini-scene + short lively turns + vivid detail before topic reveal; warm branded welcome; emotional why-it-matters; concrete stay-promise; ~250–450 spoken words before [LESSON]; first 90s entertaining as podcast audio, not a lesson objective (maps: hookAndPromise)
-- architecture: exact spine [INTRO]→[LESSON]→[PART N - TITLE]→[CLOSING]→thanks→[FINAL], continuous PART progression, [FINAL] last after [MAX] thank-you + [SARA] hope line, no music cues (maps: conversationalProgression)
+- architecture: exact spine [INTRO]→[LESSON]→[PART N - TITLE]→[CLOSING]→thanks→[FINAL], continuous PART progression, [FINAL] last after [LEO] thank-you + [EMMA] hope line, no music cues (maps: conversationalProgression)
 - conversation: uniqueMechanism organizes discovery; stories, metaphor/model, counterpoint, emotional progression; not tip-list or drill (maps: storySpecificity + metaphorClarity + emotionalProgression)
-- dialogue: Max and Sara distinct personalities; equal co-hosts; friction/reframe; short turns; natural reactions; no permanent teacher (maps: hostChemistry + naturalDialogue)
+- dialogue: Emma and Leo distinct personalities; equal co-hosts; friction/reframe; short turns; natural reactions; no permanent teacher (maps: hostChemistry + naturalDialogue)
 - catchUp: flexible natural catch-up (~4–12 turns when useful) or cold-open-as-catch-up that seeds the topic without lesson setup
 - vocabularyChunks: phrases appear before Word Tour, recur naturally, stretch language explained in context; exactly one Word Tour payoff — not dictionary list (maps: lexicalIntegration + lexicalRecurrence + comprehensibleStretch)
 - level: A2–B1 speakable core with careful stretch; concrete→abstract→concrete; comprehensible input
@@ -228,10 +228,10 @@ Score these dimensions (0–10 each):
 
 Score caps (apply the lowest relevant cap as a ceiling on overall score):
 - short script / far below soft word floor → overall score ≤ 7.5
-- includes Listen and Repeat / Your Turn / Quiz / Mission / learner pauses / Emma / Leo → overall score ≤ 6.5
+- includes Listen and Repeat / Your Turn / Quiz / Mission / learner pauses / Max / Sara → overall score ≤ 6.5
 - cold open is only a topic label with no tension/story/curiosity → overall score ≤ 7.8
 - both hosts always agree / “Exactly” after nearly every turn / interchangeable voices → overall score ≤ 7.8
-- no meaningful personal story from Max or Sara / only generic examples → overall score ≤ 7.8
+- no meaningful personal story from Emma or Leo / only generic examples → overall score ≤ 7.8
 - abstract philosophy for long stretches without ordinary examples → overall score ≤ 7.8
 - vocabulary appears only in the Word Tour / never earlier → overall score ≤ 7.5
 - vocabulary section reads like a dictionary list / "today we will study vocabulary" / "repeat these phrases" → overall score ≤ 7.8
@@ -657,7 +657,7 @@ ${script.trim()}
 Critique JSON from the scorer: ${critiqueJson}
 ${reasonLine}${mustFixBlock}${priorityBlock}${validationBlock}
 ${draftBlock}
-Rewrite a stronger V${nextDraft} of the FULL Max & Sara conversational podcast script.
+Rewrite a stronger V${nextDraft} of the FULL Emma & Leo conversational podcast script.
 
 ${buildMaxSaraGoldStandardPromptBlock()}
 

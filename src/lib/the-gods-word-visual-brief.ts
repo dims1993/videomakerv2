@@ -751,6 +751,58 @@ export function buildTheGodsWordFlowVisualBrief() {
   ].join("\n");
 }
 
+/**
+ * Compact planner context for fill-hybrid (local skeleton owns scriptText + segmentation).
+ * Keeps each ChatGPT turn under the inline composer limit (~8k) — no file attachment.
+ */
+export function buildTheGodsWordFillHybridContext() {
+  return [
+    "## TheGodsWord fill-chunk context",
+    "",
+    "Illustrated Bible-study explainer in hand-painted watercolor/ink on warm paper.",
+    "The app injects the production style lock and negatives after you return imagePrompt bodies.",
+    "",
+    "The scene skeleton was built locally — scriptText and duration are authoritative.",
+    "Fill ONLY visualPurpose, visualIdea, imagePrompt, sceneType, and optional fishSpeechText.",
+    "Do NOT re-segment, rewrite scriptText, invent scenes, or omit orders.",
+    "",
+    "### visualIdea format prefixes (required)",
+    "",
+    "Every visualIdea MUST begin with exactly one of:",
+    "- Narrative scene:",
+    "- Object/detail insert:",
+    "- Chapter cover:",
+    "- Concept card:",
+    "- Scripture/reference card:",
+    "- Comparison card:",
+    "- Simple diagram:",
+    "- Question card:",
+    "- Word-study card:",
+    "- Atmosphere/space:",
+    "",
+    "Examples:",
+    "Object/detail insert: One phone lighting beside an open Bible while a loose seed rests on the page.",
+    "Chapter cover: GENESIS 3, with one restrained parchment bookplate and a single central visual.",
+    "",
+    "### Chapter / final covers",
+    "",
+    "Exact [CHAPTER N - TITLE] and [FINAL — TITLE] markers become insert covers with spoken scriptText.",
+    "visualIdea: Chapter cover: [EXACT TITLE], with [one central visual].",
+    "One central illustration only — no subtitle, panels, or extra labels on covers.",
+    "",
+    "### Variety (soft)",
+    "",
+    "Prefer concrete objects/places/people over generic skies or decorative filler.",
+    "No more than two text-based inserts in a row (chapter covers excluded).",
+    "Match identity/style locks from Continuity when provided.",
+    "",
+    buildGodsWordImagePromptBodyContract(),
+    "",
+    "visualPurpose: one short sentence explaining why the scene exists.",
+    "visualIdea: one concrete drawable sentence with an allowed prefix.",
+  ].join("\n");
+}
+
 export function buildTheGodsWordTimingRules() {
   return [
     "## Timing Rules",

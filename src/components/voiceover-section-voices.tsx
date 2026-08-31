@@ -17,7 +17,11 @@ import type {
   NamedElevenLabsVoice,
   TtsVoiceProvider,
 } from "@/lib/tts-voices";
-import { normalizeGoogleTtsCatalogConfig } from "@/lib/tts-voices";
+import {
+  normalizeFishAudioCatalogConfig,
+  normalizeGoogleTtsCatalogConfig,
+  normalizeSpeechifyCatalogConfig,
+} from "@/lib/tts-voices";
 import {
   googleTtsVoiceFamily,
   googleTtsVoiceOptionLabel,
@@ -51,6 +55,8 @@ type VoiceoverSectionVoicesPanelProps = {
   sectionVoices: VoiceoverSectionVoices;
   sceneAssignments: SceneSectionAssignment[];
   maxSortOrder: number;
+  /** single = catalog only (voice picked in hero). speakers = Emma/Leo assigns. */
+  assignmentMode?: "single" | "speakers";
 };
 
 function voiceOptions(
@@ -100,7 +106,11 @@ function voiceOptionLabel(voice: NamedElevenLabsVoice) {
         : "Chatterbox clone"
       : voice.provider === "google"
         ? "Google Cloud TTS"
-        : "ElevenLabs";
+        : voice.provider === "fish"
+          ? "Fish Audio"
+          : voice.provider === "speechify"
+            ? "Speechify"
+            : "ElevenLabs";
   return `${voice.name} · ${provider}`;
 }
 
@@ -195,13 +205,17 @@ export function VoiceoverSectionVoicesPanel({
   sectionVoices,
   sceneAssignments,
   maxSortOrder,
+  assignmentMode = "single",
 }: VoiceoverSectionVoicesPanelProps) {
   const [catalog, setCatalog] = useState<NamedElevenLabsVoice[]>(namedVoices);
   const [newVoiceName, setNewVoiceName] = useState("");
   const [newVoiceId, setNewVoiceId] = useState("");
   const [newVoiceProvider, setNewVoiceProvider] = useState<
-    "elevenlabs" | "google"
+    "elevenlabs" | "google" | "fish" | "speechify"
   >("elevenlabs");
+  const [newFishModel, setNewFishModel] = useState("");
+  const [newFishSpeed, setNewFishSpeed] = useState("");
+  const [newSpeechifyModel, setNewSpeechifyModel] = useState("");
   const [googleVoices, setGoogleVoices] = useState<GoogleTtsVoice[]>([]);
   const [googleLanguageCode, setGoogleLanguageCode] = useState("en-US");
   const [googleVoicesStatus, setGoogleVoicesStatus] = useState<
@@ -391,6 +405,47 @@ export function VoiceoverSectionVoicesPanel({
     defaultVoiceName,
     sectionState,
   );
+
+  const fallbackVoice = useMemo(() => {
+    const fromCatalog = options.find((voice) => voice.voiceId === defaultVoiceId);
+    if (fromCatalog) {
+      return fromCatalog;
+    }
+    return {
+      voiceId: defaultVoiceId,
+      name: defaultVoiceName || "Fallback default",
+      provider: "elevenlabs" as const,
+    };
+  }, [options, defaultVoiceId, defaultVoiceName]);
+
+  const generationPlan = useMemo(() => {
+    return sectionSummary.map((section) => {
+      const locked = sectionState[section.kind];
+      const voiceId = locked?.voiceId || defaultVoiceId;
+      const voice =
+        options.find((entry) => entry.voiceId === voiceId) ??
+        ({
+          voiceId,
+          name: locked?.voiceName || defaultVoiceName || voiceId || "Unset",
+          provider: locked?.provider ?? fallbackVoice.provider,
+        } satisfies NamedElevenLabsVoice);
+      return {
+        kind: section.kind,
+        label: section.label,
+        sceneCount: section.sceneCount,
+        locked: Boolean(locked?.voiceId),
+        voice,
+      };
+    });
+  }, [
+    sectionSummary,
+    sectionState,
+    defaultVoiceId,
+    defaultVoiceName,
+    options,
+    fallbackVoice.provider,
+  ]);
+
   const autoByKind = useMemo(() => {
     const map = new Map<
       ScriptSectionKind,
@@ -424,6 +479,19 @@ export function VoiceoverSectionVoicesPanel({
       provider === "google"
         ? languageCodeFromVoiceName(voiceId) ?? googleLanguageCode
         : undefined;
+    const fishConfig =
+      provider === "fish"
+        ? normalizeFishAudioCatalogConfig({
+            model: newFishModel,
+            speed: newFishSpeed ? Number(newFishSpeed) : undefined,
+          })
+        : undefined;
+    const speechifyConfig =
+      provider === "speechify"
+        ? normalizeSpeechifyCatalogConfig({
+            model: newSpeechifyModel,
+          })
+        : undefined;
 
     setCatalog((current) => {
       const withoutDuplicate = current.filter((voice) => voice.voiceId !== voiceId);
@@ -435,6 +503,8 @@ export function VoiceoverSectionVoicesPanel({
           ...(googleLanguageCodeResolved
             ? { googleLanguageCode: googleLanguageCodeResolved }
             : {}),
+          ...(fishConfig ? { fishConfig } : {}),
+          ...(speechifyConfig ? { speechifyConfig } : {}),
         },
         ...withoutDuplicate,
       ];
@@ -442,6 +512,13 @@ export function VoiceoverSectionVoicesPanel({
     setNewVoiceName("");
     if (provider !== "google") {
       setNewVoiceId("");
+    }
+    if (provider === "fish") {
+      setNewFishModel("");
+      setNewFishSpeed("");
+    }
+    if (provider === "speechify") {
+      setNewSpeechifyModel("");
     }
     setMessage("");
   }
@@ -603,48 +680,77 @@ export function VoiceoverSectionVoicesPanel({
       />
       <div className="space-y-1">
         <h3 className="text-sm font-semibold">
-          {groupingMode === "speakers"
-            ? "Voice Catalog & Speaker Voices"
-            : "Voice Catalog & Section Voices"}
+          {assignmentMode === "speakers"
+            ? "Speaker voices (required)"
+            : "Voice catalog"}
         </h3>
         <p className="text-xs text-muted-foreground">
-          {groupingMode === "speakers" ? (
+          {assignmentMode === "speakers" ? (
             <>
-              This script uses interleaved speakers (Emma / Leo). Voices are
-              assigned per orator from the script tags and scene{" "}
-              <code className="text-[11px]">visualIdea</code> prefixes — not as
-              contiguous section blocks. Optional Speed per speaker is sent to
-              ElevenLabs as <code className="text-[11px]">voice_settings.speed</code>{" "}
-              (not post-processed). Music-bed scenes stay without a speaker
-              voice.
+              This script has multiple speakers. Assign each voice below — that
+              is what Generate uses. Add new voices to the catalog first if
+              needed.
             </>
           ) : (
             <>
-              Assign a different ElevenLabs voice per script section. Optional
-              Speed overrides the global rate for that section when generating.
-              Adjust the scene range manually when auto-detection splits a
-              section too early or too late. Generate uses these mappings even if
-              you have not clicked Save yet (and persists them on generate).
+              Add Google / ElevenLabs / Fish / Speechify voices here, then pick
+              the one for this video in the blue{" "}
+              <span className="font-medium text-foreground">
+                Choose the voice for this video
+              </span>{" "}
+              box above.
             </>
           )}
         </p>
       </div>
+
+      {assignmentMode === "speakers" ? (
+        <div className="rounded-xl border-2 border-sky-500/70 bg-sky-50 p-4 dark:border-sky-400/50 dark:bg-sky-950/50">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">
+            Required · Speaker voices
+          </p>
+          <ul className="space-y-1.5 text-sm text-sky-950 dark:text-sky-50">
+            {generationPlan.map((row) => (
+              <li key={row.kind}>
+                <span className="font-medium">{row.label}</span>
+                <span className="text-sky-800/80 dark:text-sky-200/80">
+                  {" "}
+                  → {voiceOptionLabel(row.voice)}
+                  {!row.locked ? " (pick below)" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="grid gap-3 lg:grid-cols-[minmax(140px,160px)_minmax(160px,200px)_1fr_auto]">
         <select
           className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           value={newVoiceProvider}
           onChange={(event) => {
+            const value = event.target.value;
             const next =
-              event.target.value === "google" ? "google" : "elevenlabs";
+              value === "google"
+                ? "google"
+                : value === "fish"
+                  ? "fish"
+                  : value === "speechify"
+                    ? "speechify"
+                    : "elevenlabs";
             setNewVoiceProvider(next);
             setNewVoiceId("");
+            setNewFishModel("");
+            setNewFishSpeed("");
+            setNewSpeechifyModel("");
             setMessage("");
           }}
           aria-label="Catalog voice provider"
         >
           <option value="elevenlabs">ElevenLabs</option>
           <option value="google">Google Cloud TTS</option>
+          <option value="fish">Fish Audio</option>
+          <option value="speechify">Speechify</option>
         </select>
         <Input
           value={newVoiceName}
@@ -701,6 +807,38 @@ export function VoiceoverSectionVoicesPanel({
               )}
             </select>
           </div>
+        ) : newVoiceProvider === "fish" ? (
+          <div className="grid gap-2 sm:grid-cols-[1fr_minmax(110px,140px)_minmax(70px,90px)]">
+            <Input
+              value={newVoiceId}
+              onChange={(event) => setNewVoiceId(event.target.value)}
+              placeholder="Fish reference_id"
+            />
+            <Input
+              value={newFishModel}
+              onChange={(event) => setNewFishModel(event.target.value)}
+              placeholder="model (opt.)"
+            />
+            <Input
+              value={newFishSpeed}
+              onChange={(event) => setNewFishSpeed(event.target.value)}
+              placeholder="speed"
+              inputMode="decimal"
+            />
+          </div>
+        ) : newVoiceProvider === "speechify" ? (
+          <div className="grid gap-2 sm:grid-cols-[1fr_minmax(110px,140px)]">
+            <Input
+              value={newVoiceId}
+              onChange={(event) => setNewVoiceId(event.target.value)}
+              placeholder="Speechify voice_id (e.g. geffen_32)"
+            />
+            <Input
+              value={newSpeechifyModel}
+              onChange={(event) => setNewSpeechifyModel(event.target.value)}
+              placeholder="model (opt.)"
+            />
+          </div>
         ) : (
           <Input
             value={newVoiceId}
@@ -712,6 +850,19 @@ export function VoiceoverSectionVoicesPanel({
           Add voice
         </Button>
       </div>
+      {newVoiceProvider === "fish" ? (
+        <p className="text-xs text-muted-foreground">
+          Paste a Fish Audio <span className="font-medium">reference_id</span>.
+          Optional model defaults to FISH_AUDIO_MODEL / s2.1-pro; optional speed
+          is Fish prosody.speed.
+        </p>
+      ) : null}
+      {newVoiceProvider === "speechify" ? (
+        <p className="text-xs text-muted-foreground">
+          Paste a Speechify <span className="font-medium">voice_id</span> from
+          the platform. Optional model defaults to SPEECHIFY_MODEL / simba-3.2.
+        </p>
+      ) : null}
       {newVoiceProvider === "google" && googleVoicesStatus === "error" ? (
         <p className="text-xs text-destructive">
           {googleVoicesError || "Could not load Google TTS voices."} Check
@@ -742,10 +893,23 @@ export function VoiceoverSectionVoicesPanel({
                     : "Chatterbox clone"
                   : voice.provider === "google"
                     ? "Google Cloud TTS"
-                    : "ElevenLabs"}{" "}
+                    : voice.provider === "fish"
+                      ? "Fish Audio"
+                      : voice.provider === "speechify"
+                        ? "Speechify"
+                        : "ElevenLabs"}{" "}
                 · {voice.voiceId}
                 {voice.provider === "google" && voice.googleConfig?.speakingRate != null
                   ? ` · rate ${voice.googleConfig.speakingRate}`
+                  : ""}
+                {voice.provider === "fish" && voice.fishConfig?.model
+                  ? ` · ${voice.fishConfig.model}`
+                  : ""}
+                {voice.provider === "fish" && voice.fishConfig?.speed != null
+                  ? ` · speed ${voice.fishConfig.speed}`
+                  : ""}
+                {voice.provider === "speechify" && voice.speechifyConfig?.model
+                  ? ` · ${voice.speechifyConfig.model}`
                   : ""}
               </span>
               <button
@@ -889,6 +1053,7 @@ export function VoiceoverSectionVoicesPanel({
         )}
       </CollapsibleCard>
 
+      {assignmentMode === "speakers" ? (
       <div className="space-y-3">
         {sectionSummary.map((section) => {
           const current = sectionState[section.kind];
@@ -912,7 +1077,7 @@ export function VoiceoverSectionVoicesPanel({
           return (
             <div
               key={section.kind}
-              className="grid gap-3 rounded-md border bg-background p-3"
+              className="grid gap-3 rounded-md border border-sky-300/60 bg-background p-3 dark:border-sky-800"
             >
               <div className="grid gap-2 lg:grid-cols-[220px_1fr]">
                 <div>
@@ -932,18 +1097,11 @@ export function VoiceoverSectionVoicesPanel({
                       </p>
                     </>
                   ) : (
-                    <>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Effective: scenes {startValue}–{endValue} (
-                        {section.sceneCount} scene
-                        {section.sceneCount === 1 ? "" : "s"})
-                      </p>
-                      {auto?.startSortOrder != null && auto.endSortOrder != null ? (
-                        <p className="text-xs text-muted-foreground">
-                          Auto-detected: {auto.startSortOrder}–{auto.endSortOrder}
-                        </p>
-                      ) : null}
-                    </>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Effective: scenes {startValue}–{endValue} (
+                      {section.sceneCount} scene
+                      {section.sceneCount === 1 ? "" : "s"})
+                    </p>
                   )}
                 </div>
                 <div className="grid gap-2 sm:grid-cols-[1fr_140px] sm:items-end">
@@ -957,7 +1115,7 @@ export function VoiceoverSectionVoicesPanel({
                       onChange={(event) =>
                         setKindVoice(section.kind, event.target.value)
                       }
-                      className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                      className="h-10 rounded-md border-2 border-sky-400/70 bg-background px-3 text-sm font-medium"
                     >
                       {options.map((voice) => (
                         <option key={voice.voiceId} value={voice.voiceId}>
@@ -982,110 +1140,20 @@ export function VoiceoverSectionVoicesPanel({
                         setKindSpeed(section.kind, event.target.value)
                       }
                     />
-                    <p className="text-[11px] text-muted-foreground">
-                      ElevenLabs rate ({VOICEOVER_SECTION_SPEED_MIN}–
-                      {VOICEOVER_SECTION_SPEED_MAX}). Lower = slower. Empty uses
-                      global Speed.
-                      {section.kind === "student"
-                        ? " Tip for Leo: try 0.75–0.85."
-                        : ""}
-                    </p>
                   </div>
                 </div>
               </div>
-
-              {!isSpeakerRole ? (
-                <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                  <div className="grid gap-1">
-                    <Label htmlFor={`${formId}-${section.kind}-from`}>
-                      From scene
-                    </Label>
-                    <Input
-                      id={`${formId}-${section.kind}-from`}
-                      type="number"
-                      min={1}
-                      max={maxSortOrder || undefined}
-                      value={startValue}
-                      onChange={(event) => {
-                        const parsed = Number(event.target.value);
-                        if (!Number.isFinite(parsed)) {
-                          return;
-                        }
-                        setSectionState((currentState) => {
-                          const existing = currentState[section.kind] ?? {
-                            voiceId: selectedVoiceId,
-                            voiceName:
-                              options.find((voice) => voice.voiceId === selectedVoiceId)
-                                ?.name || undefined,
-                          };
-                          return {
-                            ...currentState,
-                            [section.kind]: {
-                              ...existing,
-                              startSortOrder: Math.max(1, Math.floor(parsed)),
-                              endSortOrder: endValue,
-                            },
-                          };
-                        });
-                      }}
-                    />
-                  </div>
-                  <div className="grid gap-1">
-                    <Label htmlFor={`${formId}-${section.kind}-to`}>
-                      To scene
-                    </Label>
-                    <Input
-                      id={`${formId}-${section.kind}-to`}
-                      type="number"
-                      min={1}
-                      max={maxSortOrder || undefined}
-                      value={endValue}
-                      onChange={(event) => {
-                        const parsed = Number(event.target.value);
-                        if (!Number.isFinite(parsed)) {
-                          return;
-                        }
-                        setSectionState((currentState) => {
-                          const existing = currentState[section.kind] ?? {
-                            voiceId: selectedVoiceId,
-                            voiceName:
-                              options.find((voice) => voice.voiceId === selectedVoiceId)
-                                ?.name || undefined,
-                          };
-                          return {
-                            ...currentState,
-                            [section.kind]: {
-                              ...existing,
-                              startSortOrder: startValue,
-                              endSortOrder: Math.max(1, Math.floor(parsed)),
-                            },
-                          };
-                        });
-                      }}
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => resetSectionRange(section.kind)}
-                    disabled={
-                      auto?.startSortOrder == null || auto.endSortOrder == null
-                    }
-                  >
-                    Reset to auto
-                  </Button>
-                </div>
-              ) : null}
             </div>
           );
         })}
       </div>
+      ) : null}
 
-      <Button type="button" onClick={saveSectionVoices} disabled={isPending}>
-        {groupingMode === "speakers"
-          ? "Save speaker voices for this video"
-          : "Save section voices for this video"}
-      </Button>
+      {assignmentMode === "speakers" ? (
+        <Button type="button" onClick={saveSectionVoices} disabled={isPending}>
+          Save speaker voices for this video
+        </Button>
+      ) : null}
 
       {message ? <p className="text-xs text-muted-foreground">{message}</p> : null}
     </div>

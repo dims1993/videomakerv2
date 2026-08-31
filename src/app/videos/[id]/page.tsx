@@ -35,6 +35,7 @@ import {
   mockGenerateScript,
   renderDraft,
   retryFailedSceneVoiceovers,
+  regenerateNarrationBlock,
   resetSelectedImageReferences,
   runScriptWriterBatch,
   saveVoiceoverInfo,
@@ -43,6 +44,7 @@ import {
   updateRenderDraftStatus,
   updateScene,
   updateSelectedScenePauses,
+  applySmartPunctuationScenePausesAction,
   attachMusicBedsToScenes,
   attachSuggestedMusicBeds,
   updateSubtitleStylePreset,
@@ -58,11 +60,20 @@ import { addVideoToPipelineQueue } from "@/app/pipeline-actions";
 import { MusicBedAssignPanel } from "@/components/music-bed-assign-panel";
 import { ThumbnailMasterWorkflow } from "@/components/thumbnail-master-workflow";
 import { VoiceoverScenePausePanel } from "@/components/voiceover-scene-pause-panel";
+import { VoiceoverGenerateActions } from "@/components/voiceover-generate-actions";
+import { NarrationBlocksPanel } from "@/components/narration-blocks-panel";
+import {
+  VoiceoverSceneSelectionProvider,
+  VoiceoverSceneSelectionSummary,
+  VoiceoverSceneSelectCheckbox,
+} from "@/components/voiceover-scene-selection";
 import { listMusicBedPresets } from "@/lib/music-beds";
 import { getFreesoundApiKey } from "@/lib/freesound";
 import { displayImageOutputFolder } from "@/lib/image-output-folder";
 import { isMusicBedVisualIdea } from "@/lib/podcast-pause-cues";
 import { resolvePipelineSettings } from "@/lib/pipeline-settings";
+import { readNarrationManifest } from "@/lib/voiceover-block-manifest";
+import { isNarrationBlocksEnabled } from "@/lib/voiceover-blocks";
 import { getVisualPlanHybridCheckpointSummary } from "@/lib/visual-plan-checkpoint";
 import { getScriptWriterCheckpointSummary } from "@/lib/script-writer-checkpoint";
 import { parseVideoThumbnailMasterSelection } from "@/lib/thumbnail-batch-prompt";
@@ -103,7 +114,8 @@ import {
   sumTrailingUncaptionedDurationSecs,
 } from "@/lib/timeline-alignment";
 import { TimelineAlignmentBanner } from "@/components/timeline-alignment-banner";
-import { sceneAudioPreview } from "@/lib/voiceover-segments";
+import { sceneAudioPreview, generatedAudioUrl } from "@/lib/voiceover-segments";
+import { fishSpeechTextFromVoiceoverSettings } from "@/lib/fish-speech-tags";
 import { Badge } from "@/components/ui/badge";
 import { AssetsWorkflow } from "@/components/assets-workflow";
 import { Button } from "@/components/ui/button";
@@ -129,7 +141,6 @@ import { ElevenLabsSettingsFields } from "@/components/elevenlabs-settings-field
 import { BibleOneYearDayPanel } from "@/components/bible-one-year-day-panel";
 import { ScriptWriterBatchControls } from "@/components/script-writer-batch-controls";
 import { VoiceoverSectionVoicesPanel } from "@/components/voiceover-section-voices";
-import { CancelSceneVoiceoverButton } from "@/components/cancel-scene-voiceover-button";
 import { ExportVideoPackageButton } from "@/components/export-video-package-button";
 import { ImportScenesForm } from "@/components/import-scenes-form";
 import { ScenePatchImporter } from "@/components/scene-patch-importer";
@@ -156,6 +167,7 @@ import {
 } from "@/lib/voiceover-section-voices";
 import {
   groupScenesByScriptSection,
+  detectVoiceoverGroupingMode,
 } from "@/lib/script-sections";
 import {
   listPodcastActingCueMatches,
@@ -620,6 +632,10 @@ export default async function VideoDetailPage({
     channelVoiceName: channel.voiceoverDefaultVoiceName,
   });
   const chirp3HdUsage = await getChirp3HdUsageSummary();
+  const narrationBlocksEnabled = isNarrationBlocksEnabled();
+  const narrationManifest = narrationBlocksEnabled
+    ? await readNarrationManifest(video.id)
+    : null;
   const isBibleOneYearVideo = isBibleOneYearCategory(video.topicCategory);
   const parsedIdeaJson = (() => {
     if (!video.ideaJson?.trim()) {
@@ -651,6 +667,10 @@ export default async function VideoDetailPage({
         })),
       })
     : [];
+  const voiceoverAssignmentMode =
+    detectVoiceoverGroupingMode(autoSceneSectionAssignments) === "speakers"
+      ? "speakers"
+      : "single";
   const actingCuesBySortOrder = new Map(
     video.script?.trim()
       ? listPodcastActingCueMatches({
@@ -757,6 +777,14 @@ export default async function VideoDetailPage({
     : [];
   const scenesVoiceoverVisible = needsVoiceoverTab
     ? scenes.slice(0, voiceoverListLimit)
+    : [];
+  const voiceoverSelectableScenes = needsVoiceoverTab
+    ? scenes.map((scene) => ({
+        sortOrder: scene.sortOrder,
+        sceneType: scene.sceneType,
+        visualIdea: scene.visualIdea,
+        pauseAfterMs: scene.pauseAfterMs,
+      }))
     : [];
   const voiceoverListTruncated =
     needsVoiceoverTab &&
@@ -865,6 +893,10 @@ export default async function VideoDetailPage({
     : 0;
   const hasSceneVoiceoverMaster =
     video.voiceoverAudioPath?.includes("voiceover_by_scene_master") ?? false;
+  const masterVoiceoverAudioUrl = generatedAudioUrl(
+    video.voiceoverAudioPath,
+    video.updatedAt,
+  );
   const latestRenderDraft = video.renderDrafts[0] ?? null;
   const projectDraftFileName =
     latestRenderDraft?.fileName?.trim() ||
@@ -901,7 +933,11 @@ export default async function VideoDetailPage({
     segmentDurationSecs: voiceoverSegments.map(
       (segment) => segment.durationSec,
     ),
-    lastCueEndSec: lastCueEndFromCues(formattedSubtitleCues),
+    // Ignore stale combined cues while captions still need a rebuild.
+    lastCueEndSec:
+      video.subtitleStatus === "needs_update"
+        ? null
+        : lastCueEndFromCues(formattedSubtitleCues),
     uncaptionedTailSec: sumTrailingUncaptionedDurationSecs(
       voiceoverSegments,
     ),
@@ -2053,6 +2089,9 @@ export default async function VideoDetailPage({
                 <a href="#voiceover-overview">Overview</a>
               </Button>
               <Button asChild variant="ghost" size="sm">
+                <a href="#voiceover-master">Master</a>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
                 <a href="#voiceover-by-scene">By Scene</a>
               </Button>
               <Button asChild variant="ghost" size="sm">
@@ -2128,6 +2167,39 @@ export default async function VideoDetailPage({
                           : "Automatic after stitch"
                       }
                     />
+                  </div>
+
+                  <div
+                    id="voiceover-master"
+                    className="rounded-md border bg-muted/20 p-4"
+                  >
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium">Master stitch player</p>
+                      {hasSceneVoiceoverMaster || masterVoiceoverAudioUrl ? (
+                        <Badge variant="default">Ready to play</Badge>
+                      ) : (
+                        <Badge variant="outline">Stitch first</Badge>
+                      )}
+                    </div>
+                    {masterVoiceoverAudioUrl ? (
+                      <div className="space-y-2">
+                        <SceneVoiceoverAudioPlayer
+                          src={masterVoiceoverAudioUrl}
+                          className="w-full"
+                        />
+                        <p className="break-all font-mono text-xs text-muted-foreground">
+                          {video.voiceoverAudioPath}
+                          {video.voiceoverDurationSec
+                            ? ` · ${video.voiceoverDurationSec.toFixed(1)}s`
+                            : ""}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        After you stitch the master voiceover, the full paced
+                        track will play here so you can review pacing end to end.
+                      </p>
+                    )}
                   </div>
 
                   <details className="rounded-md border bg-muted/20 p-4">
@@ -2233,16 +2305,19 @@ export default async function VideoDetailPage({
                   />
                 </div>
 
+                <VoiceoverSceneSelectionProvider
+                  formId={elevenLabsSettingsFormId}
+                  scenes={voiceoverSelectableScenes}
+                >
                 <ElevenLabsSettingsFields
                   formId={elevenLabsSettingsFormId}
                   initialSettings={elevenLabsSettings.settings}
                   voiceIdHistory={elevenLabsSettings.voiceIdHistory}
                   namedVoices={elevenLabsSettings.namedVoices}
+                  variant={
+                    voiceoverAssignmentMode === "speakers" ? "formOnly" : "hero"
+                  }
                 />
-
-                <GoogleChirp3HdUsageMeter initialSummary={chirp3HdUsage} />
-
-                <ChatterboxVoiceCloner />
 
                 <VoiceoverSectionVoicesPanel
                   videoId={video.id}
@@ -2252,6 +2327,7 @@ export default async function VideoDetailPage({
                   namedVoices={elevenLabsSettings.namedVoices}
                   sectionVoices={voiceoverSectionVoices}
                   sceneAssignments={autoSceneSectionAssignments}
+                  assignmentMode={voiceoverAssignmentMode}
                   maxSortOrder={
                     scenes.reduce(
                       (max, scene) => Math.max(max, scene.sortOrder),
@@ -2259,6 +2335,10 @@ export default async function VideoDetailPage({
                     )
                   }
                 />
+
+                <GoogleChirp3HdUsageMeter initialSummary={chirp3HdUsage} />
+
+                <ChatterboxVoiceCloner />
 
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="flex items-center gap-2 text-sm">
@@ -2289,58 +2369,63 @@ export default async function VideoDetailPage({
                   </label>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="submit"
-                    form={elevenLabsSettingsFormId}
-                    disabled={scenes.length === 0}
-                    formAction={generateSceneVoiceovers.bind(null, video.id)}
-                  >
-                    Generate all scene voiceovers
-                  </Button>
-                  <p className="w-full text-xs text-muted-foreground">
-                    With auto-stitch on, the master voiceover is built when every
-                    scene audio is ready. Turn it off to generate clips only —
-                    then use Stitch master voiceover manually.
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Uses the voice in the blue box above
+                    {voiceoverAssignmentMode === "speakers"
+                      ? " (or speaker voices when this script has Emma/Leo)."
+                      : "."}{" "}
+                    With auto-stitch on, the master is built when every scene is
+                    ready.
                   </p>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    form={elevenLabsSettingsFormId}
-                    disabled={sceneVoiceoverMissingCount === 0}
-                    formAction={generateMissingSceneVoiceovers.bind(null, video.id)}
-                  >
-                    Generate missing scene voiceovers
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    form={elevenLabsSettingsFormId}
-                    disabled={scenes.length === 0}
-                    formAction={generateSelectedSceneVoiceovers.bind(null, video.id)}
-                  >
-                    Generate selected scene voiceovers
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    form={elevenLabsSettingsFormId}
-                    disabled={scenes.length === 0}
-                    formAction={retryFailedSceneVoiceovers.bind(null, video.id)}
-                  >
-                    Retry failed scenes
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    form={elevenLabsSettingsFormId}
-                    disabled={sceneVoiceoverGeneratedCount === 0}
-                    formAction={stitchSceneVoiceovers.bind(null, video.id)}
-                  >
-                    Stitch master voiceover
-                  </Button>
-                  <CancelSceneVoiceoverButton videoId={video.id} />
+                  <VoiceoverGenerateActions
+                    formId={elevenLabsSettingsFormId}
+                    videoId={video.id}
+                    sceneCount={scenes.length}
+                    missingCount={sceneVoiceoverMissingCount}
+                    generatedCount={sceneVoiceoverGeneratedCount}
+                    generateAllAction={generateSceneVoiceovers.bind(null, video.id)}
+                    generateMissingAction={generateMissingSceneVoiceovers.bind(
+                      null,
+                      video.id,
+                    )}
+                    generateSelectedAction={generateSelectedSceneVoiceovers.bind(
+                      null,
+                      video.id,
+                    )}
+                    retryFailedAction={retryFailedSceneVoiceovers.bind(
+                      null,
+                      video.id,
+                    )}
+                    stitchAction={stitchSceneVoiceovers.bind(null, video.id)}
+                  />
+
+                  <NarrationBlocksPanel
+                    videoId={video.id}
+                    formId={elevenLabsSettingsFormId}
+                    manifest={narrationManifest}
+                    regenerateBlockAction={regenerateNarrationBlock}
+                  />
                 </div>
+
+                {masterVoiceoverAudioUrl ? (
+                  <div className="rounded-md border border-emerald-200/80 bg-emerald-50/50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium">Listen to stitched master</p>
+                      <Badge variant="default">Master stitched</Badge>
+                    </div>
+                    <SceneVoiceoverAudioPlayer
+                      src={masterVoiceoverAudioUrl}
+                      className="w-full"
+                    />
+                    <p className="mt-2 break-all font-mono text-xs text-muted-foreground">
+                      {video.voiceoverFileName ?? video.voiceoverAudioPath}
+                      {video.voiceoverDurationSec
+                        ? ` · ${video.voiceoverDurationSec.toFixed(1)}s`
+                        : ""}
+                    </p>
+                  </div>
+                ) : null}
 
                 <MusicBedAssignPanel
                   videoId={video.id}
@@ -2365,16 +2450,24 @@ export default async function VideoDetailPage({
                     }))}
                 />
 
+                <VoiceoverSceneSelectionSummary
+                  listTruncated={voiceoverListTruncated}
+                  visibleSceneCount={scenesVoiceoverVisible.length}
+                  totalSceneCount={scenes.length}
+                  narrationBlocksEnabled={narrationBlocksEnabled}
+                />
+
                 <VoiceoverScenePausePanel
                   formId={elevenLabsSettingsFormId}
                   disabled={scenes.length === 0}
                   applyAction={updateSelectedScenePauses.bind(null, video.id)}
-                  scenes={scenes.map((scene) => ({
-                    sortOrder: scene.sortOrder,
-                    sceneType: scene.sceneType,
-                    visualIdea: scene.visualIdea,
-                    pauseAfterMs: scene.pauseAfterMs,
-                  }))}
+                  smartPauseAction={applySmartPunctuationScenePausesAction.bind(
+                    null,
+                    video.id,
+                  )}
+                  defaultPauseAfterMs={80}
+                  scenes={voiceoverSelectableScenes}
+                  narrationBlocksEnabled={narrationBlocksEnabled}
                 />
 
                 <div className="max-h-[560px] overflow-auto rounded-md border">
@@ -2386,7 +2479,9 @@ export default async function VideoDetailPage({
                         <th className="px-3 py-2">Script preview</th>
                         <th className="px-3 py-2">Voiceover</th>
                         <th className="px-3 py-2">Duration</th>
-                        <th className="px-3 py-2">Pause</th>
+                        {!narrationBlocksEnabled ? (
+                          <th className="px-3 py-2">Pause</th>
+                        ) : null}
                         <th className="px-3 py-2">Audio</th>
                       </tr>
                     </thead>
@@ -2415,22 +2510,34 @@ export default async function VideoDetailPage({
                             >
                               <td className="px-3 py-3 font-medium">{scene.sortOrder}</td>
                               <td className="px-3 py-3">
-                                {rejected ? (
-                                  <span className="text-xs text-destructive">—</span>
-                                ) : (
-                                  <input
-                                    type="checkbox"
-                                    name="selectedSceneVoiceoverOrders"
-                                    value={scene.sortOrder}
-                                    form={elevenLabsSettingsFormId}
-                                    className="size-4"
-                                  />
-                                )}
+                                <VoiceoverSceneSelectCheckbox
+                                  sortOrder={scene.sortOrder}
+                                  disabled={rejected}
+                                />
                               </td>
                               <td className="max-w-sm px-3 py-3">
                                 <div className="line-clamp-3 whitespace-pre-line">
                                   {truncatePreview(scene.scriptText, 220)}
                                 </div>
+                                {(() => {
+                                  const fishSpeechText =
+                                    fishSpeechTextFromVoiceoverSettings(
+                                      scene.voiceoverSettingsJson,
+                                    );
+                                  if (!fishSpeechText) {
+                                    return null;
+                                  }
+                                  return (
+                                    <div className="mt-2 rounded-md border border-dashed border-amber-700/30 bg-amber-50/60 px-2 py-1.5 dark:bg-amber-950/20">
+                                      <p className="text-[10px] font-medium uppercase tracking-wide text-amber-900/80 dark:text-amber-200/80">
+                                        Fish speech tags
+                                      </p>
+                                      <p className="mt-0.5 line-clamp-4 whitespace-pre-line font-mono text-[11px] leading-snug text-amber-950/90 dark:text-amber-100/90">
+                                        {fishSpeechText}
+                                      </p>
+                                    </div>
+                                  );
+                                })()}
                                 {rejected ? (
                                   <p className="mt-1 text-xs font-medium text-destructive">
                                     Rejected in Assets — skipped for voiceover/render
@@ -2478,11 +2585,13 @@ export default async function VideoDetailPage({
                                   ? `${scene.voiceoverDuration.toFixed(1)}s`
                                   : "Not set"}
                               </td>
-                              <td className="px-3 py-3">
-                                {scene.pauseAfterMs != null
-                                  ? `${scene.pauseAfterMs}ms`
-                                  : "default 180ms"}
-                              </td>
+                              {!narrationBlocksEnabled ? (
+                                <td className="px-3 py-3">
+                                  {scene.pauseAfterMs != null
+                                    ? `${scene.pauseAfterMs}ms`
+                                    : "punctuation default"}
+                                </td>
+                              ) : null}
                               <td className="max-w-xs px-3 py-3">
                                 {audioUrl ? (
                                   <SceneVoiceoverAudioPlayer
@@ -2501,7 +2610,7 @@ export default async function VideoDetailPage({
                         <tr>
                           <td
                             className="px-3 py-8 text-center text-muted-foreground"
-                            colSpan={7}
+                            colSpan={narrationBlocksEnabled ? 6 : 7}
                           >
                             Generate or import a Visual Plan before using voiceover by scene.
                           </td>
@@ -2523,6 +2632,7 @@ export default async function VideoDetailPage({
                     (heavier on memory).
                   </p>
                 ) : null}
+                </VoiceoverSceneSelectionProvider>
               </CardContent>
             </Card>
 

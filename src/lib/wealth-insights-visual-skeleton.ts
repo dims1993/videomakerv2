@@ -5,27 +5,30 @@
 
 import { packSentencesIntoBeats } from "@/lib/visual-plan-generic-skeleton";
 import {
-  clampSceneDurationSeconds,
-  suggestHookDurationSeconds,
+  forceSplitOversizedBeat,
+} from "@/lib/visual-plan-dense-beats";
+import {
+  normalizeForScriptCoverage,
+  segmentHookNarration,
+  stripStructuralMarkers,
 } from "@/lib/visual-plan-script";
 import type { PodcastVisualPlanSkeletonScene } from "@/lib/visual-plan-skeleton";
 import {
+  estimateWealthNarrationSeconds,
   isWealthHookSectionLabel,
   splitWealthInsightsScriptIntoVisualPlanSections,
   spokenWealthScript,
   WEALTH_BODY_SCENE_HARD_MAX_SEC,
   WEALTH_HOOK_SCENE_HARD_MAX_SEC,
 } from "@/lib/wealth-insights-visual-sections";
-import { normalizeForScriptCoverage } from "@/lib/visual-plan-script";
-import { stripStructuralMarkers } from "@/lib/visual-plan-script";
 
 /** Hook beats stay short (≈2–4s / ≤5.5s estimated). */
 export const WEALTH_HOOK_TARGET_WORDS = 8;
 export const WEALTH_HOOK_MAX_WORDS = 12;
 
-/** Body/closing beats aim for ≈5–8s at ~130–145 wpm. */
+/** Body/closing beats aim for ≈5–8s at ~130–145 wpm (~18 words ≈ 8s). */
 export const WEALTH_BODY_TARGET_WORDS = 16;
-export const WEALTH_BODY_MAX_WORDS = 22;
+export const WEALTH_BODY_MAX_WORDS = 18;
 export const WEALTH_BODY_SOFT_MIN_WORDS = 8;
 
 export type WealthInsightsVisualPlanSkeleton = {
@@ -55,10 +58,16 @@ function splitIntoSentences(text: string): string[] {
   return parts.map((part) => part.trim()).filter(Boolean);
 }
 
-function mergeShortBeats(beats: string[], softMinWords: number, maxWords: number) {
+function mergeShortBeats(
+  beats: string[],
+  softMinWords: number,
+  maxWords: number,
+  options?: { maxEstimatedSec?: number },
+) {
   if (beats.length <= 1) {
     return beats.filter(Boolean);
   }
+  const maxEstimatedSec = options?.maxEstimatedSec;
   const merged: string[] = [];
   for (const beat of beats) {
     const trimmed = beat.trim();
@@ -71,7 +80,11 @@ function mergeShortBeats(beats: string[], softMinWords: number, maxWords: number
       (wordCount(trimmed) < softMinWords || wordCount(prev) < softMinWords)
     ) {
       const combined = `${prev} ${trimmed}`.replace(/\s+/g, " ").trim();
-      if (wordCount(combined) <= maxWords + 6) {
+      const combinedOk =
+        wordCount(combined) <= maxWords + 6 &&
+        (maxEstimatedSec == null ||
+          estimateWealthNarrationSeconds(combined) <= maxEstimatedSec);
+      if (combinedOk) {
         merged[merged.length - 1] = combined;
         continue;
       }
@@ -82,17 +95,23 @@ function mergeShortBeats(beats: string[], softMinWords: number, maxWords: number
 }
 
 function estimateBodyDurationSec(scriptText: string) {
-  const words = wordCount(scriptText);
-  // ~135 wpm → ~2.25 words/sec
-  const estimated = Math.round(Math.max(5, words / 2.25));
-  return clampSceneDurationSeconds(
-    Math.min(WEALTH_BODY_SCENE_HARD_MAX_SEC, Math.max(5, estimated)),
+  const estimated = estimateWealthNarrationSeconds(scriptText);
+  const rounded = Math.max(
+    5,
+    Math.min(WEALTH_BODY_SCENE_HARD_MAX_SEC, estimated),
   );
+  return Math.round(rounded * 2) / 2;
 }
 
 function estimateHookDurationSec(scriptText: string) {
-  const suggested = suggestHookDurationSeconds(scriptText);
-  return Math.min(WEALTH_HOOK_SCENE_HARD_MAX_SEC, Math.max(2, suggested));
+  const estimated = estimateWealthNarrationSeconds(scriptText);
+  // Declared duration tracks real narration but never exceeds the hard ceiling.
+  const rounded = Math.max(
+    2,
+    Math.min(WEALTH_HOOK_SCENE_HARD_MAX_SEC, estimated),
+  );
+  // Keep half-second steps so short beats don't get padded to 4–5s.
+  return Math.round(rounded * 2) / 2;
 }
 
 function spokenSectionText(text: string) {
@@ -120,6 +139,7 @@ function makeScene(options: {
     duration: options.duration,
     imagePrompt: pendingImagePrompt(),
     status: "planned",
+    // Punctuation / smart pauses own micro-gaps (null = resolve at generate).
     pauseAfterMs: null,
     speaker: "other",
     visualsFilled: false,
@@ -127,11 +147,18 @@ function makeScene(options: {
 }
 
 function packHookBeats(spoken: string): string[] {
-  const packed = packSentencesIntoBeats(splitIntoSentences(spoken), {
-    targetWords: WEALTH_HOOK_TARGET_WORDS,
-    maxWords: WEALTH_HOOK_MAX_WORDS,
+  // Use the shared hard-hook segmenter, then force-split anything still >5.5s.
+  const segmented = segmentHookNarration(spoken);
+  const expanded = segmented.flatMap((beat) =>
+    forceSplitOversizedBeat(beat, {
+      maxWords: WEALTH_HOOK_MAX_WORDS,
+      maxEstimatedSec: WEALTH_HOOK_SCENE_HARD_MAX_SEC,
+      estimateSeconds: estimateWealthNarrationSeconds,
+    }),
+  );
+  return mergeShortBeats(expanded, 3, WEALTH_HOOK_MAX_WORDS, {
+    maxEstimatedSec: WEALTH_HOOK_SCENE_HARD_MAX_SEC,
   });
-  return mergeShortBeats(packed, 4, WEALTH_HOOK_MAX_WORDS);
 }
 
 function packBodyBeats(spoken: string): string[] {
@@ -139,10 +166,18 @@ function packBodyBeats(spoken: string): string[] {
     targetWords: WEALTH_BODY_TARGET_WORDS,
     maxWords: WEALTH_BODY_MAX_WORDS,
   });
+  const expanded = packed.flatMap((beat) =>
+    forceSplitOversizedBeat(beat, {
+      maxWords: WEALTH_BODY_MAX_WORDS,
+      maxEstimatedSec: WEALTH_BODY_SCENE_HARD_MAX_SEC,
+      estimateSeconds: estimateWealthNarrationSeconds,
+    }),
+  );
   return mergeShortBeats(
-    packed,
+    expanded,
     WEALTH_BODY_SOFT_MIN_WORDS,
     WEALTH_BODY_MAX_WORDS,
+    { maxEstimatedSec: WEALTH_BODY_SCENE_HARD_MAX_SEC },
   );
 }
 
@@ -199,7 +234,10 @@ export function buildWealthInsightsVisualPlanSkeleton(
 }
 
 /** Assert local skeleton preserves spoken Wealth script coverage. */
-export function assertWealthSkeletonCoverage(script: string, scenes: PodcastVisualPlanSkeletonScene[]) {
+export function assertWealthSkeletonCoverage(
+  script: string,
+  scenes: PodcastVisualPlanSkeletonScene[],
+) {
   const expected = normalizeForScriptCoverage(spokenWealthScript(script));
   const actual = normalizeForScriptCoverage(
     scenes.map((scene) => scene.scriptText).join(" "),

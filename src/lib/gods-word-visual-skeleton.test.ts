@@ -85,4 +85,43 @@ describe("gods-word-visual-skeleton", () => {
     assert.ok(merged.length < 3);
     assert.ok(merged.every((beat) => beat.split(/\s+/).length >= 6));
   });
+
+  it("force-splits dense single-sentence hook beats", () => {
+    const script = `
+[HOOK]
+They see phrases about falling away, trampling the Son of God, insulting the Spirit of grace, and they panic about whether they are already lost.
+Another person hears Jesus say, "No one will snatch them out of My hand," and feels comfort for a moment before a harder question returns.
+It tells the sheep that no one can snatch them from Christ's hand, and it also tells professing believers to examine themselves carefully before they presume.
+[END HOOK]
+
+[CHAPTER 1 - THE WARNING]
+Jesus does not begin with fear alone. He begins with a real promise and a real warning that work together.
+[FINAL]
+`.trim();
+
+    const skeleton = buildGodsWordVisualPlanSkeleton(script);
+    const hookScenes = skeleton.scenes.filter((scene) =>
+      (scene.visualPurpose || "").toLowerCase().includes("hook"),
+    );
+    assert.ok(hookScenes.length >= 4);
+    for (const scene of hookScenes) {
+      const words = scene.scriptText.trim().split(/\s+/).filter(Boolean).length;
+      assert.ok(
+        words <= 16,
+        `hook beat still too dense (${words} words): ${scene.scriptText}`,
+      );
+      assert.ok(
+        (scene.duration ?? 0) <= 6,
+        `hook duration ${scene.duration}s exceeds soft max`,
+      );
+    }
+
+    const expected = normalizeForScriptCoverage(
+      stripUnknownGodsWordBracketLines(script),
+    );
+    const actual = normalizeForScriptCoverage(
+      skeleton.scenes.map((scene) => scene.scriptText).join(" "),
+    );
+    assert.equal(actual, expected);
+  });
 });

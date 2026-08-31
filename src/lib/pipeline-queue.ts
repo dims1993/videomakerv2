@@ -291,6 +291,8 @@ export async function pickNextQueueItem() {
  * Force a queue item back to an earlier (or same) pipeline step.
  * For script / visual_plan, clears scenes + visual-plan checkpoints so the
  * step can actually re-run instead of being skipped by infer logic.
+ * For assets, clears image paths/status so Flow regenerates instead of
+ * treating existing stills as complete and jumping to voiceover.
  */
 export async function restartPipelineQueueItemFromStep({
   itemId,
@@ -315,7 +317,9 @@ export async function restartPipelineQueueItemFromStep({
   }
 
   const clearScenes = step === "script" || step === "visual_plan";
+  const clearImageAssets = step === "assets";
   let deletedScenes = 0;
+  let clearedImageScenes = 0;
 
   if (clearScenes) {
     const deleted = await prisma.scene.deleteMany({
@@ -334,6 +338,31 @@ export async function restartPipelineQueueItemFromStep({
       );
       await clearScriptWriterCheckpoint(item.videoId).catch(() => undefined);
     }
+
+    const { clearGeneratedImagesForVideo } = await import("@/lib/image-batches");
+    await clearGeneratedImagesForVideo(item.videoId, item.video.title).catch(
+      () => 0,
+    );
+  } else if (clearImageAssets) {
+    // Assets only runs for scenes without a local/url/clip asset. Restarting
+    // from assets must invalidate existing stills or the worker reports
+    // "Assets already complete", quits Chrome, and advances to voiceover.
+    const updatedScenes = await prisma.scene.updateMany({
+      where: {
+        videoId: item.videoId,
+        status: { not: "rejected" },
+      },
+      data: {
+        imageLocalPath: null,
+        imageUrl: null,
+        imageFileName: null,
+        imageError: null,
+        imageStatus: "pending",
+        imageBatchId: null,
+        status: "asset_needed",
+      },
+    });
+    clearedImageScenes = updatedScenes.count;
 
     const { clearGeneratedImagesForVideo } = await import("@/lib/image-batches");
     await clearGeneratedImagesForVideo(item.videoId, item.video.title).catch(
@@ -391,6 +420,7 @@ export async function restartPipelineQueueItemFromStep({
     item: updated,
     deletedScenes,
     clearedScenes: clearScenes,
+    clearedImageScenes,
   };
 }
 

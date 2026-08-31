@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { saveElevenLabsPreferencesAction } from "@/app/voice-catalog-actions";
-import { CollapsibleCard } from "@/components/collapsible-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type {
@@ -18,6 +17,12 @@ type ElevenLabsSettingsFieldsProps = {
   initialSettings: ElevenLabsPreferenceSettings;
   voiceIdHistory: string[];
   namedVoices?: NamedElevenLabsVoice[];
+  /**
+   * `hero` = the only voice control for single-narrator videos (always visible).
+   * `formOnly` = keep the generate form fields but hide the voice picker
+   * (multi-speaker videos assign voices in the speaker panel instead).
+   */
+  variant?: "hero" | "formOnly";
 };
 
 function readLocalSettings(): ElevenLabsPreferenceSettings | null {
@@ -97,10 +102,32 @@ function buildCatalog(
         ? { googleLanguageCode: existing.googleLanguageCode }
         : {}),
       ...(existing?.googleConfig ? { googleConfig: existing.googleConfig } : {}),
+      ...(existing?.fishConfig ? { fishConfig: existing.fishConfig } : {}),
+      ...(existing?.speechifyConfig
+        ? { speechifyConfig: existing.speechifyConfig }
+        : {}),
     });
   }
 
   return Array.from(byId.values());
+}
+
+function providerSuffix(voice: NamedElevenLabsVoice) {
+  if (voice.provider === "chatterbox") {
+    return voice.chatterboxMode === "predefined"
+      ? " · Chatterbox predefined"
+      : " · Chatterbox clone";
+  }
+  if (voice.provider === "google") {
+    return " · Google Cloud TTS";
+  }
+  if (voice.provider === "fish") {
+    return " · Fish Audio";
+  }
+  if (voice.provider === "speechify") {
+    return " · Speechify";
+  }
+  return " · ElevenLabs";
 }
 
 export function ElevenLabsSettingsFields({
@@ -108,10 +135,10 @@ export function ElevenLabsSettingsFields({
   initialSettings,
   voiceIdHistory,
   namedVoices = [],
+  variant = "hero",
 }: ElevenLabsSettingsFieldsProps) {
   const formRef = useRef<HTMLFormElement | null>(null);
   const [, startTransition] = useTransition();
-  // Always start from server props so SSR and first client render match.
   const [settings, setSettings] =
     useState<ElevenLabsPreferenceSettings>(initialSettings);
   const [hasHydratedLocal, setHasHydratedLocal] = useState(false);
@@ -134,6 +161,7 @@ export function ElevenLabsSettingsFields({
   }, [hasHydratedLocal, settings]);
 
   const catalog = buildCatalog(namedVoices, settings);
+  const selected = catalog.find((voice) => voice.voiceId === settings.voiceId);
   const history = Array.from(
     new Set(
       [settings.voiceId, ...voiceIdHistory].filter(
@@ -158,29 +186,44 @@ export function ElevenLabsSettingsFields({
     });
   }
 
-  return (
-    <CollapsibleCard
-      title="Advanced voice settings"
-      description="Global generation defaults (voice id, model, format, speed). For Google Cloud TTS rhythm/encoding, use Catalog advanced config below."
-      defaultOpen={false}
+  const formFields = (
+    <form
+      id={formId}
+      ref={formRef}
+      className="grid gap-4"
+      onChange={persistSettings}
+      onBlur={persistSettings}
+      onKeyDown={(event) => {
+        // This form has many external submit buttons (Generate all/selected,
+        // stitch, pause…). Enter in a voice field must NEVER become an
+        // implicit "Generate ALL 269 scenes" submit.
+        if (event.key !== "Enter") {
+          return;
+        }
+        const target = event.target as HTMLElement | null;
+        const tag = target?.tagName;
+        if (tag === "TEXTAREA" || tag === "BUTTON") {
+          return;
+        }
+        event.preventDefault();
+      }}
     >
-      <form
-        id={formId}
-        ref={formRef}
-        className="grid gap-4 lg:grid-cols-4"
-        onChange={persistSettings}
-        onBlur={persistSettings}
-      >
-        <div className="grid gap-2 lg:col-span-2">
-          <Label htmlFor={`${formId}-voice-select`}>Voice</Label>
+      {variant === "hero" ? (
+        <div className="grid gap-3">
+          <Label
+            htmlFor={`${formId}-voice-select`}
+            className="text-base font-semibold text-sky-950 dark:text-sky-50"
+          >
+            Voice
+          </Label>
           {catalog.length > 0 ? (
             <select
               id={`${formId}-voice-select`}
               key={`voice-select-${settings.voiceId}`}
               defaultValue={settings.voiceId}
-              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+              className="h-12 w-full rounded-lg border-2 border-sky-400/80 bg-white px-4 text-base font-medium shadow-sm dark:border-sky-500 dark:bg-sky-950"
               onChange={(event) => {
-                const selected = catalog.find(
+                const next = catalog.find(
                   (voice) => voice.voiceId === event.target.value,
                 );
                 const voiceIdInput =
@@ -192,7 +235,7 @@ export function ElevenLabsSettingsFields({
                   voiceIdInput.value = event.target.value;
                 }
                 if (voiceNameInput) {
-                  voiceNameInput.value = selected?.name ?? "";
+                  voiceNameInput.value = next?.name ?? "";
                 }
                 persistSettings();
               }}
@@ -200,25 +243,27 @@ export function ElevenLabsSettingsFields({
               {catalog.map((voice) => (
                 <option key={voice.voiceId} value={voice.voiceId}>
                   {voice.name}
-                  {voice.provider === "chatterbox"
-                    ? voice.chatterboxMode === "predefined"
-                      ? " · Chatterbox predefined"
-                      : " · Chatterbox clone"
-                    : voice.provider === "google"
-                      ? " · Google Cloud TTS"
-                      : ""}
+                  {providerSuffix(voice)}
                 </option>
               ))}
             </select>
+          ) : (
+            <p className="text-sm text-sky-900/80 dark:text-sky-100/80">
+              Add a voice to the catalog below, then pick it here.
+            </p>
+          )}
+          {selected ? (
+            <p className="text-sm font-medium text-sky-900 dark:text-sky-100">
+              Generate will use: {selected.name}
+              {providerSuffix(selected)}
+            </p>
           ) : null}
-          <Label htmlFor="voiceId">Voice ID</Label>
-          <Input
+          <input
+            type="hidden"
             id="voiceId"
             name="voiceId"
-            list={`${formId}-voice-id-history`}
             key={`voice-id-${settings.voiceId}`}
             defaultValue={settings.voiceId}
-            placeholder="ElevenLabs / Google / Chatterbox voice id"
           />
           <input
             type="hidden"
@@ -227,82 +272,133 @@ export function ElevenLabsSettingsFields({
             key={`voice-name-${settings.voiceName ?? ""}-${settings.voiceId}`}
             defaultValue={settings.voiceName ?? ""}
           />
-          <datalist id={`${formId}-voice-id-history`}>
-            {history.map((voiceId) => (
-              <option key={voiceId} value={voiceId} />
+        </div>
+      ) : (
+        <>
+          <input
+            type="hidden"
+            id="voiceId"
+            name="voiceId"
+            key={`voice-id-${settings.voiceId}`}
+            defaultValue={settings.voiceId}
+          />
+          <input
+            type="hidden"
+            id="voiceName"
+            name="voiceName"
+            key={`voice-name-${settings.voiceName ?? ""}-${settings.voiceId}`}
+            defaultValue={settings.voiceName ?? ""}
+          />
+        </>
+      )}
+
+      <details className="rounded-md border border-sky-200/60 bg-white/50 p-3 dark:border-sky-800 dark:bg-sky-950/40">
+        <summary className="cursor-pointer text-sm font-medium text-sky-950 dark:text-sky-100">
+          Optional: model / format / speed
+        </summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-2">
+            <Label htmlFor="modelId">Model ID</Label>
+            <Input
+              id="modelId"
+              name="modelId"
+              key={`model-${settings.modelId}`}
+              defaultValue={settings.modelId}
+              placeholder="eleven_multilingual_v2"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="outputFormat">Output format</Label>
+            <Input
+              id="outputFormat"
+              name="outputFormat"
+              key={`format-${settings.outputFormat}`}
+              defaultValue={settings.outputFormat}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="speed">Speed</Label>
+            <Input
+              id="speed"
+              name="speed"
+              type="number"
+              min="0.7"
+              max="1.2"
+              step="0.05"
+              key={`speed-${settings.speed}`}
+              defaultValue={settings.speed}
+            />
+          </div>
+        </div>
+        {history.length > 0 && variant === "hero" ? (
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Recent IDs:</span>
+            {history.slice(0, 4).map((voiceId) => (
+              <button
+                key={voiceId}
+                type="button"
+                className="rounded-md border bg-background px-2 py-1 font-mono hover:bg-muted"
+                onClick={() => {
+                  const input =
+                    formRef.current?.querySelector<HTMLInputElement>(
+                      "#voiceId",
+                    );
+                  const select = formRef.current?.querySelector<HTMLSelectElement>(
+                    `#${formId}-voice-select`,
+                  );
+                  const match = catalog.find((voice) => voice.voiceId === voiceId);
+                  const nameInput =
+                    formRef.current?.querySelector<HTMLInputElement>(
+                      "#voiceName",
+                    );
+                  if (!input) {
+                    return;
+                  }
+                  input.value = voiceId;
+                  if (nameInput) {
+                    nameInput.value = match?.name ?? "";
+                  }
+                  if (select && catalog.some((voice) => voice.voiceId === voiceId)) {
+                    select.value = voiceId;
+                  }
+                  persistSettings();
+                }}
+              >
+                {voiceId.length > 18 ? `${voiceId.slice(0, 18)}…` : voiceId}
+              </button>
             ))}
-          </datalist>
-          {history.length > 0 ? (
-            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Recent:</span>
-              {history.slice(0, 6).map((voiceId) => (
-                <button
-                  key={voiceId}
-                  type="button"
-                  className="rounded-md border bg-background px-2 py-1 font-mono hover:bg-muted"
-                  onClick={() => {
-                    const input =
-                      formRef.current?.querySelector<HTMLInputElement>(
-                        "#voiceId",
-                      );
+          </div>
+        ) : null}
+      </details>
 
-                    if (!input) {
-                      return;
-                    }
+      <input type="hidden" name="stability" value={settings.stability} />
+      <input
+        type="hidden"
+        name="similarityBoost"
+        value={settings.similarityBoost}
+      />
+    </form>
+  );
 
-                    input.value = voiceId;
-                    persistSettings();
-                  }}
-                >
-                  {voiceId.length > 18 ? `${voiceId.slice(0, 18)}…` : voiceId}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="modelId">Model ID</Label>
-          <Input
-            id="modelId"
-            name="modelId"
-            key={`model-${settings.modelId}`}
-            defaultValue={settings.modelId}
-            placeholder="eleven_multilingual_v2"
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="outputFormat">Output format</Label>
-          <Input
-            id="outputFormat"
-            name="outputFormat"
-            key={`format-${settings.outputFormat}`}
-            defaultValue={settings.outputFormat}
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="speed">Speed</Label>
-          <Input
-            id="speed"
-            name="speed"
-            type="number"
-            min="0.7"
-            max="1.2"
-            step="0.05"
-            key={`speed-${settings.speed}`}
-            defaultValue={settings.speed}
-          />
-          <p className="text-[11px] text-muted-foreground">
-            ElevenLabs band (0.7–1.2). Google catalog voices use speakingRate in
-            Catalog advanced config (0.25–4.0).
-          </p>
-        </div>
-        <input type="hidden" name="stability" value={settings.stability} />
-        <input
-          type="hidden"
-          name="similarityBoost"
-          value={settings.similarityBoost}
-        />
-      </form>
-    </CollapsibleCard>
+  if (variant === "formOnly") {
+    return <div className="sr-only">{formFields}</div>;
+  }
+
+  return (
+    <div className="rounded-xl border-2 border-sky-500/70 bg-sky-50 p-5 shadow-sm dark:border-sky-400/50 dark:bg-sky-950/50">
+      <div className="mb-4 space-y-1">
+        <p className="text-xs font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">
+          Required · Voiceover voice
+        </p>
+        <h3 className="text-xl font-semibold tracking-tight text-sky-950 dark:text-sky-50">
+          Choose the voice for this video
+        </h3>
+        <p className="text-sm text-sky-900/80 dark:text-sky-100/80">
+          This is the only control that sets which TTS voice Generate uses.
+          Pick a Google / ElevenLabs / Fish / Speechify voice from your catalog.
+        </p>
+      </div>
+      {formFields}
+    </div>
   );
 }

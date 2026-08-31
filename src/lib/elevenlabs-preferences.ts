@@ -11,7 +11,9 @@ import {
 import {
   findNamedVoice,
   normalizeChatterboxVoiceMode,
+  normalizeFishAudioCatalogConfig,
   normalizeGoogleTtsCatalogConfig,
+  normalizeSpeechifyCatalogConfig,
   normalizeTtsVoiceProvider,
   resolveNamedVoiceProvider,
   type ElevenLabsPreferenceSettings,
@@ -21,15 +23,19 @@ import {
 export type {
   ChatterboxVoiceMode,
   ElevenLabsPreferenceSettings,
+  FishAudioCatalogConfig,
   GoogleTtsCatalogConfig,
   NamedElevenLabsVoice,
   NamedTtsVoice,
+  SpeechifyCatalogConfig,
   TtsVoiceProvider,
 } from "@/lib/tts-voices";
 export {
   findNamedVoice,
   normalizeChatterboxVoiceMode,
+  normalizeFishAudioCatalogConfig,
   normalizeGoogleTtsCatalogConfig,
+  normalizeSpeechifyCatalogConfig,
   normalizeTtsVoiceProvider,
   resolveChatterboxVoiceMode,
   resolveNamedVoiceProvider,
@@ -141,6 +147,10 @@ export function normalizeNamedVoices(value: unknown): NamedElevenLabsVoice[] {
     const predefinedVoiceId = textValue(entry.predefinedVoiceId) || undefined;
     const googleLanguageCode = textValue(entry.googleLanguageCode) || undefined;
     const googleConfig = normalizeGoogleTtsCatalogConfig(entry.googleConfig);
+    const fishConfig = normalizeFishAudioCatalogConfig(entry.fishConfig);
+    const speechifyConfig = normalizeSpeechifyCatalogConfig(
+      entry.speechifyConfig,
+    );
     const chatterboxMode =
       provider === "chatterbox"
         ? normalizeChatterboxVoiceMode(
@@ -162,6 +172,10 @@ export function normalizeNamedVoices(value: unknown): NamedElevenLabsVoice[] {
         ? { googleLanguageCode }
         : {}),
       ...(provider === "google" && googleConfig ? { googleConfig } : {}),
+      ...(provider === "fish" && fishConfig ? { fishConfig } : {}),
+      ...(provider === "speechify" && speechifyConfig
+        ? { speechifyConfig }
+        : {}),
     });
   }
 

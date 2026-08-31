@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { requestImageBatchCancel } from "@/lib/image-batches";
-import { prisma } from "@/lib/prisma";
 import { requestSceneVoiceoverCancel } from "@/lib/scene-voiceover-cancel";
+import { cancelActiveVoiceoverAudioProcesses } from "@/lib/process-runs";
 import { requestScriptWriterCancel } from "@/lib/script-writer-cancel";
 import { requestVisualPlanCancel } from "@/lib/visual-plan-cancel";
 
@@ -45,20 +45,12 @@ export async function POST(
     // Memory flag (same Node process) + DB status so Server Actions see cancel
     // even across Hot Reload / separate module instances.
     requestSceneVoiceoverCancel(videoId);
-    const result = await prisma.processRun.updateMany({
-      where: {
-        videoId,
-        type: "scene_voiceover_generation",
-        status: { in: ["queued", "running", "waiting"] },
-      },
-      data: {
-        status: "cancelled",
-        currentStep: "Cancel requested — stopping after current scene",
-        finishedAt: new Date(),
-        errorMessage: "Cancel requested.",
-      },
+    const result = await cancelActiveVoiceoverAudioProcesses(videoId);
+    return NextResponse.json({
+      ok: true,
+      kind,
+      cancelledProcesses: result.count,
     });
-    return NextResponse.json({ ok: true, kind, cancelledProcesses: result.count });
   }
 
   if (kind === "image-batch") {

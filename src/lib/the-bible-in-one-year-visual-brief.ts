@@ -11,8 +11,13 @@ import {
   BIBLE_ONE_YEAR_HOST_CHARACTER_LOCK,
   BIBLE_ONE_YEAR_NEGATIVE_LOCK_DEFAULT,
   BIBLE_ONE_YEAR_OPEN_BIBLE_PAGE_GUARD,
+  BIBLE_ONE_YEAR_STYLE_LOCK_AVATAR,
   BIBLE_ONE_YEAR_STYLE_LOCK_COVER,
   BIBLE_ONE_YEAR_STYLE_LOCK_EPISODE_COVER,
+  BIBLE_ONE_YEAR_STYLE_LOCK_INSERT,
+  BIBLE_ONE_YEAR_STYLE_LOCK_INTERIOR,
+  BIBLE_ONE_YEAR_STYLE_LOCK_LANDSCAPE,
+  BIBLE_ONE_YEAR_VISIBLE_TEXT_NONE,
   buildBibleOneYearFinalImagePromptContract,
 } from "@/lib/the-bible-in-one-year-final-image-prompt-contract";
 
@@ -412,6 +417,82 @@ export function buildBibleOneYearSectionHybridContext() {
       "Never invent cinematic/photoreal/3D styles.",
     ].join("\n"),
   ].join("\n\n");
+}
+
+/**
+ * Compact fill-hybrid context (local skeleton owns scriptText + beats).
+ * imagePrompt must still be final production output — style locks are inlined briefly.
+ */
+export function buildBibleOneYearFillHybridContext(options?: {
+  /** When true, omit long prose; Continuity carries style-lock examples. */
+  compact?: boolean;
+}) {
+  const core = [
+    "## The Bible in One Year fill-chunk context",
+    "",
+    "Compact-flow Bible in One Year only. Ignore other channels' marker systems.",
+    "The scene skeleton was built locally — scriptText and duration are authoritative.",
+    "Fill ONLY visualPurpose, visualIdea, imagePrompt, and sceneType for listed orders.",
+    "Do NOT re-segment, rewrite scriptText, invent scenes, or omit orders.",
+    "",
+    "imagePrompt is FINAL production output (standalone, sent directly to the image model).",
+    "Every imagePrompt must open with the correct complete style lock, then composition, visible-text rule, and negatives.",
+    "",
+    "### visualIdea",
+    "",
+    'Use prefix Chapter cover: for chapter/progress announcements (schema label — prefer image-first language in imagePrompt).',
+    "sceneType must be avatar, insert, or space only.",
+    "",
+    "### Style locks (copy verbatim at imagePrompt start)",
+    "",
+    "Avatar:",
+    BIBLE_ONE_YEAR_STYLE_LOCK_AVATAR,
+    "",
+    "Insert:",
+    BIBLE_ONE_YEAR_STYLE_LOCK_INSERT,
+    "",
+    "Landscape space:",
+    BIBLE_ONE_YEAR_STYLE_LOCK_LANDSCAPE,
+    "",
+    "Interior space:",
+    BIBLE_ONE_YEAR_STYLE_LOCK_INTERIOR,
+    "",
+    "Chapter / parchment cover:",
+    BIBLE_ONE_YEAR_STYLE_LOCK_COVER,
+    "",
+    "Episode cover with host:",
+    BIBLE_ONE_YEAR_STYLE_LOCK_EPISODE_COVER,
+    "",
+    "Host character (when shown):",
+    BIBLE_ONE_YEAR_HOST_CHARACTER_LOCK,
+    "",
+    "### Visible text",
+    "",
+    "Default:",
+    BIBLE_ONE_YEAR_VISIBLE_TEXT_NONE,
+    "",
+    "Covers / progress inserts may add: visible text limited to: EXACT TITLE",
+    BIBLE_ONE_YEAR_OPEN_BIBLE_PAGE_GUARD,
+    "",
+    "Negatives (end every imagePrompt):",
+    BIBLE_ONE_YEAR_NEGATIVE_LOCK_DEFAULT,
+    "",
+    "One principal claim per scene. Concrete semantic evidence from the assigned scriptText.",
+    "When Continuity is provided, match its style-lock and character continuity exactly.",
+  ].join("\n");
+
+  if (options?.compact) {
+    return core;
+  }
+
+  return [
+    core,
+    "",
+    "## Extended production rules (first chunk only when no Continuity)",
+    "",
+    "Construct each imagePrompt: style lock → subject/framing → action → script-specific detail → composition guard → visible-text rule → negatives.",
+    "Never return shorthand, placeholders, or prompts that assume later processing.",
+  ].join("\n");
 }
 
 export function buildBibleOneYearGenerationModeInstructions(

@@ -422,6 +422,8 @@ export type GenerateChatterboxSpeechInput = {
   temperature?: number | null;
   seed?: number | null;
   signal?: AbortSignal;
+  /** When false, send full text in one take (narration blocks). Default true. */
+  splitText?: boolean;
 };
 
 /** Defaults tuned for natural podcast dialogue (not story-narrator energy). */
@@ -470,7 +472,7 @@ export async function generateChatterboxSpeech(
     text,
     voice_mode: voiceMode,
     output_format: "mp3",
-    split_text: true,
+    split_text: input.splitText !== false,
     exaggeration,
     cfg_weight: cfgWeight,
     temperature,

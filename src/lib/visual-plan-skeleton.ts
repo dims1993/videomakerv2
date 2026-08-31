@@ -42,6 +42,11 @@ export type PodcastVisualPlanSkeletonScene = {
   speaker: PodcastSkeletonSpeaker;
   /** True once ChatGPT filled visualPurpose / visualIdea / imagePrompt. */
   visualsFilled: boolean;
+  /**
+   * Optional Fish Audio S2 directed speech (tags + same words as scriptText).
+   * The God's Word fill-hybrid only; validated before persist.
+   */
+  fishSpeechText?: string | null;
 };
 
 export type PodcastVisualPlanSkeleton = {
@@ -394,6 +399,9 @@ export function skeletonScenesToImportJson(
       imagePrompt: scene.imagePrompt,
       status: scene.status,
       ...(scene.pauseAfterMs != null ? { pauseAfterMs: scene.pauseAfterMs } : {}),
+      ...(scene.fishSpeechText
+        ? { fishSpeechText: scene.fishSpeechText }
+        : {}),
     })),
   );
 }

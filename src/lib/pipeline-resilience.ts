@@ -101,7 +101,11 @@ export function isTransientPipelineError(message: string): boolean {
     m.includes("9222") ||
     m.includes("script coverage") ||
     m.includes("reading 'locator'") ||
-    m.includes("cannot read properties of null")
+    m.includes("cannot read properties of null") ||
+    m.includes("execution context was destroyed") ||
+    m.includes("because of a navigation") ||
+    m.includes("frame was detached") ||
+    m.includes("could not select chatgpt")
   );
 }
 

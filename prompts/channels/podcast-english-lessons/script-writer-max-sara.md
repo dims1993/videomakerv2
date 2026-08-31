@@ -1,8 +1,8 @@
-# Script Writer — Podcast English Lessons: Natural Daily Conversations with Max & Sara
+# Script Writer — Podcast English Lessons: Natural Daily Conversations with Emma & Leo
 
 Write a two-speaker English-learning podcast script for the series:
 
-Natural Daily English Conversations with Max & Sara
+Natural Daily English Conversations with Emma & Leo
 
 Use the Current Idea JSON as the source of truth for the episode.
 
@@ -41,14 +41,14 @@ The episode should feel like two friendly adult co-hosts discovering an idea pro
 
 Use only these speaker labels:
 
-[MAX]
-[SARA]
+[LEO]
+[EMMA]
 
-Max and Sara are equal co-hosts.
+Emma and Leo are equal co-hosts.
 
 Do not use:
-[EMMA]
-[LEO]
+[MAX]
+[SARA]
 [TEACHER]
 [STUDENT]
 [HOST]
@@ -56,7 +56,7 @@ Do not use:
 
 ### Host personality bible (tendencies, not fixed roles)
 
-MAX:
+LEO:
 - practical;
 - slightly dry or self-deprecating humor;
 - concrete examples;
@@ -64,13 +64,13 @@ MAX:
 - willing to admit bad habits or mistakes;
 - often turns abstract ideas into ordinary situations.
 
-SARA:
+EMMA:
 - reflective;
 - warm;
 - curious;
 - notices emotional meaning;
 - good at reframing an idea simply;
-- can gently challenge Max;
+- can gently challenge Leo;
 - occasionally has her own awkward or funny stories.
 
 Either host may:
@@ -82,8 +82,8 @@ Either host may:
 - summarize;
 - make the joke.
 
-Do not allow Max to become the permanent learner.
-Do not allow Sara to become the permanent teacher.
+Do not allow Leo to become the permanent learner.
+Do not allow Emma to become the permanent teacher.
 
 ## Level
 
@@ -132,8 +132,8 @@ Before writing, privately plan (do not print any of this):
 - centralQuestion
 - coreTension
 - anchorIdea (one memorable simple sentence)
-- hostStorySeedMax
-- hostStorySeedSara
+- hostStorySeedLeo
+- hostStorySeedEmma
 - 3 realistic everyday examples
 - 2–3 possible simple metaphors
 - 1 meaningful counterpoint
@@ -276,11 +276,11 @@ A strong intro should sound like the beginning of a real podcast episode. It sho
 - a direct jump from one joke into explanation.
 
 Bad:
-[MAX]
+[LEO]
 Today we are talking about beginning again.
 
 Better:
-Dramatize the feeling first — Max's running shoes that no longer trust him, an old notebook on the shelf, an app that says "Welcome back," or a project file that feels like it is judging him. Let Sara react. Expand the human detail. Only then reveal the topic.
+Dramatize the feeling first — Leo's running shoes that no longer trust him, an old notebook on the shelf, an app that says "Welcome back," or a project file that feels like it is judging him. Let Emma react. Expand the human detail. Only then reveal the topic.
 
 ### Good opening patterns
 
@@ -322,51 +322,51 @@ For [INTRO], prefer:
 - a warm branded Podcast English Lessons welcome;
 - a strong stay-promise.
 
-Max vivacity rule (important for TTS):
-- Do not give Max long list-style monologues in [INTRO] or early [LESSON].
-- If Max has several examples, split them across turns with Sara reacting between them.
+Leo vivacity rule (important for TTS):
+- Do not give Leo long list-style monologues in [INTRO] or early [LESSON].
+- If Leo has several examples, split them across turns with Emma reacting between them.
 - Prefer punchy images and quoted thoughts over paragraph explanations.
-- Long flat Max paragraphs make Chirp sound calm and dull — break them up.
+- Long flat Leo paragraphs make Chirp sound calm and dull — break them up.
 
-Bad (one long Max dump):
-[MAX]
+Bad (one long Leo dump):
+[LEO]
 Yes. Beginning again after you stopped. Starting English again after a long break. Going back to exercise. Opening an old notebook. Returning to a project. Trying again when part of you feels embarrassed.
 
 Better (split for energy):
-[MAX]
+[LEO]
 Yes. Beginning again after you stopped.
 
-[SARA]
+[EMMA]
 Like English after a long break.
 
-[MAX]
+[LEO]
 Or going back to the gym. Or opening an old notebook that still sits on the shelf.
 
-[SARA]
+[EMMA]
 That notebook feeling is real.
 
 Bad writing for voice (flat, hard to animate):
-[MAX]
+[LEO]
 Today we are talking about beginning again after stopping.
 
 Good writing for voice (gives TTS something to perform):
-[MAX]
+[LEO]
 I have restarted my gym routine so many times that I think my running shoes no longer trust me.
 
-[SARA]
+[EMMA]
 Your running shoes have trust issues?
 
-[MAX]
-Absolutely. Every Monday, I look at them and say, "This is it. We are back." And I think they are sitting there like, "Sure, Max. We have heard this speech before."
+[LEO]
+Absolutely. Every Monday, I look at them and say, "This is it. We are back." And I think they are sitting there like, "Sure, Leo. We have heard this speech before."
 
-[SARA]
+[EMMA]
 That is very dramatic for a pair of shoes.
 
 Preserve punctuation that helps delivery: question marks, commas, short sentences, quotation marks for imitated thoughts. Do not flatten the intro into long summary paragraphs.
 
 Parser rules for intro (unchanged):
 - Start with [INTRO].
-- Use [MAX] and [SARA] only.
+- Use [LEO] and [EMMA] only.
 - No music cues.
 - No SFX labels.
 - No teacher/student dynamic.
@@ -438,8 +438,8 @@ Rules:
 ## Story engine
 
 Every normal long-form episode should contain at least:
-- one meaningful personal mini-story from Max;
-- one meaningful personal mini-story from Sara;
+- one meaningful personal mini-story from Leo;
+- one meaningful personal mini-story from Emma;
 - 2–4 smaller everyday scenarios.
 
 Stories need concrete details.
@@ -545,7 +545,7 @@ Each item:
 - must already have appeared naturally earlier;
 - gets a short plain-English explanation;
 - gets one or two natural examples;
-- may include a short reaction between Max and Sara.
+- may include a short reaction between Emma and Leo.
 
 Because this product is passive listening:
 
@@ -738,8 +738,8 @@ Do NOT include:
 - teacher correction loops;
 - Day numbers;
 - next-day challenge preview;
-- Emma;
-- Leo;
+- Max;
+- Sara;
 - student mistakes corrected by teacher;
 - third speaking characters;
 - music cues.
@@ -768,7 +768,7 @@ Avoid:
 unless Current Idea explicitly supports it.
 
 For contested social topics:
-keep Max and Sara nonpartisan and human-centered.
+keep Emma and Leo nonpartisan and human-centered.
 Do not attack groups.
 Do not oversimplify complex causes.
 
@@ -815,12 +815,12 @@ Speaker tags must be alone on their own line.
 
 Correct:
 
-[MAX]
+[LEO]
 I have a question for you.
 
 Incorrect:
 
-[MAX] I have a question for you.
+[LEO] I have a question for you.
 
 ## Self-audit before output
 
@@ -833,7 +833,7 @@ STRUCTURE
 - correct hard ending from the Hard Ending block.
 
 HOSTS
-- Max and Sara only;
+- Emma and Leo only;
 - distinct personalities;
 - neither is permanent teacher;
 - at least one genuine reframe/counterpoint;

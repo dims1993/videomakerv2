@@ -114,7 +114,7 @@ test("wealth topic batch prompt still includes finance title mechanics when lane
   assert.doesNotMatch(prompt, /SCRIPTURE FIRST/i);
 });
 
-test("podcast english topic batch prompt uses conversational Max & Sara engine", () => {
+test("podcast english topic batch prompt uses conversational Emma & Leo engine", () => {
   const channel = getChannelProfile("podcast-english-lessons");
   assert.equal(
     channel.editorialInstructions?.topicEngine,
@@ -141,7 +141,7 @@ test("podcast english topic batch prompt uses conversational Max & Sara engine",
     recentTopics: [],
   });
 
-  assert.match(prompt, /Max and Sara/i);
+  assert.match(prompt, /Emma and Leo/i);
   assert.match(prompt, /Natural Daily English Conversations/i);
   assert.match(prompt, /NOT a teacher-student speaking challenge/i);
   assert.match(prompt, /UNIQUE MECHANISM explains the specific tension/i);
@@ -154,7 +154,7 @@ test("podcast english topic batch prompt uses conversational Max & Sara engine",
   assert.match(prompt, /EXAMPLE ANTI-COPY RULE/i);
   assert.match(prompt, /MULTI-TOPIC BALANCE/i);
   assert.match(prompt, /BIG HUMAN CONVERSATION HOOK FIRST/i);
-  assert.doesNotMatch(prompt, /Emma & Leo/i);
+  assert.doesNotMatch(prompt, /Max & Sara/i);
   assert.doesNotMatch(prompt, /SCRIPTURE FIRST/i);
   assert.doesNotMatch(prompt, /make your raise disappear/i);
 });

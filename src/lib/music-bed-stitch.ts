@@ -5,6 +5,13 @@ import {
 } from "@/lib/music-beds";
 import { DEFAULT_SCENE_PAUSE_AFTER_MS } from "@/lib/voiceover-scenes";
 
+export type EffectiveScenePauseOptions = {
+  isMusicBed?: boolean;
+  pauseAfterMs?: number | null;
+  /** When pauseAfterMs is null (spoken scenes). Default: punctuation fallback. */
+  defaultPauseAfterMs?: number;
+};
+
 export type MusicBedStitchClipPlan = {
   isMusicBed: boolean;
   pauseAfterMs: number | null;
@@ -40,14 +47,11 @@ export type MusicBedOverlap = {
 };
 
 /**
- * Spoken scenes: null pause → app default micro-gap (180ms).
+ * Spoken scenes: null pause → punctuation fallback micro-gap (80ms default).
  * Explicit 0 stays 0. Music beds default to 0 (underlay handles the join)
  * but still honor an explicit pauseAfterMs if set.
  */
-export function effectiveScenePauseAfterMs(clip: {
-  isMusicBed?: boolean;
-  pauseAfterMs?: number | null;
-}) {
+export function effectiveScenePauseAfterMs(clip: EffectiveScenePauseOptions) {
   if (
     typeof clip.pauseAfterMs === "number" &&
     Number.isFinite(clip.pauseAfterMs) &&
@@ -60,7 +64,13 @@ export function effectiveScenePauseAfterMs(clip: {
     return 0;
   }
 
-  return DEFAULT_SCENE_PAUSE_AFTER_MS;
+  const fallback =
+    typeof clip.defaultPauseAfterMs === "number" &&
+    Number.isFinite(clip.defaultPauseAfterMs) &&
+    clip.defaultPauseAfterMs >= 0
+      ? clip.defaultPauseAfterMs
+      : DEFAULT_SCENE_PAUSE_AFTER_MS;
+  return Math.round(fallback);
 }
 
 export function musicBedIntroSec(bedDurationSec: number) {
@@ -80,14 +90,19 @@ export function musicBedUnderlaySec(speechDurationSec: number) {
  */
 export function planMusicBedStitch(
   clips: MusicBedStitchClipPlan[],
+  options?: { defaultPauseAfterMs?: number },
 ): MusicBedStitchStep[] {
   const steps: MusicBedStitchStep[] = [];
   let i = 0;
+  const withDefault = (clip: MusicBedStitchClipPlan) => ({
+    ...clip,
+    defaultPauseAfterMs: options?.defaultPauseAfterMs,
+  });
 
   while (i < clips.length) {
     const clip = clips[i]!;
     const next = clips[i + 1];
-    const pauseSec = effectiveScenePauseAfterMs(clip) / 1000;
+    const pauseSec = effectiveScenePauseAfterMs(withDefault(clip)) / 1000;
     const canUnderlay =
       clip.isMusicBed &&
       Boolean(next) &&
@@ -105,7 +120,8 @@ export function planMusicBedStitch(
           introSec,
           underlaySec,
         });
-        const speechPauseSec = effectiveScenePauseAfterMs(next) / 1000;
+        const speechPauseSec =
+          effectiveScenePauseAfterMs(withDefault(next)) / 1000;
         if (speechPauseSec > 0 && i + 1 < clips.length - 1) {
           steps.push({ kind: "silence", pauseSec: speechPauseSec });
         }
@@ -158,6 +174,7 @@ export function sceneVisualDurationSec(scene: {
   isMusicBed?: boolean;
   /** When set (music bed underlay), overrides voiceoverDuration for visuals. */
   introSec?: number;
+  defaultPauseAfterMs?: number;
 }) {
   const baseDuration =
     typeof scene.introSec === "number" && Number.isFinite(scene.introSec)

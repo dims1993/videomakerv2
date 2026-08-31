@@ -31,6 +31,7 @@ test("normalizeTtsVoiceProvider defaults missing entries to elevenlabs", () => {
   assert.equal(normalizeTtsVoiceProvider("elevenlabs"), "elevenlabs");
   assert.equal(normalizeTtsVoiceProvider("chatterbox"), "chatterbox");
   assert.equal(normalizeTtsVoiceProvider("google"), "google");
+  assert.equal(normalizeTtsVoiceProvider("fish"), "fish");
   assert.equal(normalizeTtsVoiceProvider("other"), "elevenlabs");
 });
 

@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 
 import {
   parseAndValidateHandoffResponse,
   scenesToImportJson,
 } from "@/lib/chatgpt-scene-handoff";
+import {
+  resolveValidFishSpeechText,
+  voiceoverSettingsWithFishSpeechText,
+} from "@/lib/fish-speech-tags";
 import { prisma } from "@/lib/prisma";
 import { getVideoPrompt } from "@/lib/video-prompts";
 import {
@@ -103,26 +108,44 @@ async function importScenesReplace(videoId: string, scenesJson: string) {
     duration: number;
     status: string;
     pauseAfterMs?: number | null;
+    fishSpeechText?: string | null;
   }>;
 
   await prisma.$transaction([
     prisma.scene.deleteMany({ where: { videoId } }),
     prisma.scene.createMany({
-      data: normalized.map((scene) => ({
-        videoId,
-        sortOrder: scene.order,
-        scriptText: scene.scriptText,
-        sceneType: scene.sceneType,
-        visualPurpose: scene.visualPurpose,
-        visualIdea: scene.visualIdea,
-        imagePrompt: scene.imagePrompt,
-        duration: scene.duration,
-        status: scene.status || "planned",
-        pauseAfterMs:
-          typeof scene.pauseAfterMs === "number" && Number.isFinite(scene.pauseAfterMs)
-            ? Math.round(scene.pauseAfterMs)
-            : null,
-      })),
+      data: normalized.map((scene) => {
+        const fishSpeechText = resolveValidFishSpeechText(
+          scene.scriptText,
+          scene.fishSpeechText,
+        );
+        const voiceoverSettings = voiceoverSettingsWithFishSpeechText(
+          null,
+          fishSpeechText,
+        );
+        return {
+          videoId,
+          sortOrder: scene.order,
+          scriptText: scene.scriptText,
+          sceneType: scene.sceneType,
+          visualPurpose: scene.visualPurpose,
+          visualIdea: scene.visualIdea,
+          imagePrompt: scene.imagePrompt,
+          duration: scene.duration,
+          status: scene.status || "planned",
+          pauseAfterMs:
+            typeof scene.pauseAfterMs === "number" &&
+            Number.isFinite(scene.pauseAfterMs)
+              ? Math.round(scene.pauseAfterMs)
+              : null,
+          ...(voiceoverSettings
+            ? {
+                voiceoverSettingsJson:
+                  voiceoverSettings as Prisma.InputJsonValue,
+              }
+            : {}),
+        };
+      }),
     }),
   ]);
 

@@ -29,7 +29,8 @@ export type PodcastHostVoiceProfile = {
   sections: Record<PodcastDeliveryMode, PodcastSectionDelivery>;
 };
 
-export const PODCAST_MAX_VOICE_ID = "en-US-Chirp3-HD-Iapetus";
+/** Channel Max host — Fenrir as animated / charismatic co-host. */
+export const PODCAST_MAX_VOICE_ID = "en-US-Chirp3-HD-Fenrir";
 export const PODCAST_SARA_VOICE_ID = "en-US-Chirp3-HD-Erinome";
 
 export const PODCAST_MAX_SARA_VOICE_PROFILES: Record<
@@ -38,37 +39,37 @@ export const PODCAST_MAX_SARA_VOICE_PROFILES: Record<
 > = {
   max: {
     voiceId: PODCAST_MAX_VOICE_ID,
-    role: "practical, lightly funny, self-deprecating, warm male podcast co-host",
+    role: "animated, charismatic, lightly funny, warm male podcast co-host",
     globalDirection:
-      "Sound like a friendly American podcast co-host. Warm, conversational, lightly funny, and expressive. Use a natural smile in the voice. React naturally to Sara. Do not sound like a teacher, narrator, announcer, or audiobook reader. Keep the English clear for learners, but make the delivery feel alive and human.",
+      "Sound like a charismatic American podcast co-host. Warm, animated, conversational, and lightly funny — the guy who keeps the show moving. Use a natural smile and easy confidence in the voice. React to Sara with energy and charm. Do not sound like a teacher, narrator, announcer, or audiobook reader. Keep the English clear for learners, but make the delivery feel lively, human, and magnetic.",
     sections: {
       intro: {
-        speakingRate: 1.1,
+        speakingRate: 1.12,
         direction:
-          "Use higher podcast energy. Sound playful, surprised, and slightly self-deprecating. Deliver short reactions quickly and naturally. Emphasize funny images without becoming cartoonish. Smile while speaking. On longer lines, keep punch and momentum — do not flatten into a calm read. Make the listener feel that the show has started with energy.",
-        energy: "high but natural",
-        tone: "playful, animated, lightly amused",
+          "Open with high podcast charisma. Sound playful, surprised, and warmly self-deprecating. Deliver short reactions quickly and naturally. Emphasize funny images without becoming cartoonish. Smile while speaking. On longer lines, keep punch, bounce, and momentum — do not flatten into a calm read. Make the listener feel that an animated host just kicked off the show.",
+        energy: "high, charismatic, natural",
+        tone: "playful, animated, charming, lightly amused",
       },
       main: {
-        speakingRate: 1.05,
+        speakingRate: 1.07,
         direction:
-          "Use a lively but relaxed podcast tone. Stay practical, curious, and lightly funny. Speak clearly and naturally with a smile in the voice. Keep the pace comfortable for A2–B1 English learners, but do not sound flat on longer explanations — keep light energy and comic timing.",
-        energy: "medium-high",
-        tone: "conversational, practical, lightly funny",
+          "Use a lively, charismatic podcast tone. Stay practical, curious, and lightly funny. Speak clearly and naturally with a smile and forward energy. Keep the pace comfortable for A2–B1 English learners, but do not sound flat on longer explanations — keep light energy, comic timing, and host magnetism.",
+        energy: "medium-high charismatic",
+        tone: "conversational, animated, lightly funny",
       },
       wordTour: {
-        speakingRate: 1.01,
+        speakingRate: 1.02,
         direction:
-          "Clear, helpful, still conversational. Give examples without classroom stiffness. Stay a bit brighter than a dictionary read.",
+          "Clear, helpful, still conversational and warm. Give examples without classroom stiffness. Stay a bit brighter and more engaging than a dictionary read — still the same animated host, just clearer.",
         energy: "medium-clear",
-        tone: "helpful, relaxed, still conversational",
+        tone: "helpful, relaxed, still animated",
       },
       closing: {
-        speakingRate: 0.99,
+        speakingRate: 1.0,
         direction:
-          "Sound warmer and calmer. Speak sincerely, with less comedy and more encouragement. Keep the ending human and grounded.",
-        energy: "lower-medium",
-        tone: "warm, sincere, calm",
+          "Sound warmer and a touch calmer, but keep a soft smile. Speak sincerely, with less comedy and more encouragement. Keep the ending human, grounded, and still hosted — not a narrator fade-out.",
+        energy: "lower-medium warm",
+        tone: "warm, sincere, still present",
       },
     },
   },
@@ -127,7 +128,11 @@ export function resolvePodcastHostFromVoiceId(
   if (!id) {
     return null;
   }
-  if (id === PODCAST_MAX_VOICE_ID || /iapetus/i.test(id)) {
+  // Fenrir = channel Animated Hoster; Puck / Iapetus still resolve as Max.
+  if (
+    id === PODCAST_MAX_VOICE_ID ||
+    /fenrir|puck|iapetus/i.test(id)
+  ) {
     return "max";
   }
   if (id === PODCAST_SARA_VOICE_ID || /erinome/i.test(id)) {
@@ -228,7 +233,7 @@ export function getPodcastSectionDelivery(
  * Explicit UI/section-voice speed wins; otherwise use the profile section rate.
  *
  * Chirp flattens long Max monologues — apply a small vivacity boost on longer
- * intro/main lines so Iapetus stays animated without racing Word Tour/closing.
+ * intro/main lines so Fenrir stays animated without racing Word Tour/closing.
  */
 export function resolvePodcastSectionSpeakingRate({
   host,

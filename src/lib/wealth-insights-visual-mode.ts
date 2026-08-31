@@ -126,6 +126,13 @@ export function resolveWealthInsightsVisualMode({
   return "default";
 }
 
+/** Default-mode story cast prefixes (Episode Cast Lock). */
+export const WEALTH_INSIGHTS_DEFAULT_STORY_VISUAL_IDEA_PREFIXES = [
+  "MAIN HOST + STORY:",
+  "STORY_CHARACTER:",
+  "STORY_PAIR:",
+] as const;
+
 export function hasAllowedWealthInsightsVisualIdeaPrefix(
   visualIdea: string,
   mode: WealthInsightsVisualMode = "default",
@@ -145,7 +152,9 @@ export function hasAllowedWealthInsightsVisualIdeaPrefix(
     );
   }
 
-  return false;
+  return WEALTH_INSIGHTS_DEFAULT_STORY_VISUAL_IDEA_PREFIXES.some((prefix) =>
+    trimmed.startsWith(prefix),
+  );
 }
 
 /**
@@ -558,9 +567,10 @@ export function buildWealthInsightsVisualModeSection(
     "## Active Wealth Insights Visual Mode",
     "",
     "Mode: default",
-    "Visual system: MAIN HOST + BIG EXPLANATORY ELEMENTS",
-    "Recurring Wealth Insights main host: required by default.",
-    "Obey the standard Wealth Insights Visual Planner host and explanatory-element rules.",
+    "Visual system: MAIN HOST + BIG EXPLANATORY ELEMENTS (+ episode story cast)",
+    "Recurring Wealth Insights main host: required for mechanism/meta beats; story cast may appear alone when the script names them.",
+    "Use MAIN HOST: / STORY_CHARACTER: / MAIN HOST + STORY: / STORY_PAIR: prefixes.",
+    "Obey the Episode Cast Lock when present; do not invent named people outside it.",
   ].join("\n");
 }
 

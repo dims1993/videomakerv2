@@ -14,16 +14,16 @@
         "imageOutputFolder": null
       },
       "voiceover": {
-        "voiceId": "alFofuDn3cOwyoz1i44T",
-        "voiceName": "GodWord Narrador",
-        "ttsProvider": "elevenlabs",
-        "pauseAfterMs": 180,
+        "voiceId": "en-US-Chirp3-HD-Enceladus",
+        "voiceName": "Enceladus GodsWord",
+        "ttsProvider": "google",
+        "pauseAfterMs": null,
         "generateSubtitles": true,
-        "alignmentProvider": "elevenlabs",
+        "alignmentProvider": "whisperx",
         "captionStylePreset": "godsword_style"
       },
       "render": {
-        "burnCaptions": true,
+        "burnCaptions": false,
         "voiceSoundBars": false,
         "voiceSoundBarsStyle": "bars"
       }
@@ -33,7 +33,98 @@
         "voiceId": "alFofuDn3cOwyoz1i44T",
         "voiceName": "GodWord Narrador",
         "defaultPauseAfterMs": 180
+      },
+      {
+        "voiceId": "en-US-Chirp3-HD-Enceladus",
+        "voiceName": "Enceladus GodsWord",
+        "defaultPauseAfterMs": 180
       }
     ]
+  },
+  "wealth-insights": {
+    "pipelineDefaults": {
+      "script": {
+        "includeReferenceTranscripts": false,
+        "referenceDocumentIds": []
+      },
+      "visualPlan": {
+        "mode": "hybrid",
+        "generationMode": "FULL_VIDEO",
+        "libraryId": null
+      },
+      "assets": {
+        "imageOutputFolder": null
+      },
+      "voiceover": {
+        "voiceId": "en-US-Chirp3-HD-Erinome",
+        "voiceName": "SARA-PODCASTS",
+        "ttsProvider": "google",
+        "pauseAfterMs": 0,
+        "generateSubtitles": true,
+        "alignmentProvider": "whisperx",
+        "captionStylePreset": "clean_active_word"
+      },
+      "render": {
+        "burnCaptions": true,
+        "voiceSoundBars": false,
+        "voiceSoundBarsStyle": "bars"
+      }
+    },
+    "voiceProfiles": [
+      {
+        "voiceId": "en-US-Chirp3-HD-Charon",
+        "voiceName": "Charon — Deep Story Narrator",
+        "defaultPauseAfterMs": 120
+      },
+      {
+        "voiceId": "en-US-Chirp3-HD-Erinome",
+        "voiceName": "SARA-PODCASTS",
+        "defaultPauseAfterMs": 0
+      }
+    ]
+  },
+  "podcast-english-lessons": {
+    "pipelineDefaults": {
+      "script": {
+        "includeReferenceTranscripts": false,
+        "referenceDocumentIds": []
+      },
+      "visualPlan": {
+        "mode": "library",
+        "generationMode": "FULL_VIDEO",
+        "libraryId": "podcast-english-lessons"
+      },
+      "assets": {
+        "imageOutputFolder": null
+      },
+      "voiceover": {
+        "voiceId": null,
+        "voiceName": null,
+        "ttsProvider": "google",
+        "sectionVoices": {
+          "teacher": {
+            "voiceId": "en-US-Chirp3-HD-Fenrir",
+            "voiceName": "Fenrir — Emma (teacher)",
+            "provider": "google"
+          },
+          "student": {
+            "voiceId": "en-US-Chirp3-HD-Erinome",
+            "voiceName": "Erinome — Leo (student)",
+            "provider": "google",
+            "speed": 0.9
+          }
+        },
+        "pauseAfterMs": null,
+        "generateSubtitles": true,
+        "alignmentProvider": "whisperx",
+        "captionStylePreset": "clean_phrase_script"
+      },
+      "render": {
+        "burnCaptions": true,
+        "voiceSoundBars": true,
+        "voiceSoundBarsStyle": "bars"
+      }
+    },
+    "voiceProfiles": []
   }
 }

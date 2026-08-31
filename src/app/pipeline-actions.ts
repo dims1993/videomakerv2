@@ -25,6 +25,7 @@ import {
   saveVideoPipelineSettings,
   type PipelineSettings,
 } from "@/lib/pipeline-settings";
+import { normalizeVoiceoverSectionVoices } from "@/lib/voiceover-section-voices";
 import {
   runPipelineWorkerLoop,
 } from "@/lib/pipeline-worker";
@@ -246,7 +247,9 @@ export async function restartPipelineQueueItemFromStepAction(
 
   const cleared = result.clearedScenes
     ? ` Cleared ${result.deletedScenes} scene(s).`
-    : "";
+    : result.clearedImageScenes > 0
+      ? ` Cleared ${result.clearedImageScenes} image asset(s) for regen.`
+      : "";
   const notice = `Restarted at ${pipelineStepLabel(step)}.${cleared}`;
   redirect(
     `/pipeline-queue?notice=${encodeURIComponent(notice)}&highlight=${encodeURIComponent(itemId)}`,
@@ -349,17 +352,39 @@ function parsePipelineSettingsFormData(
   const voiceId = formData.get("voiceId")?.toString().trim() || null;
   const voiceName = formData.get("voiceName")?.toString().trim() || null;
   const pauseRaw = formData.get("pauseAfterMs")?.toString().trim() ?? "";
-  const pauseParsed = pauseRaw === "" ? null : Number(pauseRaw);
+  // Empty field = punctuation smart pauses (null). Do not fall back to a prior
+  // flat pause — that silently bypassed per-scene punctuation for every channel.
   const pauseAfterMs =
-    pauseParsed == null || !Number.isFinite(pauseParsed) || pauseParsed < 0
-      ? fallback.voiceover.pauseAfterMs
-      : Math.round(pauseParsed);
+    pauseRaw === ""
+      ? null
+      : (() => {
+          const n = Number(pauseRaw);
+          return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+        })();
 
   const imageOutputFolderField = formData.get("imageOutputFolder");
   const imageOutputFolder =
     imageOutputFolderField === null
       ? fallback.assets.imageOutputFolder
       : imageOutputFolderField.toString().trim() || null;
+
+  const sectionVoicesRaw = formData
+    .get("voiceoverSectionVoicesJson")
+    ?.toString()
+    .trim();
+  let sectionVoices = fallback.voiceover.sectionVoices;
+  if (sectionVoicesRaw) {
+    try {
+      const parsed = normalizeVoiceoverSectionVoices(
+        JSON.parse(sectionVoicesRaw) as unknown,
+      );
+      if (Object.keys(parsed).length > 0) {
+        sectionVoices = parsed;
+      }
+    } catch {
+      // Keep fallback section voices when JSON is invalid.
+    }
+  }
 
   return parsePipelineSettings(
     {
@@ -381,6 +406,7 @@ function parsePipelineSettingsFormData(
         ttsProvider:
           formData.get("ttsProvider")?.toString().trim() ||
           fallback.voiceover.ttsProvider,
+        sectionVoices,
         pauseAfterMs,
         generateSubtitles: formData.get("generateSubtitles") === "on",
         alignmentProvider:

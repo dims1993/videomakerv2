@@ -1,10 +1,12 @@
 import { extractJsonPayload } from "@/lib/browser-automation/types";
 import { repairUnescapedJsonStringQuotes } from "@/lib/chatgpt-scene-handoff";
+import { resolveValidFishSpeechText } from "@/lib/fish-speech-tags";
 import {
   inferPodcastImagePromptRole,
   normalizePodcastImagePrompt,
 } from "@/lib/podcast-english-lessons-image-prompt-contract";
 import { stripChatGptUiChrome } from "@/lib/script-writer-extract";
+import { THE_GODS_WORD_CHANNEL_KEY } from "@/lib/the-gods-word-script-prompt";
 import type { PodcastVisualPlanSkeletonScene } from "@/lib/visual-plan-skeleton";
 import { clampSceneDurationSeconds } from "@/lib/visual-plan-script";
 
@@ -17,6 +19,8 @@ export type VisualPlanFillPatch = {
   visualIdea?: string;
   imagePrompt?: string;
   duration?: number;
+  /** Optional Fish directed speech (The God's Word). */
+  fishSpeechText?: string;
 };
 
 export type VisualPlanFillValidation = {
@@ -202,6 +206,11 @@ export function validateVisualPlanFillResponse(
       }
     }
 
+    const fishSpeechText =
+      typeof record.fishSpeechText === "string"
+        ? record.fishSpeechText.trim()
+        : undefined;
+
     patches.push({
       order: Math.floor(order),
       ...(sceneType ? { sceneType } : {}),
@@ -209,6 +218,7 @@ export function validateVisualPlanFillResponse(
       ...(visualIdea ? { visualIdea } : {}),
       ...(imagePrompt ? { imagePrompt } : {}),
       ...(duration != null ? { duration } : {}),
+      ...(fishSpeechText ? { fishSpeechText } : {}),
     });
   });
 
@@ -255,14 +265,24 @@ export function applyVisualPlanFillPatches(
     const visualIdea = patch.visualIdea ?? scene.visualIdea;
     const rawImagePrompt = patch.imagePrompt ?? scene.imagePrompt;
     if (!isPodcast) {
+      const fishSpeechText =
+        options.channelKey === THE_GODS_WORD_CHANNEL_KEY
+          ? resolveValidFishSpeechText(scene.scriptText, patch.fishSpeechText)
+          : null;
       return {
         ...scene,
         sceneType: patch.sceneType ?? scene.sceneType,
         visualPurpose,
         visualIdea,
         imagePrompt: rawImagePrompt,
-        duration: patch.duration ?? scene.duration,
+        // Wealth fill-hybrid: app owns duration (hook ≤5.5s, body ≤8s).
+        // ChatGPT patches must not reinflate beats past the local ceiling.
+        duration:
+          options.channelKey === "wealth-insights"
+            ? scene.duration
+            : (patch.duration ?? scene.duration),
         visualsFilled: true,
+        ...(fishSpeechText ? { fishSpeechText } : {}),
       };
     }
     const role = inferPodcastImagePromptRole({
@@ -324,7 +344,63 @@ export function slimHybridVisualPlanContext(
   return `${withoutVideoData.slice(0, maxChars)}\n\n[Context truncated for chunk-fill size.]`;
 }
 
+/** Keep fill chunks inline in the ChatGPT composer (attachment mode starts at 8000). */
+export const VISUAL_PLAN_FILL_INLINE_MAX_CHARS = 7500;
+
+export function resolveFillChunkContextPrompt(options: {
+  contextPrompt: string;
+  hasContinuity: boolean;
+}): string {
+  const maxChars = options.hasContinuity ? 2200 : 5200;
+  return slimHybridVisualPlanContext(options.contextPrompt, { maxChars });
+}
+
 export function buildVisualPlanFillChunkPrompt({
+  contextPrompt,
+  chunk,
+  chunkIndex,
+  totalChunks,
+  previousTail,
+  channelKey,
+}: {
+  contextPrompt: string;
+  chunk: PodcastVisualPlanSkeletonScene[];
+  chunkIndex: number;
+  totalChunks: number;
+  previousTail: PodcastVisualPlanSkeletonScene[];
+  channelKey?: string;
+}): string {
+  const hasContinuity = previousTail.length > 0;
+  let slimContext = resolveFillChunkContextPrompt({
+    contextPrompt,
+    hasContinuity,
+  });
+
+  const assemble = (ctx: string) =>
+    buildVisualPlanFillChunkPromptBody({
+      contextPrompt: ctx,
+      chunk,
+      chunkIndex,
+      totalChunks,
+      previousTail,
+      channelKey,
+    });
+
+  let prompt = assemble(slimContext);
+  if (prompt.length > VISUAL_PLAN_FILL_INLINE_MAX_CHARS) {
+    const overhead = prompt.length - slimContext.length;
+    const budget = Math.max(
+      1200,
+      VISUAL_PLAN_FILL_INLINE_MAX_CHARS - overhead - 100,
+    );
+    slimContext = slimHybridVisualPlanContext(contextPrompt, { maxChars: budget });
+    prompt = assemble(slimContext);
+  }
+
+  return prompt;
+}
+
+function buildVisualPlanFillChunkPromptBody({
   contextPrompt,
   chunk,
   chunkIndex,
@@ -418,10 +494,13 @@ export function buildVisualPlanFillChunkPrompt({
         `Return exactly ${expectedOrders.length} objects for orders: ${expectedOrders.join(", ")}.`,
         "Each object MUST include: order, sceneType, visualPurpose, visualIdea, imagePrompt.",
         "duration is optional (positive number); keep close to the skeleton estimate unless clearly wrong.",
+        channelKey === THE_GODS_WORD_CHANNEL_KEY
+          ? "For The God's Word: also include optional fishSpeechText (same spoken words as scriptText, with Fish [tags] only)."
+          : "Do NOT invent fields beyond the fill contract.",
         "Do NOT include scriptText.",
         "Do NOT include status.",
         channelKey === "wealth-insights"
-          ? 'visualIdea should usually start with "MAIN HOST:" (or the episode-specific prefix from Narrative Economics Stories context).'
+          ? 'visualIdea should start with "MAIN HOST:", "STORY_CHARACTER:", "MAIN HOST + STORY:", or "STORY_PAIR:" (or Narrative Economics prefixes when that mode is active).'
           : "visualIdea MUST start with an allowed channel format prefix from the planner context (e.g. MAIN HOST:, Narrative scene:, Object/detail insert:, Chapter cover:).",
         "Keep character/style/environment identity locks consistent with Continuity and the planner context.",
         "Do not bake captions, logos, or watermark text into imagePrompt unless the channel explicitly requires on-image title text.",

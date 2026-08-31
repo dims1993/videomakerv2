@@ -992,18 +992,17 @@ function assignNewestMediaIdsFirst(scenes: SceneForFlow[], mediaIds: string[]) {
   return assignMediaIdsToBatchScenes(scenes, mediaIds);
 }
 
-async function downloadFlowMedia(page: FlowPage, mediaId: string) {
-  const url = `https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=${encodeURIComponent(
+function buildFlowMediaRedirectUrl(mediaId: string) {
+  return `https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=${encodeURIComponent(
     mediaId,
   )}`;
-  const response = await page.request.get(url, { timeout: 60000 });
+}
 
-  if (!response.ok()) {
-    throw new Error(`Flow media download failed with HTTP ${response.status()}.`);
-  }
-
-  const body = await response.body();
-
+async function convertDownloadedBytesToPng(
+  page: FlowPage,
+  body: Buffer,
+  contentType: string,
+) {
   if (body.byteLength < flowConfig.minSavedBytes) {
     throw new Error(
       `Flow media download was too small: ${body.byteLength} bytes.`,
@@ -1019,7 +1018,6 @@ async function downloadFlowMedia(page: FlowPage, mediaId: string) {
     return body;
   }
 
-  const contentType = response.headers()["content-type"] || "image/jpeg";
   const downloadedBase64 = body.toString("base64");
   const png = await page.evaluate<
     { base64: string; contentType: string },
@@ -1082,6 +1080,152 @@ async function downloadFlowMedia(page: FlowPage, mediaId: string) {
   }
 
   return pngBytes;
+}
+
+async function downloadFlowMediaFromDom(page: FlowPage, mediaId: string) {
+  const png = await page.evaluate<string, FlowDownloadedPng>(async (id) => {
+    const mediaIdFromValue = (value: string | null) => {
+      if (!value) {
+        return "";
+      }
+
+      const match = value.match(/name=([a-f0-9-]+)/i);
+      return match ? decodeURIComponent(match[1]) : "";
+    };
+
+    let target: HTMLImageElement | null = null;
+
+    for (const element of document.querySelectorAll<HTMLImageElement>(
+      'img[alt="Imagen generada"], img[src*="getMediaUrlRedirect"], img[src*="name="], [style*="getMediaUrlRedirect"]',
+    )) {
+      const style = window.getComputedStyle(element);
+      const candidates = [
+        element.currentSrc || element.src || "",
+        element.getAttribute("href"),
+        style.backgroundImage,
+      ];
+      const matches = candidates.some(
+        (value) => mediaIdFromValue(String(value || "")) === id,
+      );
+
+      if (matches && element.naturalWidth >= 64) {
+        target = element;
+        break;
+      }
+    }
+
+    if (!target) {
+      throw new Error("Flow media image element not found in gallery DOM.");
+    }
+
+    if (!target.complete || target.naturalWidth < 64) {
+      await new Promise<void>((resolve, reject) => {
+        const timer = window.setTimeout(() => {
+          reject(new Error("Flow gallery image did not finish loading."));
+        }, 15000);
+        target!.onload = () => {
+          window.clearTimeout(timer);
+          resolve();
+        };
+        target!.onerror = () => {
+          window.clearTimeout(timer);
+          reject(new Error("Flow gallery image failed to load."));
+        };
+      });
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = target.naturalWidth;
+    canvas.height = target.naturalHeight;
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("Canvas 2D context is unavailable.");
+    }
+
+    context.drawImage(target, 0, 0);
+
+    const pngBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((value) => {
+        if (value) {
+          resolve(value);
+        } else {
+          reject(new Error("Canvas PNG export failed."));
+        }
+      }, "image/png");
+    });
+    const buffer = await pngBlob.arrayBuffer();
+    const pngBytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunkSize = 0x8000;
+
+    for (let index = 0; index < pngBytes.length; index += chunkSize) {
+      binary += String.fromCharCode(...pngBytes.slice(index, index + chunkSize));
+    }
+
+    return {
+      base64: btoa(binary),
+      width: canvas.width,
+      height: canvas.height,
+      type: "image/png",
+      size: pngBlob.size,
+    };
+  }, mediaId);
+
+  const pngBytes = Buffer.from(png.base64, "base64");
+
+  if (pngBytes.byteLength < flowConfig.minSavedBytes) {
+    throw new Error(
+      `Flow DOM PNG export was too small: ${pngBytes.byteLength} bytes.`,
+    );
+  }
+
+  return pngBytes;
+}
+
+async function downloadFlowMedia(page: FlowPage, mediaId: string) {
+  const url = buildFlowMediaRedirectUrl(mediaId);
+  const retryDelaysMs = [0, 2000, 4000];
+  let lastError: Error | null = null;
+
+  for (const delayMs of retryDelaysMs) {
+    if (delayMs > 0) {
+      await page.waitForTimeout(delayMs);
+    }
+
+    try {
+      const response = await page.request.get(url, { timeout: 60000 });
+
+      if (!response.ok()) {
+        throw new Error(
+          `Flow media download failed with HTTP ${response.status()}.`,
+        );
+      }
+
+      return await convertDownloadedBytesToPng(
+        page,
+        await response.body(),
+        response.headers()["content-type"] || "image/jpeg",
+      );
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      if (!lastError.message.includes("HTTP 404")) {
+        throw lastError;
+      }
+    }
+  }
+
+  try {
+    return await downloadFlowMediaFromDom(page, mediaId);
+  } catch (domError) {
+    const domMessage =
+      domError instanceof Error ? domError.message : String(domError);
+
+    throw new Error(
+      `${lastError?.message ?? "Flow media download failed."} DOM fallback also failed: ${domMessage}`,
+    );
+  }
 }
 
 async function saveGeneratedSceneImage({
@@ -1430,6 +1574,16 @@ export async function processBatchWithGoogleFlow(batchId: string) {
                 : `Scene ${scene.sortOrder} download failed.`;
 
             await appendImageBatchLog(batchId, message);
+
+            if (mediaId && message.includes("HTTP 404")) {
+              // Stale gallery ids from a previous Flow session still appear in
+              // the DOM but their redirect URLs 404 under the current login.
+              knownMediaIds.add(mediaId);
+              await appendImageBatchLog(
+                batchId,
+                `Flow media ${mediaId.slice(0, 8)} poisoned after HTTP 404 — likely stale gallery from a previous Flow session; waiting for fresh media.`,
+              );
+            }
           }
         }
 

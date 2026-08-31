@@ -327,7 +327,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
       };
     }
 
-    const loginNeeded = await this.page.evaluate(() => {
+    const loginNeeded = await this.pageEvaluate(() => {
       const body = document.body?.innerText?.toLowerCase() ?? "";
       return (
         body.includes("log in") ||
@@ -757,7 +757,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
 
       // Lightweight progress sample first — avoid re-reading 100k+ JSON from the
       // DOM every second while ChatGPT is still streaming scenes / fill patches.
-      const progress = await this.page.evaluate(() => {
+      const progress = await this.pageEvaluate(() => {
         const assistants = [
           ...document.querySelectorAll(
             '[data-message-author-role="assistant"]',
@@ -1328,7 +1328,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
       }
 
       try {
-        const payload = await this.page.evaluate(async () => {
+        const payload = await this.pageEvaluate(async () => {
           const assistants = Array.from(
             document.querySelectorAll(
               '[data-message-author-role="assistant"], [data-testid="assistant-message"]',
@@ -1436,7 +1436,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
       return "";
     }
 
-    return this.page.evaluate(() => {
+    return this.pageEvaluate(() => {
       const extractBalancedJsonAt = (raw: string, start: number): string | null => {
         if (start < 0 || start >= raw.length) {
           return null;
@@ -1567,7 +1567,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
       return "";
     }
 
-    const fromDom = await this.page.evaluate((selector) => {
+    const fromDom = await this.pageEvaluate((selector) => {
       const extractBalancedJsonAt = (raw: string, start: number): string | null => {
         if (start < 0 || start >= raw.length) {
           return null;
@@ -1756,7 +1756,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
       return "";
     }
 
-    const alreadyOpen = await this.page.evaluate(() => {
+    const alreadyOpen = await this.pageEvaluate(() => {
       const nodes = [
         ...document.querySelectorAll("pre.cm-content, .cm-content, pre code"),
       ] as HTMLElement[];
@@ -1797,7 +1797,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
         .last()
         .click({ timeout: 4000 });
     } catch {
-      const clicked = await this.page.evaluate((selector) => {
+      const clicked = await this.pageEvaluate((selector) => {
         const assistants = [...document.querySelectorAll(selector)];
         const last = assistants[assistants.length - 1] as HTMLElement | undefined;
         const button = last?.querySelector(
@@ -1816,7 +1816,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
 
     await this.page.waitForTimeout(1200);
 
-    return this.page.evaluate(() => {
+    return this.pageEvaluate(() => {
       const nodes = [
         ...document.querySelectorAll("pre.cm-content, .cm-content, pre code"),
       ] as HTMLElement[];
@@ -1889,6 +1889,9 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
   /**
    * Force ChatGPT composer model + reasoning before each send.
    * Default: GPT-5.5 + Alta (avoids slow GPT-5.6 Sol High).
+   *
+   * Selecting a model often triggers an SPA navigation that destroys the
+   * Playwright execution context mid-evaluate — retry until the chip sticks.
    */
   private async ensurePreferredModelSelection() {
     if (!this.page) {
@@ -1899,65 +1902,185 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     const reasoning = PREFERRED_CHATGPT_REASONING;
     const reasoningAliases = reasoningEffortAliases(reasoning);
 
-    try {
-      await this.page.keyboard.press("Escape");
-      await this.page.waitForTimeout(250);
+    let lastMessage = "Unknown model picker error.";
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await this.page.keyboard.press("Escape").catch(() => undefined);
+        await this.page.waitForTimeout(250);
 
-      if (await this.isPreferredModelChip(model, reasoningAliases)) {
-        console.info("[chatgpt-browser] model already selected", {
+        if (await this.isPreferredModelChip(model, reasoningAliases)) {
+          console.info("[chatgpt-browser] model already selected", {
+            model,
+            reasoning,
+            attempt,
+          });
+          return;
+        }
+
+        if (!(await this.openComposerModelMenu())) {
+          throw new Error("Could not open ChatGPT model picker.");
+        }
+        await this.page.waitForTimeout(500);
+        await this.selectModelFamily(model);
+        // Model switches often navigate / remount the composer.
+        await this.waitForComposerAfterPossibleNavigation();
+
+        if (!(await this.isPreferredModelChip(model, reasoningAliases))) {
+          if (!(await this.openComposerModelMenu())) {
+            throw new Error(
+              "Could not reopen ChatGPT model picker for reasoning.",
+            );
+          }
+          await this.page.waitForTimeout(400);
+          await this.selectReasoningEffort(reasoningAliases);
+          await this.waitForComposerAfterPossibleNavigation();
+        }
+
+        await this.page.keyboard.press("Escape").catch(() => undefined);
+        await this.page.waitForTimeout(200);
+
+        const chipText = await this.readComposerModelChipText();
+        console.info("[chatgpt-browser] preferred model applied", {
           model,
           reasoning,
+          chipText,
+          attempt,
         });
-        return;
-      }
 
-      if (!(await this.openComposerModelMenu())) {
-        throw new Error("Could not open ChatGPT model picker.");
-      }
-      await this.page.waitForTimeout(500);
-      await this.selectModelFamily(model);
-      await this.page.waitForTimeout(500);
-
-      if (!(await this.isPreferredModelChip(model, reasoningAliases))) {
-        if (!(await this.openComposerModelMenu())) {
-          throw new Error("Could not reopen ChatGPT model picker for reasoning.");
+        if (!(await this.isPreferredModelChip(model, reasoningAliases))) {
+          throw new Error(
+            `ChatGPT model chip is "${chipText || "(empty)"}"; expected ${model} + ${reasoning}.`,
+          );
         }
-        await this.page.waitForTimeout(400);
-        await this.selectReasoningEffort(reasoningAliases);
-        await this.page.waitForTimeout(350);
+        return;
+      } catch (error) {
+        lastMessage =
+          error instanceof Error ? error.message : "Unknown model picker error.";
+        const retryable =
+          this.isDestroyedContextError(error) ||
+          /model picker|model option|model chip|reasoning option/i.test(
+            lastMessage,
+          );
+        console.warn("[chatgpt-browser] Failed to enforce preferred model.", {
+          attempt,
+          message: lastMessage,
+          retryable,
+        });
+        if (!retryable || attempt >= 3) {
+          break;
+        }
+        await this.waitForComposerAfterPossibleNavigation();
+        await this.page.keyboard.press("Escape").catch(() => undefined);
+        await this.page.waitForTimeout(400 * attempt);
       }
-
-      await this.page.keyboard.press("Escape");
-      await this.page.waitForTimeout(200);
-
-      const chipText = await this.readComposerModelChipText();
-      console.info("[chatgpt-browser] preferred model applied", {
-        model,
-        reasoning,
-        chipText,
-      });
-
-      if (!(await this.isPreferredModelChip(model, reasoningAliases))) {
-        throw new Error(
-          `ChatGPT model chip is "${chipText || "(empty)"}"; expected ${model} + ${reasoning}.`,
-        );
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown model picker error.";
-      console.warn("[chatgpt-browser] Failed to enforce preferred model.", message);
-      throw new BrowserAutomationError(
-        `Could not select ChatGPT ${model} / ${reasoning}: ${message}`,
-        { code: "provider_error" },
-      );
     }
+
+    throw new BrowserAutomationError(
+      `Could not select ChatGPT ${model} / ${reasoning}: ${lastMessage}`,
+      { code: "provider_error" },
+    );
+  }
+
+  private isDestroyedContextError(error: unknown) {
+    const message =
+      error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error ?? "");
+    return /execution context was destroyed|most likely because of a navigation|cannot find context with specified id|frame was detached/i.test(
+      message,
+    );
+  }
+
+  /** Wait for ChatGPT composer to remount after a model-switch navigation. */
+  private async waitForComposerAfterPossibleNavigation() {
+    if (!this.page) {
+      return;
+    }
+    await this.page.waitForTimeout(600);
+    try {
+      await this.page.waitForSelector(
+        "#prompt-textarea, div[contenteditable='true']",
+        { timeout: 15000, state: "visible" },
+      );
+    } catch {
+      // Composer selectors vary; keep going and let callers retry evaluate.
+    }
+    await this.page.waitForTimeout(500);
+  }
+
+  private async evaluateStable<R>(fn: () => R): Promise<R>;
+  private async evaluateStable<T, R>(fn: (arg: T) => R, arg: T): Promise<R>;
+  private async evaluateStable<T, R>(
+    fn: ((arg: T) => R) | (() => R),
+    arg?: T,
+  ): Promise<R> {
+    if (!this.page) {
+      throw new Error("ChatGPT session is not open.");
+    }
+
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      try {
+        if (arguments.length > 1) {
+          return await this.pageEvaluate(fn as (arg: T) => R, arg as T);
+        }
+        return await this.pageEvaluate(fn as () => R);
+      } catch (error) {
+        lastError = error;
+        if (!this.isDestroyedContextError(error) || attempt >= 4) {
+          throw error;
+        }
+        console.warn(
+          "[chatgpt-browser] evaluate retry after destroyed context",
+          { attempt },
+        );
+        await this.waitForComposerAfterPossibleNavigation();
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error(String(lastError ?? "evaluateStable failed"));
+  }
+
+  /**
+   * Playwright page.evaluate that survives tsx/esbuild `__name` injection.
+   * The bridge callbacks are string literals so tsx cannot rewrite them.
+   */
+  private async pageEvaluate<R>(fn: () => R): Promise<R>;
+  private async pageEvaluate<T, R>(fn: (arg: T) => R, arg: T): Promise<R>;
+  private async pageEvaluate<T, R>(
+    fn: ((arg: T) => R) | (() => R),
+    arg?: T,
+  ): Promise<R> {
+    if (!this.page) {
+      throw new Error("ChatGPT session is not open.");
+    }
+    const src = fn.toString();
+    const needsNameShim = /\b__name\b/.test(src);
+    if (!needsNameShim) {
+      if (arguments.length > 1) {
+        return await this.page.evaluate(fn as (arg: T) => R, arg as T);
+      }
+      return await this.page.evaluate(fn as () => R);
+    }
+    // String-form bridge so tsx cannot inject another __name into the outer callback.
+    if (arguments.length > 1) {
+      return (await this.page.evaluate(
+        `({ src, value }) => { const __name = (t) => t; const impl = (0, eval)("(" + src + ")"); return impl(value); }`,
+        { src, value: arg as T },
+      )) as R;
+    }
+    return (await this.page.evaluate(
+      `(src) => { const __name = (t) => t; const impl = (0, eval)("(" + src + ")"); return impl(); }`,
+      src,
+    )) as R;
   }
 
   private async readComposerModelChipText() {
     if (!this.page) {
       return "";
     }
-    return this.page.evaluate(() =>
+    return this.evaluateStable(() =>
       [...document.querySelectorAll("button")]
         .filter((el) => String(el.className || "").includes("composer-pill"))
         .map((el) => (el.innerText || "").replace(/\s+/g, " ").trim())
@@ -1972,29 +2095,36 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     if (!this.page) {
       return false;
     }
-    return this.page.evaluate(
-      ({ model, reasoning }) => {
-        const pills = [...document.querySelectorAll("button")].filter((el) =>
-          String(el.className || "").includes("composer-pill"),
-        );
-        if (pills.length === 0) {
-          return false;
-        }
-        const text = pills
-          .map((el) => (el.innerText || "").replace(/\s+/g, " ").trim())
-          .join(" | ")
-          .toLowerCase();
-        const wants55 = /gpt-5\.5|5\.5/i.test(model);
-        const hasModel = wants55
-          ? /\b5\.5\b/.test(text)
-          : text.includes(model.toLowerCase());
-        const hasReasoning = reasoning.some((label) =>
-          text.includes(label.toLowerCase()),
-        );
-        return hasModel && hasReasoning;
-      },
-      { model: modelLabel, reasoning: reasoningLabels },
-    );
+    try {
+      return await this.evaluateStable(
+        ({ model, reasoning }) => {
+          const pills = [...document.querySelectorAll("button")].filter((el) =>
+            String(el.className || "").includes("composer-pill"),
+          );
+          if (pills.length === 0) {
+            return false;
+          }
+          const text = pills
+            .map((el) => (el.innerText || "").replace(/\s+/g, " ").trim())
+            .join(" | ")
+            .toLowerCase();
+          const wants55 = /gpt-5\.5|5\.5/i.test(model);
+          const hasModel = wants55
+            ? /\b5\.5\b/.test(text)
+            : text.includes(model.toLowerCase());
+          const hasReasoning = reasoning.some((label) =>
+            text.includes(label.toLowerCase()),
+          );
+          return hasModel && hasReasoning;
+        },
+        { model: modelLabel, reasoning: reasoningLabels },
+      );
+    } catch (error) {
+      if (this.isDestroyedContextError(error)) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   private async openComposerModelMenu() {
@@ -2003,7 +2133,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     }
 
     const menuOpen = async () =>
-      this.page!.evaluate(
+      this.evaluateStable(
         () =>
           [...document.querySelectorAll('[role="menu"]')].length > 0 ||
           [...document.querySelectorAll("button")].some(
@@ -2030,7 +2160,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
         .last()
         .click({ timeout: 5000 });
     } catch {
-      const clicked = await this.page.evaluate(() => {
+      const clicked = await this.evaluateStable(() => {
         const pills = [...document.querySelectorAll("button")].filter((el) => {
           if (!String(el.className || "").includes("composer-pill")) {
             return false;
@@ -2051,8 +2181,15 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     }
 
     await this.page.waitForTimeout(500);
-    if (await menuOpen()) {
-      return true;
+    try {
+      if (await menuOpen()) {
+        return true;
+      }
+    } catch (error) {
+      if (!this.isDestroyedContextError(error)) {
+        throw error;
+      }
+      await this.waitForComposerAfterPossibleNavigation();
     }
 
     // Second attempt.
@@ -2075,7 +2212,14 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
       // fall through
     }
     await this.page.waitForTimeout(600);
-    return menuOpen();
+    try {
+      return await menuOpen();
+    } catch (error) {
+      if (this.isDestroyedContextError(error)) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   private async selectModelFamily(modelLabel: string) {
@@ -2095,7 +2239,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
         await this.page.waitForTimeout(350);
         await trigger.click({ timeout: 3000 }).catch(() => undefined);
       } catch {
-        await this.page.evaluate(() => {
+        await this.evaluateStable(() => {
           const el = document.querySelector(
             '[role="menu"] [role="menuitem"][aria-haspopup="menu"]',
           ) as HTMLElement | null;
@@ -2110,35 +2254,45 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
       await this.page.waitForTimeout(600);
     }
 
-    const deadline = Date.now() + 5000;
+    const deadline = Date.now() + 8000;
     let clicked = false;
     while (Date.now() < deadline) {
-      clicked = await this.page.evaluate((wanted) => {
-        const nodes = [
-          ...document.querySelectorAll(
-            '[role="menu"] [role="menuitem"], [role="menu"] [role="menuitemradio"], [role="menu"] button, [role="menu"] span, [role="menu"] div',
-          ),
-        ] as HTMLElement[];
-        const exact = nodes.filter((el) => {
-          const text = (el.innerText || "").trim().replace(/\s+/g, " ");
-          if (text !== wanted) {
+      try {
+        clicked = await this.evaluateStable((wanted) => {
+          const nodes = [
+            ...document.querySelectorAll(
+              '[role="menu"] [role="menuitem"], [role="menu"] [role="menuitemradio"], [role="menu"] button, [role="menu"] span, [role="menu"] div',
+            ),
+          ] as HTMLElement[];
+          const exact = nodes.filter((el) => {
+            const text = (el.innerText || "").trim().replace(/\s+/g, " ");
+            if (text !== wanted) {
+              return false;
+            }
+            const rect = el.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0 && rect.height <= 40;
+          });
+          exact.sort((a, b) => {
+            const ar = a.getBoundingClientRect();
+            const br = b.getBoundingClientRect();
+            return ar.height * ar.width - br.height * br.width;
+          });
+          const target = exact[0];
+          if (!target) {
             return false;
           }
-          const rect = el.getBoundingClientRect();
-          return rect.width > 0 && rect.height > 0 && rect.height <= 40;
-        });
-        exact.sort((a, b) => {
-          const ar = a.getBoundingClientRect();
-          const br = b.getBoundingClientRect();
-          return ar.height * ar.width - br.height * br.width;
-        });
-        const target = exact[0];
-        if (!target) {
-          return false;
+          target.click();
+          return true;
+        }, modelLabel);
+      } catch (error) {
+        if (!this.isDestroyedContextError(error)) {
+          throw error;
         }
-        target.click();
-        return true;
-      }, modelLabel);
+        // Menu remounted mid-click; reopen and keep trying.
+        await this.waitForComposerAfterPossibleNavigation();
+        await this.openComposerModelMenu();
+        await this.page.waitForTimeout(400);
+      }
       if (clicked) {
         break;
       }
@@ -2155,7 +2309,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
       return;
     }
 
-    const clicked = await this.page.evaluate((labels) => {
+    const clicked = await this.evaluateStable((labels) => {
       const radios = [
         ...document.querySelectorAll('[role="menu"] [role="menuitemradio"]'),
       ] as HTMLElement[];
@@ -2197,7 +2351,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
       // fall through
     }
 
-    const focused = await this.page.evaluate((sel) => {
+    const focused = await this.pageEvaluate((sel) => {
       const el = document.querySelector(sel) as HTMLElement | null;
       if (!el) {
         return false;
@@ -2219,7 +2373,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     if (!focused) {
       // Last resort: click the center of the box via coordinates (still force).
       await locator.click({ timeout: 3000, force: true, trial: false }).catch(() => undefined);
-      await this.page.evaluate((sel) => {
+      await this.pageEvaluate((sel) => {
         const el = document.querySelector(sel) as HTMLElement | null;
         el?.focus();
       }, selector);
@@ -2250,7 +2404,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     const selector = await this.findFirstVisible(PROMPT_SELECTORS, 15000);
     await this.focusComposer(selector);
 
-    const inserted = await this.page.evaluate(
+    const inserted = await this.pageEvaluate(
       ({ sel, text }) => {
         const el = document.querySelector(sel) as HTMLElement | null;
         if (!el) {
@@ -2417,7 +2571,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
 
     const selector = await this.findFirstVisible(PROMPT_SELECTORS, 15000);
     await this.focusComposer(selector);
-    const inserted = await this.page.evaluate(
+    const inserted = await this.pageEvaluate(
       ({ sel, value }) => {
         const el = document.querySelector(sel) as HTMLElement | null;
         if (!el) return false;
@@ -2455,7 +2609,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     }
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const state = await this.page.evaluate(() => {
+      const state = await this.pageEvaluate(() => {
         const body = document.body?.innerText || "";
         const hasFileChip =
           /videomaker-chatgpt-prompt-|\.md\b/i.test(body.slice(-4000)) ||
@@ -2501,7 +2655,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     }
 
     // Fallback DOM check (covers aria-disabled / data-disabled).
-    return this.page.evaluate((selectors) => {
+    return this.pageEvaluate((selectors) => {
       for (const sel of selectors) {
         const el = document.querySelector(sel) as HTMLButtonElement | null;
         if (!el) continue;
@@ -2564,7 +2718,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     }
 
     const baseline = baselineText.trim();
-    const fromDom = await this.page.evaluate(() => {
+    const fromDom = await this.pageEvaluate(() => {
       const assistants = Array.from(
         document.querySelectorAll('[data-message-author-role="assistant"]'),
       );
@@ -2731,7 +2885,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
       return "";
     }
     try {
-      return await this.page.evaluate(async () => {
+      return await this.pageEvaluate(async () => {
         try {
           return await navigator.clipboard.readText();
         } catch {
@@ -2798,7 +2952,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     }
 
     try {
-      return await this.page.evaluate((selectors) => {
+      return await this.pageEvaluate((selectors) => {
         const assistants = Array.from(
           document.querySelectorAll('[data-message-author-role="assistant"]'),
         );
@@ -2916,7 +3070,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
       return "";
     }
     try {
-      return await this.page.evaluate((selectors) => {
+      return await this.pageEvaluate((selectors) => {
         for (const sel of selectors) {
           const el = document.querySelector(sel) as HTMLElement | null;
           if (!el) continue;

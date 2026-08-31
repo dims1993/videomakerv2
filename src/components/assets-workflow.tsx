@@ -1087,7 +1087,8 @@ export function AssetsWorkflow({
                     </CardDescription>
                     {rejected ? (
                       <p className="mt-1 text-xs font-medium text-destructive">
-                        Rejected — skipped in image batch, voiceover, stitch, and render.
+                        Rejected — skipped in image batch, voiceover, stitch,
+                        subtitles, and render.
                       </p>
                     ) : null}
                   </div>
@@ -1215,7 +1216,8 @@ export function AssetsWorkflow({
                     </select>
                     <p className="text-xs text-muted-foreground">
                       Rejected scenes are skipped in image batches, voiceover, stitch,
-                      and render. Re-stitch after rejecting if a master already exists.
+                      subtitles, and render. Re-stitch after rejecting if a master
+                      already exists (subtitles recombine after stitch).
                     </p>
                   </div>
                 </div>

@@ -49,10 +49,8 @@ function parseBracketLabel(line: string): string | null {
   return match?.[1]?.trim() ?? null;
 }
 
-function isSpeaker(label: string, format: PodcastEpisodeFormat) {
-  return format === "max_sara_conversation"
-    ? MAX_SARA_SPEAKER_RE.test(label)
-    : EMMA_LEO_SPEAKER_RE.test(label);
+function isSpeaker(label: string, _format: PodcastEpisodeFormat) {
+  return EMMA_LEO_SPEAKER_RE.test(label);
 }
 
 function countSpokenWords(script: string) {
@@ -240,10 +238,10 @@ export function validatePodcastEnglishScript(
     }
 
     // Wrong-cast speakers become hard errors for the active format.
-    if (format === "max_sara_conversation" && EMMA_LEO_SPEAKER_RE.test(label)) {
+    if (format === "max_sara_conversation" && MAX_SARA_SPEAKER_RE.test(label)) {
       errors.push({
         code: "wrong_cast",
-        message: `Max & Sara episodes must use [MAX]/[SARA] only (found [${label}] on line ${i + 1}).`,
+        message: `Emma & Leo conversation episodes must use [EMMA]/[LEO] only (found [${label}] on line ${i + 1}).`,
         severity: "error",
       });
       continue;
@@ -261,7 +259,7 @@ export function validatePodcastEnglishScript(
       if (format === "max_sara_conversation") {
         errors.push({
           code: "learner_pause",
-          message: `Timed learner pauses are not used in Max & Sara conversation episodes (found [${label}] on line ${i + 1}).`,
+          message: `Timed learner pauses are not used in Emma & Leo conversation episodes (found [${label}] on line ${i + 1}).`,
           severity: "error",
         });
       }
@@ -382,10 +380,8 @@ export function validatePodcastEnglishScript(
     const turnsBeforeFinal = collectTurns(beforeFinalScript, format);
     const thanksTurn = turnsBeforeFinal.at(-2);
     const hopeTurn = turnsBeforeFinal.at(-1);
-    const expectedThanksSpeaker =
-      format === "max_sara_conversation" ? "MAX" : "LEO";
-    const expectedHopeSpeaker =
-      format === "max_sara_conversation" ? "SARA" : "EMMA";
+    const expectedThanksSpeaker = "LEO";
+    const expectedHopeSpeaker = "EMMA";
     const thanksOk =
       thanksTurn &&
       thanksTurn.speaker === expectedThanksSpeaker &&
@@ -401,10 +397,7 @@ export function validatePodcastEnglishScript(
     if (!thanksOk || !hopeOk) {
       errors.push({
         code: "final_missing_forced_thanks",
-        message:
-          format === "max_sara_conversation"
-            ? `Immediately before [FINAL], required ending is [MAX] "${PODCAST_FORCED_THANKS_LINE}" then [SARA] starting with "${PODCAST_FORCED_HOPE_LINE_STEM} …".`
-            : `Immediately before [FINAL], required ending is [LEO] "${PODCAST_FORCED_THANKS_LINE}" then [EMMA] starting with "${PODCAST_FORCED_HOPE_LINE_STEM} …".`,
+        message: `Immediately before [FINAL], required ending is [LEO] "${PODCAST_FORCED_THANKS_LINE}" then [EMMA] starting with "${PODCAST_FORCED_HOPE_LINE_STEM} …".`,
         severity: "error",
       });
     }
@@ -448,13 +441,13 @@ export function validatePodcastEnglishScript(
     if (partCount < gold.partCountMin) {
       errors.push({
         code: "part_count_low",
-        message: `PART count ${partCount} is below Max & Sara standard ${gold.partCountMin}–${gold.partCountMax}.`,
+        message: `PART count ${partCount} is below Emma & Leo conversation standard ${gold.partCountMin}–${gold.partCountMax}.`,
         severity: "error",
       });
     } else if (partCount > gold.partCountMax + 2) {
       warnings.push({
         code: "part_count_high",
-        message: `PART count ${partCount} is above typical Max & Sara standard ${gold.partCountMax}.`,
+        message: `PART count ${partCount} is above typical Emma & Leo conversation standard ${gold.partCountMax}.`,
         severity: "warning",
       });
     }
@@ -463,16 +456,16 @@ export function validatePodcastEnglishScript(
       if (lower.includes(beat)) {
         errors.push({
           code: "forbidden_practice_beat",
-          message: `Max & Sara conversation scripts must not include practice/challenge language: "${beat}".`,
+          message: `Emma & Leo conversation scripts must not include practice/challenge language: "${beat}".`,
           severity: "error",
         });
       }
     }
 
-    if (/\bemma\b/.test(lower) || /\bleo\b/.test(lower)) {
+    if (/\bmax\b/.test(lower) || /\bsara\b/.test(lower)) {
       errors.push({
         code: "wrong_cast_name",
-        message: "Max & Sara scripts must not mention Emma or Leo.",
+        message: "Emma & Leo conversation scripts must not mention Max or Sara.",
         severity: "error",
       });
     }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 
 import { stopPipelineQueueWorkerAction } from "@/app/pipeline-actions";
 import { Button } from "@/components/ui/button";
@@ -49,9 +49,29 @@ async function startWorkerRequest(): Promise<{ ok: boolean; reason?: string }> {
   }
 }
 
+/**
+ * router.refresh() RSC fetches often throw TypeError("network error") when
+ * Next.js is restarting / the tab is busy. That surfaces as a red overlay on
+ * the Server Component tree (misleading stack on pipeline-queue page).
+ */
+function safeRouterRefresh(
+  router: ReturnType<typeof useRouter>,
+  startTransition: (cb: () => void) => void,
+) {
+  startTransition(() => {
+    try {
+      const result = router.refresh() as void | Promise<void>;
+      if (result && typeof (result as Promise<void>).then === "function") {
+        void (result as Promise<void>).catch(() => undefined);
+      }
+    } catch {
+      // ignore mid-restart blips
+    }
+  });
+}
+
 export function PipelineWorkerControls({
   initiallyRunning,
-  hasQueuedWork = false,
 }: PipelineWorkerControlsProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -60,6 +80,24 @@ export function PipelineWorkerControls({
   const [running, setRunning] = useState(initiallyRunning);
   const [keepAlive, setKeepAlive] = useState(false);
   const restartingRef = useRef(false);
+  const refreshCooldownRef = useRef(false);
+
+  const refreshQueue = useCallback(() => {
+    if (refreshCooldownRef.current) {
+      return;
+    }
+    if (
+      typeof document !== "undefined" &&
+      document.visibilityState === "hidden"
+    ) {
+      return;
+    }
+    refreshCooldownRef.current = true;
+    safeRouterRefresh(router, startTransition);
+    window.setTimeout(() => {
+      refreshCooldownRef.current = false;
+    }, 2500);
+  }, [router, startTransition]);
 
   useEffect(() => {
     setRunning(initiallyRunning);
@@ -71,6 +109,28 @@ export function PipelineWorkerControls({
     } catch {
       // ignore
     }
+  }, []);
+
+  // Next.js RSC refresh failures often bubble as unhandled TypeError("network error")
+  // and the overlay mis-attributes them to PipelineQueuePage JSX.
+  useEffect(() => {
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const message =
+        reason instanceof Error
+          ? reason.message
+          : typeof reason === "string"
+            ? reason
+            : "";
+      if (
+        reason instanceof TypeError &&
+        /^network error$/i.test(message.trim())
+      ) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => window.removeEventListener("unhandledrejection", onRejection);
   }, []);
 
   function setKeepAliveFlag(value: boolean) {
@@ -124,7 +184,7 @@ export function PipelineWorkerControls({
       if (started.ok) {
         setRunning(true);
         setNotice("Worker auto-restarted. Checkpoints/queue preserved.");
-        router.refresh();
+        refreshQueue();
       } else if (started.reason === "network_error") {
         setNotice(
           "Auto-restart waiting — server still coming back from network error…",
@@ -141,17 +201,17 @@ export function PipelineWorkerControls({
       void tick();
     }, 8000);
     return () => window.clearInterval(timer);
-  }, [keepAlive, router]);
+  }, [keepAlive, refreshQueue]);
 
   useEffect(() => {
     if (!running) {
       return;
     }
     const timer = window.setInterval(() => {
-      router.refresh();
-    }, 5000);
+      refreshQueue();
+    }, 8000);
     return () => window.clearInterval(timer);
-  }, [running, router]);
+  }, [running, refreshQueue]);
 
   function startWorker() {
     setError("");
@@ -171,7 +231,7 @@ export function PipelineWorkerControls({
         setNotice(
           "Worker started with keep-alive — auto-restarts after Next.js/network drops.",
         );
-        router.refresh();
+        refreshQueue();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not start worker.");
       }
@@ -200,7 +260,7 @@ export function PipelineWorkerControls({
           body.message ||
             "Worker stopped. Progress preserved — Start worker to resume.",
         );
-        router.refresh();
+        refreshQueue();
       } catch (err) {
         // Even if DELETE fails mid-network blip, clear keep-alive so we don't
         // immediately restart after an intentional Stop.

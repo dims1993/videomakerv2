@@ -1,6 +1,11 @@
 /** Shared TTS catalog types — safe for client components (no Node fs). */
 
-export type TtsVoiceProvider = "elevenlabs" | "chatterbox" | "google";
+export type TtsVoiceProvider =
+  | "elevenlabs"
+  | "chatterbox"
+  | "google"
+  | "fish"
+  | "speechify";
 
 /** Chatterbox built-in pack vs uploaded clone sample. */
 export type ChatterboxVoiceMode = "predefined" | "clone";
@@ -16,6 +21,20 @@ export type GoogleTtsCatalogConfig = {
   /** Cloud TTS speakingRate (0.25–4.0). */
   speakingRate?: number;
   audioEncoding?: "MP3" | "LINEAR16" | "OGG_OPUS";
+};
+
+/** Per-catalog Fish Audio TTS overrides. */
+export type FishAudioCatalogConfig = {
+  /** Fish `model` header (e.g. s2.1-pro). */
+  model?: string;
+  /** Fish prosody.speed. */
+  speed?: number;
+};
+
+/** Per-catalog Speechify TTS overrides. */
+export type SpeechifyCatalogConfig = {
+  /** Speechify `model` body field (e.g. simba-3.2). */
+  model?: string;
 };
 
 export type NamedTtsVoice = {
@@ -37,6 +56,10 @@ export type NamedTtsVoice = {
   googleLanguageCode?: string;
   /** Advanced Google synthesize overrides stored on the catalog entry. */
   googleConfig?: GoogleTtsCatalogConfig;
+  /** Fish Audio overrides (`voiceId` = Fish `reference_id`). */
+  fishConfig?: FishAudioCatalogConfig;
+  /** Speechify overrides (`voiceId` = Speechify `voice_id`). */
+  speechifyConfig?: SpeechifyCatalogConfig;
 };
 
 export function normalizeChatterboxVoiceMode(
@@ -90,6 +113,48 @@ export function normalizeGoogleTtsCatalogConfig(
   };
 }
 
+export function normalizeFishAudioCatalogConfig(
+  value: unknown,
+): FishAudioCatalogConfig | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const entry = value as Record<string, unknown>;
+  const model =
+    typeof entry.model === "string" && entry.model.trim()
+      ? entry.model.trim()
+      : undefined;
+  const speedRaw = Number(entry.speed);
+  const speed =
+    Number.isFinite(speedRaw) && speedRaw > 0
+      ? Math.min(Math.max(speedRaw, 0.5), 2)
+      : undefined;
+  if (!model && speed == null) {
+    return undefined;
+  }
+  return {
+    ...(model ? { model } : {}),
+    ...(speed != null ? { speed } : {}),
+  };
+}
+
+export function normalizeSpeechifyCatalogConfig(
+  value: unknown,
+): SpeechifyCatalogConfig | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const entry = value as Record<string, unknown>;
+  const model =
+    typeof entry.model === "string" && entry.model.trim()
+      ? entry.model.trim()
+      : undefined;
+  if (!model) {
+    return undefined;
+  }
+  return { model };
+}
+
 /** @deprecated Prefer NamedTtsVoice; kept for existing ElevenLabs-named call sites. */
 export type NamedElevenLabsVoice = NamedTtsVoice;
 
@@ -111,6 +176,12 @@ export function normalizeTtsVoiceProvider(value: unknown): TtsVoiceProvider {
   if (value === "google") {
     return "google";
   }
+  if (value === "fish") {
+    return "fish";
+  }
+  if (value === "speechify") {
+    return "speechify";
+  }
   return "elevenlabs";
 }
 
@@ -122,7 +193,9 @@ export function resolveNamedVoiceProvider(
   if (
     explicit === "chatterbox" ||
     explicit === "elevenlabs" ||
-    explicit === "google"
+    explicit === "google" ||
+    explicit === "fish" ||
+    explicit === "speechify"
   ) {
     return explicit;
   }

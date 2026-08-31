@@ -457,7 +457,7 @@ export async function getVideoPrompt(
               [
                 "Podcast Episode Format",
                 podcastFormat === "max_sara_conversation"
-                  ? "max_sara_conversation — Natural Daily English Conversations with Max & Sara"
+                  ? "max_sara_conversation — Natural Daily English Conversations with Emma & Leo"
                   : "emma_leo_lesson — English in Action teacher/student challenge",
               ],
             ] as Array<[string, string]>)

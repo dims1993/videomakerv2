@@ -1,9 +1,9 @@
 # Script Writer — Podcast English Lessons (Emma & Leo / speaking challenge)
 
-> **Series note:** This prompt is for legacy **English in Action** Emma & Leo challenge episodes only.
-> For **Natural Daily English Conversations with Max & Sara**, the pipeline selects
+> **Series note:** This prompt is for legacy **English in Action** Emma & Leo speaking-challenge episodes only.
+> For **Natural Daily English Conversations with Emma & Leo**, the pipeline selects
 > `prompts/channels/podcast-english-lessons/script-writer-max-sara.md` instead
-> (when `topicEngine` is `conversational_podcast` or the idea marks Max & Sara).
+> (when `topicEngine` is `conversational_podcast` or the idea marks a long-form conversation).
 
 Write a two-speaker English lesson podcast script that matches the gold standard of finished Day 1 (depth/progression) and Day 3 (practice system/rhythm). When those references conflict on repetitions, follow Day 3.
 

@@ -14,11 +14,15 @@ import {
   WEALTH_INSIGHTS_MAIN_HOST_LOCK,
   WEALTH_INSIGHTS_STYLE_LOCK,
 } from "@/lib/wealth-insights-image-prompt";
+import {
+  buildWealthEpisodeCastLockPromptBlock,
+  type WealthEpisodeCastLock,
+} from "@/lib/wealth-insights-episode-cast";
 
 export const WEALTH_INSIGHTS_MAIN_HOST_DESCRIPTOR = WEALTH_INSIGHTS_MAIN_HOST_LOCK;
 
 export const WEALTH_INSIGHTS_SUPPORTING_CHARACTER_DESCRIPTOR =
-  "supporting background/side character from the same Wealth Insights character universe: diverse adult in their 20s to 40s, varied skin tone/ethnicity/hairstyle/facial features as needed, friendly relatable everyday professional or smart-casual appearance, modern simple clothing (office wear, blazer, shirt, sweater, blouse, neutral pants, clean everyday shoes), natural clear readable expression (curious, concerned, surprised, thoughtful, happy, or attentive), slightly stylized cartoon-friendly proportions, clean facial structure, approachable body language, drawn in the same clean 2D vector cartoon style as the main host, thick clean outlines, smooth flat colors, simple shading, polished educational thumbnail aesthetic";
+  "original fictional background/side character for this educational cartoon: diverse adult in their 20s to 40s, varied skin tone/ethnicity/hairstyle/facial features as needed, friendly relatable everyday professional or smart-casual appearance, modern simple clothing (office wear, blazer, shirt, sweater, blouse, neutral pants, clean everyday shoes), natural clear readable expression (curious, concerned, surprised, thoughtful, happy, or attentive), slightly stylized cartoon-friendly proportions, clean facial structure, approachable body language, drawn in the same clean 2D vector cartoon style, thick clean outlines, smooth flat colors, simple shading, polished educational thumbnail aesthetic. Original fictional design only — not a pre-existing IP or shared visual universe.";
 
 export const WEALTH_INSIGHTS_DEFAULT_STYLE_LOCK = WEALTH_INSIGHTS_STYLE_LOCK;
 
@@ -103,30 +107,44 @@ export function buildWealthInsightsSegmentationRules() {
   ].join("\n");
 }
 
-export function buildWealthInsightsDefaultVisualSystemRules() {
+export function buildWealthInsightsDefaultVisualSystemRules(options?: {
+  cast?: WealthEpisodeCastLock | null;
+}) {
+  const castBlock = buildWealthEpisodeCastLockPromptBlock(options?.cast);
   return [
-    "## Visual system: MAIN HOST + BIG EXPLANATORY ELEMENTS",
+    "## Visual system: MAIN HOST + BIG EXPLANATORY ELEMENTS (+ episode story cast)",
     "",
-    "Default mode requires the recurring Wealth Insights main host in almost every scene.",
-    "Host identity and art style are APP-OWNED locks. Do NOT rewrite the host face, hair, outfit, or style paragraph.",
-    "Describe only the host's action / pose / emotion relative to the explanatory element.",
-    `Supporting character (when needed, short cue only): "${WEALTH_INSIGHTS_SUPPORTING_CHARACTER_DESCRIPTOR}"`,
+    "Default mode uses an original fictional finance educator character for mechanism / meta beats.",
+    "When the script names story characters from the Episode Cast,",
+    "put those characters on screen (alone, as a pair, or with the educator).",
+    "Host appearance and art style are fixed episode-consistent original designs. Do NOT rewrite the host face, hair, outfit, or style paragraph.",
+    "For story-character scenes, paste that character's original-design descriptor into Must show.",
+    "Never ask the image model to reproduce a shared character universe, recurring brand host IP, celebrity likeness, or other pre-existing visual identity — describe only original fictional designs.",
+    `Supporting character (anonymous extras only when needed): "${WEALTH_INSIGHTS_SUPPORTING_CHARACTER_DESCRIPTOR}"`,
     "",
     "Composition:",
-    "- host + one dominant explanatory element",
-    "- host must be visually connected to that element (points, holds, reacts, steadies, reveals)",
+    "- one clear readable beat (educator, story character, pair, or educator+story)",
     "- few large elements; readable in under one second",
     "- no generic AI finance posters, random stock characters, or IP-adjacent references",
+    "- do not invent named people outside the Episode Cast",
     "- no photorealism, no 3D, no anime",
     "",
-    "visualIdea usually starts with: MAIN HOST:",
+    "visualIdea prefixes:",
+    '- "MAIN HOST: …" — finance educator explains a mechanism / meta beat',
+    '- "STORY_CHARACTER: Name — …" — story character alone',
+    '- "MAIN HOST + STORY: Name — …" — educator with one story character',
+    '- "STORY_PAIR: Name + Name — …" — two story characters',
     "",
     "sceneType guidance (NOT TheGodsWord mix targets):",
-    '- "avatar" is the normal default when the main host appears with an explanatory element',
+    '- "avatar" when a person (educator or cast) is the visual anchor',
     '- "insert" only for true object/detail beats under current Wealth rules',
     '- "space" only for environment/transition beats when truly appropriate',
     "Semantic alignment always wins over distribution statistics.",
-  ].join("\n");
+    castBlock ? "" : null,
+    castBlock,
+  ]
+    .filter((line): line is string => line != null)
+    .join("\n");
 }
 
 export function buildWealthInsightsImagePromptRules(mode: WealthInsightsVisualMode) {
@@ -150,11 +168,12 @@ export function buildWealthInsightsImagePromptRules(mode: WealthInsightsVisualMo
     "## imagePrompt shape (Default Wealth Insights — variable beats only)",
     "",
     "Generate imagePrompt ONLY after boundaries + durations are valid.",
-    "Use this structure. The app injects fixed MAIN HOST + Style locks after you respond.",
-    "Do NOT paste the full host appearance paragraph or the Style rules paragraph.",
+    "Use this structure. The app injects fixed MAIN HOST / Style locks when the host is on screen.",
+    "Do NOT paste the full host appearance paragraph or the Style paragraph.",
+    "When a cast character is on screen, paste that character's episode-consistent original design into Must show.",
     "",
-    "Voiceover context:",
-    '"[exact scriptText for this scene]"',
+    "Educational beat:",
+    '"[one calm sentence explaining the mechanism — YOU invent this; do NOT paste raw voiceover]"',
     "",
     "Narrative meaning:",
     '"[one sentence — YOU invent this]"',
@@ -162,24 +181,24 @@ export function buildWealthInsightsImagePromptRules(mode: WealthInsightsVisualMo
     "Create:",
     WEALTH_INSIGHTS_CREATE_LOCK,
     "",
-    "Must show:",
-    "- [APP_FILLS_MAIN_HOST_LOCK]",
-    "- [YOU invent: one dominant big explanatory element]",
-    "- [YOU invent: host action / pose / emotion connected to that element]",
+    "Must show (examples by prefix):",
+    "- MAIN HOST scenes: [APP_FILLS_MAIN_HOST_LOCK] + dominant element + host action/emotion",
+    "- STORY_CHARACTER / STORY_PAIR: cast descriptor(s) + action/emotion (host lock NOT required)",
+    "- MAIN HOST + STORY: [APP_FILLS_MAIN_HOST_LOCK] + cast descriptor + joint action",
     "",
     "Style rules:",
     "[APP_FILLS_STYLE_LOCK]",
     "",
     `Avoid: ${WEALTH_INSIGHTS_AVOID_LOCK}`,
     "",
-    "You ONLY decide: Narrative meaning, big explanatory element(s), and host action/emotion/pose.",
-    "Leave host identity and style wording to the app placeholders above.",
+    "You decide: Narrative meaning, on-screen cast vs host, big explanatory element(s), and action/emotion/pose.",
+    "Leave host identity and style wording to the app placeholders when the host appears.",
     "",
     "Prefer concrete drawable beats, e.g.:",
     "Must show:",
     "- [APP_FILLS_MAIN_HOST_LOCK]",
-    "- a giant rent notice labeled RENT pressing down on a glass savings jar labeled SAVINGS",
-    "- the host reacts with tense concern, one hand bracing the jar",
+    "- a giant rent notice labeled RENT stacked on a glass savings jar labeled SAVINGS",
+    "- the host reacts with thoughtful concern, one hand bracing the jar",
     "",
     "JSON escaping: escape inner quotes inside imagePrompt as \\\".",
   ].join("\n");
@@ -211,11 +230,12 @@ export function buildWealthInsightsFillImagePromptRules(
     "",
     "scriptText and duration are already fixed by the app.",
     "Write imagePrompt for each listed order only.",
-    "Use this structure. The app injects fixed MAIN HOST + Style locks after you respond.",
-    "Do NOT paste the full host appearance paragraph or the Style rules paragraph.",
+    "Use this structure. The app injects fixed MAIN HOST / Style locks when the host is on screen.",
+    "Do NOT paste the full host appearance paragraph or the Style paragraph.",
+    "When a cast character is on screen, paste that character's episode-consistent original design into Must show.",
     "",
-    "Voiceover context:",
-    '"[exact scriptText for this scene]"',
+    "Educational beat:",
+    '"[one calm sentence explaining the mechanism — YOU invent this; do NOT paste raw voiceover]"',
     "",
     "Narrative meaning:",
     '"[one sentence — YOU invent this]"',
@@ -223,24 +243,24 @@ export function buildWealthInsightsFillImagePromptRules(
     "Create:",
     WEALTH_INSIGHTS_CREATE_LOCK,
     "",
-    "Must show:",
-    "- [APP_FILLS_MAIN_HOST_LOCK]",
-    "- [YOU invent: one dominant big explanatory element]",
-    "- [YOU invent: host action / pose / emotion connected to that element]",
+    "Must show (examples by prefix):",
+    "- MAIN HOST scenes: [APP_FILLS_MAIN_HOST_LOCK] + dominant element + host action/emotion",
+    "- STORY_CHARACTER / STORY_PAIR: cast descriptor(s) + action/emotion (host lock NOT required)",
+    "- MAIN HOST + STORY: [APP_FILLS_MAIN_HOST_LOCK] + cast descriptor + joint action",
     "",
     "Style rules:",
     "[APP_FILLS_STYLE_LOCK]",
     "",
     `Avoid: ${WEALTH_INSIGHTS_AVOID_LOCK}`,
     "",
-    "You ONLY decide: Narrative meaning, big explanatory element(s), and host action/emotion/pose.",
-    "Leave host identity and style wording to the app placeholders above.",
+    "You decide: Narrative meaning, on-screen cast vs host, big explanatory element(s), and action/emotion/pose.",
+    "Leave host identity and style wording to the app placeholders when the host appears.",
     "",
     "Prefer concrete drawable beats, e.g.:",
     "Must show:",
     "- [APP_FILLS_MAIN_HOST_LOCK]",
-    "- a giant rent notice labeled RENT pressing down on a glass savings jar labeled SAVINGS",
-    "- the host reacts with tense concern, one hand bracing the jar",
+    "- a giant rent notice labeled RENT stacked on a glass savings jar labeled SAVINGS",
+    "- the host reacts with thoughtful concern, one hand bracing the jar",
     "",
     "JSON escaping: escape inner quotes inside imagePrompt as \\\".",
   ].join("\n");
@@ -285,8 +305,9 @@ export function buildWealthInsightsFillDuplicateVisualControlRules() {
 export function buildWealthInsightsSectionHybridContext(options: {
   mode: WealthInsightsVisualMode;
   visualElementLibraryCompact?: string | null;
+  cast?: WealthEpisodeCastLock | null;
 }) {
-  const { mode, visualElementLibraryCompact } = options;
+  const { mode, visualElementLibraryCompact, cast } = options;
 
   if (mode === "narrative_economics_stories") {
     return [
@@ -313,7 +334,7 @@ export function buildWealthInsightsSectionHybridContext(options: {
   }
 
   return [
-    buildWealthInsightsDefaultVisualSystemRules(),
+    buildWealthInsightsDefaultVisualSystemRules({ cast }),
     buildWealthInsightsTimingRules(),
     buildWealthInsightsSegmentationRules(),
     buildWealthInsightsHardHookSegmentationRules(),
@@ -340,8 +361,9 @@ export function buildWealthInsightsSectionHybridContext(options: {
 export function buildWealthInsightsFillHybridContext(options: {
   mode: WealthInsightsVisualMode;
   visualElementLibraryCompact?: string | null;
+  cast?: WealthEpisodeCastLock | null;
 }) {
-  const { mode, visualElementLibraryCompact } = options;
+  const { mode, visualElementLibraryCompact, cast } = options;
   const fillNotes = [
     "## Fill-chunk mode notes",
     "",
@@ -350,7 +372,9 @@ export function buildWealthInsightsFillHybridContext(options: {
     "Do NOT rewrite scriptText, invent scenes, or omit orders.",
     "Do NOT run scene-boundary planning or hard-hook segmentation — the app already did that.",
     "HOOK beats are already short — keep visuals punchy and beat-specific.",
-    "visualIdea usually starts with: MAIN HOST:",
+    mode === "narrative_economics_stories"
+      ? "visualIdea usually starts with CHARACTER_A/B/C/D:, MECHANISM:, etc."
+      : "visualIdea uses MAIN HOST: / STORY_CHARACTER: / MAIN HOST + STORY: / STORY_PAIR: as appropriate.",
     "Do not restart the visual narrative mid-video; continue identity locks from Continuity.",
     mode === "narrative_economics_stories"
       ? null
@@ -373,7 +397,7 @@ export function buildWealthInsightsFillHybridContext(options: {
   }
 
   return [
-    buildWealthInsightsDefaultVisualSystemRules(),
+    buildWealthInsightsDefaultVisualSystemRules({ cast }),
     buildWealthInsightsFillTimingRules(),
     buildWealthInsightsFillDuplicateVisualControlRules(),
     buildWealthInsightsFillImagePromptRules(mode),

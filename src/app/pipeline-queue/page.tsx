@@ -7,6 +7,7 @@ import {
   setPipelineQueueItemEnabled,
 } from "@/app/pipeline-actions";
 import { PipelineSettingsPanel } from "@/components/pipeline-settings-panel";
+import { isChirp3HdVoice } from "@/lib/google-tts-shared";
 import { PipelineWorkerControls } from "@/components/pipeline-worker-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getChannelProfile } from "@/lib/channels-server";
-import { readElevenLabsPreferences } from "@/lib/elevenlabs-preferences";
+import { isNarrationBlocksEnabled } from "@/lib/voiceover-blocks";
+import {
+  readElevenLabsPreferences,
+  type NamedElevenLabsVoice,
+} from "@/lib/elevenlabs-preferences";
 import { formatDate } from "@/lib/format";
 import { isPipelineWorkerRunning } from "@/lib/pipeline-cancel";
 import {
@@ -64,6 +69,7 @@ export default async function PipelineQueuePage({
 }: PipelineQueuePageProps) {
   const query = searchParams ? await searchParams : undefined;
   const items = await listPipelineQueueItems();
+  const narrationBlocksEnabled = isNarrationBlocksEnabled();
   const workerRunning = isPipelineWorkerRunning();
   const elevenPrefs = (await readElevenLabsPreferences()) ?? {
     lastUsed: {
@@ -75,11 +81,7 @@ export default async function PipelineQueuePage({
       similarityBoost: 0.75,
     },
     voiceIdHistory: [] as string[],
-    namedVoices: [] as {
-      name: string;
-      voiceId: string;
-      provider?: "elevenlabs" | "chatterbox" | "google";
-    }[],
+    namedVoices: [] as NamedElevenLabsVoice[],
     updatedAt: "",
   };
 
@@ -200,16 +202,19 @@ export default async function PipelineQueuePage({
                       voiceId: string;
                       voiceName: string | null;
                       defaultPauseAfterMs: number;
-                      provider: "elevenlabs" | "chatterbox" | "google";
+                      provider: "elevenlabs" | "chatterbox" | "google" | "fish" | "speechify";
                       chatterboxMode?: "predefined" | "clone";
                     }
                   >();
                   for (const profile of voiceProfiles) {
+                    const provider = isChirp3HdVoice(profile.voiceId)
+                      ? "google"
+                      : "elevenlabs";
                     voiceMap.set(profile.voiceId, {
                       voiceId: profile.voiceId,
                       voiceName: profile.voiceName ?? null,
                       defaultPauseAfterMs: profile.defaultPauseAfterMs,
-                      provider: "elevenlabs",
+                      provider,
                     });
                   }
                   for (const voice of named) {
@@ -218,7 +223,11 @@ export default async function PipelineQueuePage({
                         ? "chatterbox"
                         : voice.provider === "google"
                           ? "google"
-                          : "elevenlabs";
+                          : voice.provider === "fish"
+                            ? "fish"
+                            : voice.provider === "speechify"
+                              ? "speechify"
+                              : "elevenlabs";
                     const chatterboxMode =
                       provider === "chatterbox"
                         ? voice.chatterboxMode === "predefined"
@@ -239,7 +248,10 @@ export default async function PipelineQueuePage({
                         ...existing,
                         voiceName: existing.voiceName || voice.name,
                         provider:
-                          provider === "chatterbox" || provider === "google"
+                          provider === "chatterbox" ||
+                          provider === "google" ||
+                          provider === "fish" ||
+                          provider === "speechify"
                             ? provider
                             : existing.provider,
                         ...(chatterboxMode
@@ -382,6 +394,7 @@ export default async function PipelineQueuePage({
                           settings={settings}
                           references={references}
                           voices={[...voiceMap.values()]}
+                          narrationBlocksEnabled={narrationBlocksEnabled}
                         />
                       </span>
                     </div>

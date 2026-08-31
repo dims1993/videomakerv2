@@ -6,6 +6,10 @@ export type GenerateElevenLabsSpeechOptions = {
   stability?: number | null;
   similarityBoost?: number | null;
   speed?: number | null;
+  /** Prior spoken text for request stitching / prosody continuity. */
+  previousText?: string | null;
+  /** Following spoken text for request stitching / prosody continuity. */
+  nextText?: string | null;
   signal?: AbortSignal;
 };
 
@@ -50,6 +54,8 @@ export async function generateElevenLabsSpeech({
   stability,
   similarityBoost,
   speed,
+  previousText,
+  nextText,
   signal,
 }: GenerateElevenLabsSpeechOptions): Promise<Buffer> {
   const apiKey = envValue("ELEVENLABS_API_KEY");
@@ -58,6 +64,8 @@ export async function generateElevenLabsSpeech({
   const resolvedOutputFormat =
     outputFormat?.trim() || DEFAULT_ELEVENLABS_OUTPUT_FORMAT;
   const cleanText = text.trim();
+  const cleanPrevious = previousText?.trim() || "";
+  const cleanNext = nextText?.trim() || "";
 
   if (!apiKey) {
     throw new ElevenLabsError("Missing ELEVENLABS_API_KEY.");
@@ -94,6 +102,8 @@ export async function generateElevenLabsSpeech({
             similarity_boost: sanitizeSetting(similarityBoost, 0.75),
             ...(sanitizedSpeed === undefined ? {} : { speed: sanitizedSpeed }),
           },
+          ...(cleanPrevious ? { previous_text: cleanPrevious } : {}),
+          ...(cleanNext ? { next_text: cleanNext } : {}),
         }),
         signal,
       },

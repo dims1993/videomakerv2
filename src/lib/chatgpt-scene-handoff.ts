@@ -7,6 +7,7 @@ import {
   isPartCoverVisualIdea,
   sanitizePodcastAvatarScriptText,
 } from "@/lib/podcast-part-covers";
+import { resolveValidFishSpeechText } from "@/lib/fish-speech-tags";
 import {
   clampSceneDurationSeconds,
   findStructuralMarkersInScriptText,
@@ -38,6 +39,8 @@ export type ParsedHandoffScene = {
   status: string;
   /** Silence after this scene when stitching voiceover (milliseconds). */
   pauseAfterMs?: number | null;
+  /** Optional Fish Audio directed speech (same words as scriptText + tags). */
+  fishSpeechText?: string | null;
   sourceSection?: string;
 };
 
@@ -427,6 +430,10 @@ function normalizeRawHandoffScene(rawScene: Record<string, unknown>, index: numb
     pauseAfterMs: normalizePauseAfterMs(
       rawScene.pauseAfterMs ?? rawScene.pause_after_ms ?? rawScene.pauseAfter,
     ),
+    fishSpeechText: firstTextValue(
+      rawScene.fishSpeechText,
+      rawScene.fish_speech_text,
+    ),
     fallbackOrder: index + 1,
   };
 }
@@ -564,6 +571,10 @@ export function validateHandoffScenes(rawScenes: unknown[]): SceneHandoffValidat
       imagePrompt: normalizedScene.imagePrompt,
       status: "planned",
       pauseAfterMs: normalizedScene.pauseAfterMs,
+      fishSpeechText: resolveValidFishSpeechText(
+        normalizedScene.scriptText,
+        normalizedScene.fishSpeechText,
+      ),
       sourceSection: normalizedScene.section || undefined,
     });
   });
@@ -638,6 +649,9 @@ export function scenesToImportJson(scenes: ParsedHandoffScene[]) {
       duration: clampSceneDurationSeconds(scene.duration),
       ...(scene.pauseAfterMs != null
         ? { pauseAfterMs: scene.pauseAfterMs }
+        : {}),
+      ...(scene.fishSpeechText
+        ? { fishSpeechText: scene.fishSpeechText }
         : {}),
     })),
     null,

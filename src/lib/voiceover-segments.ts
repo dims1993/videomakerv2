@@ -198,11 +198,30 @@ export function generatedAudioUrl(
   audioPath: string | null | undefined,
   cacheKey?: string | number | Date | null,
 ) {
-  if (!audioPath?.startsWith("storage/voiceovers/")) {
+  if (!audioPath?.trim()) {
     return null;
   }
 
-  const url = `/api/generated-audio/${audioPath.slice("storage/voiceovers/".length)}`;
+  const normalized = audioPath.replace(/\\/g, "/").trim();
+  const prefix = "storage/voiceovers/";
+  let relativeUnderVoiceovers: string | null = null;
+
+  if (normalized.startsWith(prefix)) {
+    relativeUnderVoiceovers = normalized.slice(prefix.length);
+  } else {
+    // Absolute paths written by restore / older scripts.
+    const marker = `/${prefix}`;
+    const idx = normalized.indexOf(marker);
+    if (idx >= 0) {
+      relativeUnderVoiceovers = normalized.slice(idx + marker.length);
+    }
+  }
+
+  if (!relativeUnderVoiceovers) {
+    return null;
+  }
+
+  const url = `/api/generated-audio/${relativeUnderVoiceovers}`;
   if (cacheKey == null || cacheKey === "") {
     return url;
   }

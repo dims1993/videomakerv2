@@ -14,6 +14,21 @@ export const PROCESS_STATUSES = [
 
 export type ProcessStatus = (typeof PROCESS_STATUSES)[number];
 
+/** Process types that create or stitch scene voiceover audio. */
+export const VOICEOVER_AUDIO_PROCESS_TYPES = [
+  "scene_voiceover_generation",
+  "voiceover_stitching",
+] as const;
+
+export type VoiceoverAudioProcessType =
+  (typeof VOICEOVER_AUDIO_PROCESS_TYPES)[number];
+
+const ACTIVE_PROCESS_STATUSES: ProcessStatus[] = [
+  "queued",
+  "running",
+  "waiting",
+];
+
 export type ProcessLogLevel = "info" | "warning" | "error" | "success";
 
 export type ProcessLogItem = {
@@ -250,6 +265,41 @@ export async function cancelProcess(processId: string | null | undefined) {
   });
 
   await appendProcessLog(processId, "Cancelled", "warning");
+}
+
+export async function hasActiveVoiceoverAudioProcess(videoId: string) {
+  const id = videoId.trim();
+  if (!id) {
+    return false;
+  }
+  const count = await prisma.processRun.count({
+    where: {
+      videoId: id,
+      type: { in: [...VOICEOVER_AUDIO_PROCESS_TYPES] },
+      status: { in: ACTIVE_PROCESS_STATUSES },
+    },
+  });
+  return count > 0;
+}
+
+export async function cancelActiveVoiceoverAudioProcesses(videoId: string) {
+  const id = videoId.trim();
+  if (!id) {
+    return { count: 0 };
+  }
+  return prisma.processRun.updateMany({
+    where: {
+      videoId: id,
+      type: { in: [...VOICEOVER_AUDIO_PROCESS_TYPES] },
+      status: { in: ACTIVE_PROCESS_STATUSES },
+    },
+    data: {
+      status: "cancelled",
+      currentStep: "Cancel requested — stopping voiceover audio work",
+      finishedAt: new Date(),
+      errorMessage: "Cancel requested.",
+    },
+  });
 }
 
 export async function listProcessRuns({

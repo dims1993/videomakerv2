@@ -93,7 +93,7 @@ test("mode sections distinguish default vs narrative", () => {
     "narrative_economics_stories",
   );
   assert.match(defaultSection, /MAIN HOST \+ BIG EXPLANATORY ELEMENTS/);
-  assert.match(defaultSection, /required by default/);
+  assert.match(defaultSection, /story cast may appear alone/);
   assert.match(
     narrativeSection,
     /EPISODE PROTAGONIST \+ STORY MOMENT \/ ECONOMIC MECHANISM/,
@@ -104,6 +104,27 @@ test("mode sections distinguish default vs narrative", () => {
 test("visualIdea prefixes depend on active mode", () => {
   assert.equal(
     hasAllowedWealthInsightsVisualIdeaPrefix("MAIN HOST: Explains chart", "default"),
+    true,
+  );
+  assert.equal(
+    hasAllowedWealthInsightsVisualIdeaPrefix(
+      "STORY_CHARACTER: Ryan — checks his phone bill",
+      "default",
+    ),
+    true,
+  );
+  assert.equal(
+    hasAllowedWealthInsightsVisualIdeaPrefix(
+      "MAIN HOST + STORY: Maya — host compares two jars",
+      "default",
+    ),
+    true,
+  );
+  assert.equal(
+    hasAllowedWealthInsightsVisualIdeaPrefix(
+      "STORY_PAIR: Ryan + Maya — side-by-side contrast",
+      "default",
+    ),
     true,
   );
   assert.equal(

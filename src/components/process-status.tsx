@@ -36,7 +36,10 @@ type ProcessRun = {
   logs: unknown;
 };
 
+import { VOICEOVER_AUDIO_PROCESS_TYPES } from "@/lib/process-runs";
+
 const ACTIVE_STATUSES = new Set(["queued", "running", "waiting"]);
+const VOICEOVER_AUDIO_TYPES = new Set<string>(VOICEOVER_AUDIO_PROCESS_TYPES);
 const STALE_AFTER_MS = 45_000;
 
 function formatElapsed(startedAt: string, finishedAt: string | null) {
@@ -97,7 +100,7 @@ export function ProcessStatusCard({ process }: { process: ProcessRun }) {
   const progress = process.progressPercent;
   const canCancelSceneVoiceover =
     isActive &&
-    process.type === "scene_voiceover_generation" &&
+    VOICEOVER_AUDIO_TYPES.has(process.type) &&
     Boolean(process.videoId);
 
   function cancelSceneVoiceover() {

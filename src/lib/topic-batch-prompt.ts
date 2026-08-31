@@ -490,9 +490,9 @@ The English learning happens through:
 - conversational recap.
 
 Hosts:
-Max and Sara.
+Emma and Leo.
 
-Max and Sara are co-hosts, not teacher and student.
+Emma and Leo are co-hosts, not teacher and student.
 
 Either host may:
 - explain an idea;
@@ -515,7 +515,7 @@ Number of topics requested:
 ${countText}
 
 Goal:
-Generate highly clickable, conversation-worthy topics for daily publishing that can naturally sustain approximately 20–30 minutes of Max & Sara dialogue.
+Generate highly clickable, conversation-worthy topics for daily publishing that can naturally sustain approximately 20–30 minutes of Emma & Leo dialogue.
 
 Fundamental editorial shift (read carefully):
 
@@ -531,7 +531,7 @@ The ANGLE and UNIQUE MECHANISM make that conversation concrete and sustainable f
 Do NOT force the full everyday mechanism into the title.
 
 The viewer should think:
-'That is a meaningful conversation about life. I want to hear Max and Sara talk about it.'
+'That is a meaningful conversation about life. I want to hear Emma and Leo talk about it.'
 
 The viewer should also absorb useful English naturally while listening.
 
@@ -557,7 +557,7 @@ The fixed editorial references use this general episode feel:
 - a short opening promise;
 - casual personal catch-up between the hosts;
 - the catch-up naturally connects to the main topic;
-- Max and Sara explore the topic through questions and reactions;
+- Emma and Leo explore the topic through questions and reactions;
 - personal anecdotes and realistic examples;
 - occasional moments such as:
   'Really?'
@@ -587,13 +587,13 @@ TOPIC VIABILITY REQUIREMENT
 
 Every topic must be strong enough to support a 20–30 minute conversation without padding.
 
-Before selecting the idea, internally verify that Max and Sara could naturally discuss at least 5–7 of:
+Before selecting the idea, internally verify that Emma and Leo could naturally discuss at least 5–7 of:
 
 - what the big idea means;
 - whether they agree;
 - different personal experiences;
-- a story from Max;
-- a story from Sara;
+- a story from Leo;
+- a story from Emma;
 - a common belief about the topic;
 - when that belief is useful or wrong;
 - realistic daily-life examples;
@@ -634,7 +634,7 @@ Additional editorial originality rules:
 - The title should create curiosity about the IDEA, not necessarily describe the exact everyday mechanism.
 - Ground broad topics in simple everyday examples inside angle and uniqueMechanism.
 - Avoid vague motivational filler. A broad topic still needs a concrete conversational engine.
-- The viewer should want to hear Max and Sara's opinions, experiences, disagreements, and stories about the topic.
+- The viewer should want to hear Emma and Leo's opinions, experiences, disagreements, and stories about the topic.
 - The English-learning benefit should be secondary to the human interest of the topic.
 
 Do not propose generic titles such as:
@@ -670,7 +670,7 @@ UNIQUE MECHANISM
 
 The TITLE sells the big human idea.
 
-The UNIQUE MECHANISM explains the specific tension that gives Max and Sara enough material for 20–30 minutes.
+The UNIQUE MECHANISM explains the specific tension that gives Emma and Leo enough material for 20–30 minutes.
 
 Do NOT force the uniqueMechanism wording into the title.
 
@@ -723,7 +723,7 @@ Title:
 The Power Of Starting Again | English Podcast For Easy English Conversation | Learn English Fast
 
 Angle:
-Max and Sara explore what it feels like to restart after abandoning a goal, changing plans, having a bad week, or realizing an old approach no longer works.
+Emma and Leo explore what it feels like to restart after abandoning a goal, changing plans, having a bad week, or realizing an old approach no longer works.
 
 uniqueMechanism:
 The Restart Resistance: beginning again can feel harder than beginning the first time because the person now carries memories of the previous failed attempt.
@@ -836,13 +836,13 @@ B. HUMAN INTEREST TEST — Would someone potentially click even if they were not
 C. PODCAST TEST — Does it sound like a podcast episode title rather than a productivity blog headline?
 D. SEO WRAPPER TEST — Does the title clearly fit the easy-English podcast niche?
 E. SIMPLICITY TEST — Can an A1–B1 learner understand the core title concept?
-F. CURIOSITY TEST — Does it make the viewer want Max and Sara’s perspective?
+F. CURIOSITY TEST — Does it make the viewer want Emma and Leo’s perspective?
 G. MICRO-TOPIC TEST — Is the title unnecessarily focused on a tiny action/object when a bigger human framing would be stronger?
 
 If G = yes, rewrite.
 
 Also ask:
-'What will Max and Sara actually have to talk about for 20–30 minutes?'
+'What will Emma and Leo actually have to talk about for 20–30 minutes?'
 
 If there is no specific conversational engine behind the title, reject it.
 
@@ -1066,7 +1066,7 @@ Do not repeat the same visual metaphor in consecutive episodes.
 VISUAL IDENTITY
 --------------------------------------------------
 
-visualHook and thumbnailIdea must use Max and Sara in the established podcast studio.
+visualHook and thumbnailIdea must use Emma and Leo in the established podcast studio.
 
 Do not build the thumbnail around a completely new illustrated world.
 
@@ -1095,13 +1095,13 @@ Keep it simple.
 Examples (STYLE ONLY):
 
 Why We Care Too Much About What People Think:
-Sara looks toward several floating opinion bubbles while Max points toward a card that says 'YOUR LIFE'.
+Emma looks toward several floating opinion bubbles while Leo points toward a card that says 'YOUR LIFE'.
 
 Starting Again:
-Max holds a crumpled old plan while Sara opens a clean new notebook.
+Leo holds a crumpled old plan while Emma opens a clean new notebook.
 
 Friendships Growing Apart:
-Max and Sara hold two phones with a widening gap between message bubbles.
+Emma and Leo hold two phones with a widening gap between message bubbles.
 
 Do not force every thumbnail to use:
 - laptop;
@@ -1134,11 +1134,11 @@ The underlying IDEA must contain a specific mechanism the viewer has probably ex
 
 The title itself does NOT need to explicitly name that mechanism.
 
-The title may use a broader, simpler, more emotionally ambitious framing as long as uniqueMechanism clearly defines what Max and Sara will actually explore.
+The title may use a broader, simpler, more emotionally ambitious framing as long as uniqueMechanism clearly defines what Emma and Leo will actually explore.
 
 Each topic must answer:
 
-'What exactly is happening here that Max and Sara can unpack for 20–30 minutes?'
+'What exactly is happening here that Emma and Leo can unpack for 20–30 minutes?'
 
 Store that answer in uniqueMechanism.
 
@@ -1165,7 +1165,7 @@ RULES
 - Avoid topics that depend on the listener actively answering questions.
 - Avoid explicit listen-and-repeat mechanisms.
 - Avoid quizzes, missions, speaking challenges, and learner pauses.
-- Max and Sara should have genuine room for different opinions or experiences.
+- Emma and Leo should have genuine room for different opinions or experiences.
 - The topic should generate natural questions between the hosts.
 - Include an emotional trigger, but do not use manipulative fear.
 - The promise must be realistic and must include both human conversation payoff and natural English listening payoff.
@@ -1190,7 +1190,7 @@ Before returning each topic, internally verify:
 - Does it feel more like a podcast episode than a micro-productivity article?
 - Is the title broader than the uniqueMechanism?
 - Is the uniqueMechanism still specific enough to prevent generic motivation?
-- Can Max and Sara disagree or have different experiences?
+- Can Emma and Leo disagree or have different experiences?
 - Can the subject sustain 20–30 minutes?
 - Can it be explained using simple A1–B1 English?
 - Does the angle include ordinary examples?
@@ -1224,13 +1224,13 @@ title:
 The proposed YouTube title (big human idea + SEO wrappers).
 
 topic:
-One sentence describing what Max and Sara will talk about.
+One sentence describing what Emma and Leo will talk about.
 
 angle:
 The focused editorial perspective that keeps the episode from becoming generic, including ordinary examples.
 
 uniqueMechanism:
-The concrete tension, pattern, or dynamic that gives Max and Sara enough material — more specific than the title.
+The concrete tension, pattern, or dynamic that gives Emma and Leo enough material — more specific than the title.
 
 trigger:
 A provocative question, recognizable fear, life tension, uncomfortable truth, aspiration, relationship experience, disagreement, or strong curiosity. It does NOT always need to be a tiny observable object event.
@@ -1273,7 +1273,7 @@ Return exactly this JSON shape:
       "category": "${exampleCategory}",
       "title": "Example Big Human Idea | Easy English Podcast For Conversation Practice | Learn English Fast",
       "topic": "One-sentence summary of the conversation topic.",
-      "angle": "The focused editorial angle with ordinary examples that gives Max and Sara enough material for a natural long-form conversation.",
+      "angle": "The focused editorial angle with ordinary examples that gives Emma and Leo enough material for a natural long-form conversation.",
       "uniqueMechanism": "The concrete everyday mechanism or conversational dynamic this episode explores.",
       "trigger": "The recognizable emotional, relational, or life tension that makes the viewer click.",
       "promise": "What the viewer will understand or recognize after listening while absorbing useful natural English.",

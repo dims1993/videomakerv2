@@ -20,10 +20,23 @@ import {
   generateElevenLabsSpeech,
 } from "@/lib/elevenlabs";
 import {
+  FISH_AUDIO_PROVIDER,
+  generateFishSpeech,
+} from "@/lib/fish-audio";
+import {
+  fishSpeechTextFromVoiceoverSettings,
+  resolveValidFishSpeechText,
+  voiceoverSettingsWithFishSpeechText,
+} from "@/lib/fish-speech-tags";
+import {
   GOOGLE_TTS_PROVIDER,
   generateGoogleTtsSpeech,
   languageCodeFromVoiceName,
 } from "@/lib/google-tts";
+import {
+  SPEECHIFY_PROVIDER,
+  generateSpeechifySpeech,
+} from "@/lib/speechify";
 import {
   buildExpressiveVoiceoverText,
   mapPodcastActingCuesToScenes,
@@ -128,6 +141,7 @@ import {
   cancelProcess,
   failProcess,
   finishProcess,
+  hasActiveVoiceoverAudioProcess,
   startProcess,
   updateProcess,
 } from "@/lib/process-runs";
@@ -171,6 +185,7 @@ import { buildSceneTimelineFromSegments } from "@/lib/render/timing";
 import {
   getComputedVideoStatus,
   isSceneRejected,
+  SCENE_STATUS_REJECTED,
   sceneIncludedInPipelineWhere,
 } from "@/lib/status";
 import {
@@ -228,6 +243,7 @@ import {
 } from "@/lib/podcast-pause-cues";
 import {
   DEFAULT_SCENE_PAUSE_AFTER_MS,
+  defaultScenePauseAfterMsForChannel,
   ensureSceneVoiceoversDir,
   getPauseAfterScene,
   normalizeSceneVoiceoverText,
@@ -235,11 +251,32 @@ import {
   sceneVoiceoverMasterRelativePath,
   sceneVoiceoverRelativePath,
 } from "@/lib/voiceover-scenes";
+import { shouldBridgeProsody } from "@/lib/voiceover-continuity";
+import {
+  ENABLE_VOICEOVER_CONTINUITY_GROUPS,
+  synthesizeContinuityGroup,
+} from "@/lib/voiceover-continuity-groups";
+import {
+  narrationPlannerSceneFromVoice,
+  planNarrationBlocks,
+} from "@/lib/narration-planner";
+import { pregenerateNarrationBlocks } from "@/lib/voiceover-block-generation";
+import {
+  applyNarrationBlockDurationSync,
+  narrationManifestVoiceoverDurationBySceneId,
+} from "@/lib/narration-block-duration-sync";
+import {
+  readNarrationManifest,
+  writeNarrationManifestMerged,
+} from "@/lib/voiceover-block-manifest";
+import { buildNarrationBlockPausePlan } from "@/lib/narration-block-sync";
+import { isNarrationBlocksEnabled } from "@/lib/voiceover-blocks";
+import { synthesizeVoiceoverTtsText } from "@/lib/voiceover-tts-synth";
 import {
   prepareVoiceoverSpeechText,
   remapSpeechWordsToDisplay,
 } from "@/lib/speech-text";
-import { groupScenesByScriptSection, applyManualSectionRanges } from "@/lib/script-sections";
+import { groupScenesByScriptSection, applyManualSectionRanges, detectVoiceoverGroupingMode } from "@/lib/script-sections";
 import {
   extractVoiceoverSectionRanges,
   normalizeVoiceoverSectionVoices,
@@ -2456,6 +2493,8 @@ const importedSceneSchema = z.object({
   /** Silence after this scene when stitching (milliseconds). */
   pauseAfterMs: z.coerce.number().nonnegative().optional().nullable(),
   pause_after_ms: z.coerce.number().nonnegative().optional().nullable(),
+  /** Optional Fish Audio directed speech (The God's Word Visual Planner). */
+  fishSpeechText: z.string().optional().nullable(),
 });
 
 const importedScenesSchema = z.array(importedSceneSchema).min(1);
@@ -2472,6 +2511,7 @@ type NormalizedImportedScene = {
   imageUrl: string | null;
   status: string;
   pauseAfterMs: number | null;
+  fishSpeechText: string | null;
 };
 
 const importSceneChunkSize = 50;
@@ -2641,6 +2681,10 @@ function normalizeImportedScene(
     pauseAfterMs: normalizePauseAfterMs(
       scene.pauseAfterMs ?? scene.pause_after_ms,
     ),
+    fishSpeechText: resolveValidFishSpeechText(
+      scene.scriptText.trim(),
+      scene.fishSpeechText,
+    ),
   };
 }
 
@@ -2650,19 +2694,31 @@ function parseScenesImport(rawJson: string, fieldLabel = "Scenes JSON") {
 }
 
 function sceneCreateData(videoId: string, scenes: NormalizedImportedScene[]) {
-  return scenes.map((scene) => ({
-    videoId,
-    sortOrder: scene.sortOrder,
-    scriptText: scene.scriptText,
-    sceneType: scene.sceneType,
-    visualPurpose: scene.visualPurpose,
-    visualIdea: scene.visualIdea,
-    imagePrompt: scene.imagePrompt,
-    duration: scene.duration,
-    imageUrl: scene.imageUrl,
-    status: scene.status,
-    pauseAfterMs: scene.pauseAfterMs,
-  }));
+  return scenes.map((scene) => {
+    const voiceoverSettings = voiceoverSettingsWithFishSpeechText(
+      null,
+      scene.fishSpeechText,
+    );
+    return {
+      videoId,
+      sortOrder: scene.sortOrder,
+      scriptText: scene.scriptText,
+      sceneType: scene.sceneType,
+      visualPurpose: scene.visualPurpose,
+      visualIdea: scene.visualIdea,
+      imagePrompt: scene.imagePrompt,
+      duration: scene.duration,
+      imageUrl: scene.imageUrl,
+      status: scene.status,
+      pauseAfterMs: scene.pauseAfterMs,
+      ...(voiceoverSettings
+        ? {
+            voiceoverSettingsJson:
+              voiceoverSettings as Prisma.InputJsonValue,
+          }
+        : {}),
+    };
+  });
 }
 
 function sceneCreateManyOperations(
@@ -4030,6 +4086,13 @@ async function syncSceneVoiceoversToSubtitleSegments(
   const preserved = preserveSubtitles
     ? await snapshotPreservableSubtitleSegments(videoId)
     : new Map<string, PreservedSubtitleSegmentSnapshot>();
+  const videoMeta = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { channelKey: true },
+  });
+  const defaultPauseAfterMs = defaultScenePauseAfterMsForChannel(
+    videoMeta?.channelKey,
+  );
 
   await ensureExclusiveClipVoiceoverPathsForVideo(videoId);
 
@@ -4074,6 +4137,7 @@ async function syncSceneVoiceoversToSubtitleSegments(
         durationSec: scene.voiceoverDuration ?? 0,
       };
     }),
+    { defaultPauseAfterMs },
   );
   for (const overlap of musicBedOverlapsFromSteps(stitchPlan)) {
     const bed = scenes[overlap.bedIndex];
@@ -4094,6 +4158,7 @@ async function syncSceneVoiceoversToSubtitleSegments(
       const visualDuration = sceneVisualDurationSec({
         voiceoverDuration: scene.voiceoverDuration,
         pauseAfterMs: scene.pauseAfterMs,
+        defaultPauseAfterMs,
         isMusicBed,
         introSec: introByBedOrder.get(scene.sortOrder),
       });
@@ -4220,6 +4285,14 @@ async function syncSceneVoiceoversToSubtitleSegments(
 async function refreshVoiceoverSegmentDurationsFromScenes(videoId: string) {
   await ensureExclusiveClipVoiceoverPathsForVideo(videoId);
 
+  const videoMeta = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { channelKey: true },
+  });
+  const defaultPauseAfterMs = defaultScenePauseAfterMsForChannel(
+    videoMeta?.channelKey,
+  );
+
   const scenes = await prisma.scene.findMany({
     where: {
       videoId,
@@ -4256,6 +4329,7 @@ async function refreshVoiceoverSegmentDurationsFromScenes(videoId: string) {
         durationSec: scene.voiceoverDuration ?? 0,
       };
     }),
+    { defaultPauseAfterMs },
   );
   for (const overlap of musicBedOverlapsFromSteps(stitchPlan)) {
     const bed = scenes[overlap.bedIndex];
@@ -4308,16 +4382,37 @@ async function maybeRecombineSubtitlesAfterVoiceoverSync(videoId: string) {
     where: { id: videoId },
     select: { subtitleStatus: true },
   });
-  const segments = await prisma.voiceoverSegment.findMany({
-    where: { videoId },
-    include: {
-      subtitleSegment: {
-        select: {
-          status: true,
-          localCuesJson: true,
+  const rejectedScenes = await prisma.scene.findMany({
+    where: {
+      videoId,
+      status: SCENE_STATUS_REJECTED,
+    },
+    select: { sortOrder: true },
+  });
+  const rejectedOrders = new Set(rejectedScenes.map((scene) => scene.sortOrder));
+  const segments = (
+    await prisma.voiceoverSegment.findMany({
+      where: { videoId },
+      include: {
+        subtitleSegment: {
+          select: {
+            status: true,
+            localCuesJson: true,
+          },
         },
       },
-    },
+    })
+  ).filter((segment) => {
+    for (
+      let order = segment.sceneStartOrder;
+      order <= segment.sceneEndOrder;
+      order += 1
+    ) {
+      if (rejectedOrders.has(order)) {
+        return false;
+      }
+    }
+    return true;
   });
 
   if (segments.length === 0) {
@@ -4339,13 +4434,9 @@ async function maybeRecombineSubtitlesAfterVoiceoverSync(videoId: string) {
   });
 
   if (!allLocallyReady) {
-    await prisma.video.update({
-      where: { id: videoId },
-      data: {
-        subtitleStatus: "needs_update",
-        renderDraftStatus: "pending",
-      },
-    });
+    // Drop stale combined cues — otherwise Render shows a false timeline
+    // mismatch against an outdated caption track.
+    await invalidateSubtitlesForVideo(videoId);
     return { recombined: false, restoredReady: false };
   }
 
@@ -4592,9 +4683,15 @@ async function generateVoiceoverForScenes(
         sectionLabel: "Full script",
         sectionKind: "other" as const,
       }));
+  // Single-narrator videos: only the Voiceover voice picker drives TTS.
+  // Section voice overrides are ignored so Other/Advanced can't fight each other.
+  const effectiveSectionVoices =
+    detectVoiceoverGroupingMode(autoSceneSectionAssignments) === "speakers"
+      ? sectionVoices
+      : {};
   const sceneSectionAssignments = applyManualSectionRanges({
     autoAssignments: autoSceneSectionAssignments,
-    ranges: extractVoiceoverSectionRanges(sectionVoices),
+    ranges: extractVoiceoverSectionRanges(effectiveSectionVoices),
   });
   const sectionBySortOrder = new Map(
     sceneSectionAssignments.map((assignment) => [
@@ -4630,7 +4727,9 @@ async function generateVoiceoverForScenes(
   const formTtsProvider =
     formTtsProviderRaw === "chatterbox" ||
     formTtsProviderRaw === "elevenlabs" ||
-    formTtsProviderRaw === "google"
+    formTtsProviderRaw === "google" ||
+    formTtsProviderRaw === "fish" ||
+    formTtsProviderRaw === "speechify"
       ? formTtsProviderRaw
       : null;
   const fallbackVoice = {
@@ -4648,7 +4747,28 @@ async function generateVoiceoverForScenes(
   let skipped = 0;
   let failed = 0;
   let cumulativeTimeSec = 0;
+  /** Pre-sliced audio from narration blocks / continuity takes, keyed by scene id. */
+  const pendingGroupAudio = new Map<string, Buffer>();
+  const narrationBlockPauseBySceneId = new Map<string, number>();
 
+  if (options.processId) {
+    const initialRun = await prisma.processRun.findUnique({
+      where: { id: options.processId },
+      select: { status: true },
+    });
+    if (initialRun?.status === "cancelled") {
+      throw new SceneVoiceoverCanceledError(
+        "Scene voiceover generation canceled.",
+        { generated: 0, skipped: 0, failed: 0 },
+      );
+    }
+  }
+  if (isSceneVoiceoverCancelRequested(videoId)) {
+    throw new SceneVoiceoverCanceledError(
+      "Scene voiceover generation canceled.",
+      { generated: 0, skipped: 0, failed: 0 },
+    );
+  }
   clearSceneVoiceoverCancel(videoId);
 
   async function isCanceledNow() {
@@ -4689,6 +4809,201 @@ async function generateVoiceoverForScenes(
       `Scene voiceover generation canceled after ${generated} generated, ${skipped} skipped, ${failed} failed.`,
       { generated, skipped, failed },
     );
+  }
+
+  async function resolveSceneVoiceContext(
+    scene: (typeof scenes)[number],
+    sceneIndex: number,
+  ) {
+    const cleanText = normalizeSceneVoiceoverText(scene.scriptText);
+    const speech = prepareVoiceoverSpeechText(cleanText);
+    const actingCues = actingCuesBySortOrder.get(scene.sortOrder) ?? [];
+    const spokenText = buildExpressiveVoiceoverText(
+      speech.spokenText,
+      actingCues,
+    );
+    const modelId = resolveVoiceoverModelForActingCues(
+      actingCues,
+      generationOptions.modelId,
+    );
+    const sectionAssignment = sectionBySortOrder.get(scene.sortOrder);
+    const deliveryMode: PodcastDeliveryMode =
+      podcastDeliveryBySortOrder?.get(scene.sortOrder) ?? "main";
+    const resolvedVoice = resolveSceneVoiceoverSettings({
+      sectionKind: sectionAssignment?.sectionKind ?? "other",
+      sectionVoices: effectiveSectionVoices,
+      fallback: fallbackVoice,
+    });
+    const voiceProvider = resolveNamedVoiceProvider(
+      namedVoices,
+      resolvedVoice.voiceId || generationOptions.voiceId || "",
+      resolvedVoice.provider,
+    );
+    const namedVoice = findNamedVoice(
+      namedVoices,
+      resolvedVoice.voiceId || generationOptions.voiceId || "",
+    );
+    const podcastHost = applyMaxSaraVoiceProfiles
+      ? resolvePodcastHostKey({
+          voiceId: resolvedVoice.voiceId || generationOptions.voiceId,
+          sectionKind: sectionAssignment?.sectionKind,
+        })
+      : null;
+    const podcastSectionSpeed =
+      podcastHost != null
+        ? resolvePodcastSectionSpeakingRate({
+            host: podcastHost,
+            mode: deliveryMode,
+            explicitSpeed: resolvedVoice.speed,
+            spokenText: speech.spokenText,
+          })
+        : null;
+    const sceneGenerationOptions = {
+      ...generationOptions,
+      voiceId: resolvedVoice.voiceId || generationOptions.voiceId,
+      modelId,
+      ...(actingCues.length > 0 && voiceProvider === "elevenlabs"
+        ? { speed: null }
+        : podcastSectionSpeed != null
+          ? { speed: podcastSectionSpeed }
+          : resolvedVoice.speed != null
+            ? { speed: resolvedVoice.speed }
+            : {}),
+    };
+    const storedFishSpeech =
+      video?.channelKey === THE_GODS_WORD_CHANNEL_KEY
+        ? resolveValidFishSpeechText(
+            speech.spokenText,
+            fishSpeechTextFromVoiceoverSettings(scene.voiceoverSettingsJson),
+          )
+        : null;
+    const fishText = storedFishSpeech ?? speech.spokenText;
+    const ttsText =
+      voiceProvider === FISH_AUDIO_PROVIDER
+        ? fishText
+        : voiceProvider === "elevenlabs"
+          ? spokenText
+          : speech.spokenText;
+    return {
+      cleanText,
+      speech,
+      actingCues,
+      spokenText,
+      modelId,
+      sectionAssignment,
+      deliveryMode,
+      resolvedVoice,
+      voiceProvider,
+      namedVoice,
+      podcastHost,
+      podcastSectionSpeed,
+      sceneGenerationOptions,
+      fishText,
+      ttsText,
+      sceneIndex,
+    };
+  }
+
+  if (isNarrationBlocksEnabled()) {
+    const plannerScenes = [];
+    for (const [sceneIndex, scene] of scenes.entries()) {
+      if (sceneUsesExclusiveClipAudio(scene)) {
+        continue;
+      }
+      const ctx = await resolveSceneVoiceContext(scene, sceneIndex);
+      if (!ctx.ttsText.trim()) {
+        continue;
+      }
+      plannerScenes.push(
+        narrationPlannerSceneFromVoice({
+          sceneId: scene.id,
+          sortOrder: scene.sortOrder,
+          scriptText: scene.scriptText ?? "",
+          spokenText: ctx.speech.spokenText,
+          ttsText: ctx.ttsText,
+          provider: ctx.voiceProvider,
+          voiceId: ctx.sceneGenerationOptions.voiceId ?? "",
+          hasActingCues: ctx.actingCues.length > 0,
+          usesFishSpeechTags:
+            ctx.voiceProvider === FISH_AUDIO_PROVIDER &&
+            ctx.fishText.trim() !== ctx.speech.spokenText.trim(),
+        }),
+      );
+    }
+
+    const blocks = planNarrationBlocks(plannerScenes);
+    const multiSceneBlocks = blocks.filter((block) => block.scenes.length > 1);
+    await updateProcess(options.processId, {
+      logMessage: `Narration blocks: ${blocks.length} total, ${multiSceneBlocks.length} multi-scene (provider-agnostic).`,
+    });
+
+    const blockAbort = new AbortController();
+    const lastSortOrder = Math.max(
+      ...scenes.map((scene) => scene.sortOrder),
+      0,
+    );
+    const pregen = await pregenerateNarrationBlocks({
+      videoId,
+      blocks: multiSceneBlocks,
+      synthesizeBlock: async (block, fullText, context) => {
+        const firstScene = scenes.find(
+          (item) => item.id === block.scenes[0]!.sceneId,
+        );
+        if (!firstScene) {
+          throw new Error("Narration block references missing scene.");
+        }
+        const ctx = await resolveSceneVoiceContext(
+          firstScene,
+          scenes.indexOf(firstScene),
+        );
+        return synthesizeVoiceoverTtsText({
+          text: fullText,
+          voiceProvider: block.provider,
+          voiceId: ctx.sceneGenerationOptions.voiceId ?? "",
+          namedVoices,
+          generationOptions: ctx.sceneGenerationOptions,
+          expressiveText: ctx.spokenText,
+          spokenText: ctx.speech.spokenText,
+          fishText: ctx.fishText,
+          actingCueCount: ctx.actingCues.length,
+          blockMode: true,
+          previousText: context.previousText,
+          signal: blockAbort.signal,
+        });
+      },
+      onBlockComplete: (result, block) => {
+        void updateProcess(options.processId, {
+          logMessage: result
+            ? result.validationIssues.length > 0
+              ? `Narration block ${block.index + 1} (${block.provider}) failed validation: ${result.validationIssues.join("; ")}`
+              : `Narration block ${block.index + 1} (${block.provider}): ${result.slices.length} scenes, align=${result.alignmentProvider ?? "none"}, confidence=${result.alignmentConfidence?.toFixed(2) ?? "n/a"}.`
+            : `Narration block ${block.index + 1} (${block.provider}): alignment failed — per-scene fallback.`,
+          logLevel:
+            result && result.validationIssues.length === 0 ? "info" : "warning",
+        });
+      },
+    });
+
+    for (const [sceneId, audio] of pregen.audioBySceneId) {
+      pendingGroupAudio.set(sceneId, audio);
+    }
+
+    const pausePlan = buildNarrationBlockPausePlan({
+      blocks,
+      successfulBlockIds: pregen.successfulBlockIds,
+      lastSortOrder,
+    });
+    for (const [sceneId, pauseMs] of pausePlan) {
+      narrationBlockPauseBySceneId.set(sceneId, pauseMs);
+    }
+
+    if (pregen.records.length > 0) {
+      await writeNarrationManifestMerged(videoId, pregen.records);
+      await applyNarrationBlockDurationSync(videoId, {
+        pauseAfterMsBySceneId: narrationBlockPauseBySceneId,
+        channelKey: video?.channelKey,
+      });
+    }
   }
 
   for (const [index, scene] of scenes.entries()) {
@@ -4752,6 +5067,11 @@ async function generateVoiceoverForScenes(
       index,
       cumulativeTimeSec,
       existingPauseAfterMs: scene.pauseAfterMs,
+      defaultPauseAfterMs: defaultScenePauseAfterMsForChannel(video?.channelKey),
+      channelKey: video?.channelKey,
+      visualIdea: scene.visualIdea,
+      nextVisualIdea: scenes[index + 1]?.visualIdea,
+      nextScriptText: scenes[index + 1]?.scriptText,
     });
 
     const sectionAssignment = sectionBySortOrder.get(scene.sortOrder);
@@ -4765,7 +5085,10 @@ async function generateVoiceoverForScenes(
         scene.pauseAfterMs <= DEFAULT_SCENE_PAUSE_AFTER_MS)
         ? PODCAST_INTRO_SCENE_PAUSE_AFTER_MS
         : null;
-    const effectivePauseAfterMs = introGapMs ?? pauseAfterMs;
+    const narrationBlockPause = narrationBlockPauseBySceneId.get(scene.id);
+    const effectivePauseAfterMs =
+      introGapMs ??
+      (narrationBlockPause != null ? narrationBlockPause : pauseAfterMs);
 
     await prisma.scene.update({
       where: { id: scene.id },
@@ -4779,7 +5102,7 @@ async function generateVoiceoverForScenes(
     try {
       const resolvedVoice = resolveSceneVoiceoverSettings({
         sectionKind: sectionAssignment?.sectionKind ?? "other",
-        sectionVoices,
+        sectionVoices: effectiveSectionVoices,
         fallback: fallbackVoice,
       });
       const voiceProvider = resolveNamedVoiceProvider(
@@ -4831,6 +5154,112 @@ async function generateVoiceoverForScenes(
 
       let audio: Buffer;
       try {
+        const resolveNeighborVoiceId = (neighborIndex: number) => {
+          const neighbor = scenes[neighborIndex];
+          if (!neighbor) {
+            return "";
+          }
+          const neighborAssignment = sectionBySortOrder.get(neighbor.sortOrder);
+          const neighborResolved = resolveSceneVoiceoverSettings({
+            sectionKind: neighborAssignment?.sectionKind ?? "other",
+            sectionVoices: effectiveSectionVoices,
+            fallback: fallbackVoice,
+          });
+          return (
+            neighborResolved.voiceId ||
+            generationOptions.voiceId ||
+            ""
+          ).trim();
+        };
+        const currentVoiceId = (
+          resolvedVoice.voiceId ||
+          generationOptions.voiceId ||
+          ""
+        ).trim();
+
+        const runSynthesize = async (
+          bodyText: string,
+          synthesize: (fullText: string) => Promise<Buffer>,
+        ): Promise<Buffer> => {
+          const pending = pendingGroupAudio.get(scene.id);
+          if (pending) {
+            pendingGroupAudio.delete(scene.id);
+            return pending;
+          }
+
+          // Continuity Groups (one TTS take → align → slice) are disabled.
+          // Forced-align cuts kept leaking next-word onsets / eating attacks.
+          // Prefer cold per-scene synth: slightly less smooth mid-sentence joins,
+          // but no slice artifacts. Re-enable only behind ENABLE_VOICEOVER_CONTINUITY_GROUPS.
+          if (
+            ENABLE_VOICEOVER_CONTINUITY_GROUPS &&
+            actingCues.length === 0
+          ) {
+            const groupIndices = [index];
+            let k = index;
+            while (k + 1 < scenes.length) {
+              const cur = scenes[k]!;
+              const nxt = scenes[k + 1]!;
+              if (nxt.sortOrder !== cur.sortOrder + 1) break;
+              if (!shouldBridgeProsody(cur.scriptText, nxt.scriptText)) break;
+              if (resolveNeighborVoiceId(k + 1) !== currentVoiceId) break;
+              if ((actingCuesBySortOrder.get(nxt.sortOrder)?.length ?? 0) > 0) {
+                break;
+              }
+              if (pendingGroupAudio.has(nxt.id)) break;
+              if (
+                !options.overwrite &&
+                !options.missingOnly &&
+                !options.retryFailedOnly
+              ) {
+                const exists = await sceneVoiceoverFileExists(
+                  nxt.voiceoverLocalPath,
+                );
+                if (exists.ok) break;
+              }
+              groupIndices.push(k + 1);
+              k += 1;
+            }
+
+            if (groupIndices.length >= 2) {
+              const groupScenes = groupIndices.map((gi) => {
+                const gScene = scenes[gi]!;
+                const gSpeech = prepareVoiceoverSpeechText(
+                  normalizeSceneVoiceoverText(gScene.scriptText),
+                );
+                return {
+                  id: gScene.id,
+                  scriptText: gScene.scriptText,
+                  spokenText: gSpeech.spokenText,
+                  voiceKey: currentVoiceId,
+                };
+              });
+              const groupResult = await synthesizeContinuityGroup({
+                scenes: groupScenes,
+                label: scene.id,
+                synthesize,
+              });
+              if (groupResult) {
+                for (const slice of groupResult.slices) {
+                  if (slice.id === scene.id) continue;
+                  pendingGroupAudio.set(slice.id, slice.audio);
+                }
+                await updateProcess(options.processId, {
+                  logMessage: `Continuity group of ${groupIndices.length} scenes — one TTS take, sliced by alignment.`,
+                });
+                const self = groupResult.slices.find(
+                  (slice) => slice.id === scene.id,
+                );
+                if (self) {
+                  return self.audio;
+                }
+              }
+            }
+          }
+
+          return synthesize(bodyText);
+        };
+
         if (voiceProvider === CHATTERBOX_PROVIDER) {
           const chatterboxMode = resolveChatterboxVoiceMode(namedVoice);
           const predefinedVoiceId =
@@ -4843,52 +5272,103 @@ async function generateVoiceoverForScenes(
             (chatterboxMode === "clone"
               ? resolvedVoice.voiceId || generationOptions.voiceId || ""
               : "");
+          const chatterboxSpeed =
+            podcastSectionSpeed != null
+              ? podcastSectionSpeed
+              : resolvedVoice.speed != null
+                ? resolvedVoice.speed
+                : generationOptions.speed;
           // Chatterbox: speak clean text only (no ElevenLabs acting tags).
-          audio = await generateChatterboxSpeech({
-            text: speech.spokenText,
-            voiceMode: chatterboxMode,
-            predefinedVoiceId:
-              chatterboxMode === "predefined" ? predefinedVoiceId : undefined,
-            referenceFileName:
-              chatterboxMode === "clone" ? referenceFileName : undefined,
-            speed:
-              podcastSectionSpeed != null
-                ? podcastSectionSpeed
-                : resolvedVoice.speed != null
-                  ? resolvedVoice.speed
-                  : generationOptions.speed,
-            signal: abortController.signal,
-          });
+          audio = await runSynthesize(speech.spokenText, (fullText) =>
+            generateChatterboxSpeech({
+              text: fullText,
+              voiceMode: chatterboxMode,
+              predefinedVoiceId:
+                chatterboxMode === "predefined" ? predefinedVoiceId : undefined,
+              referenceFileName:
+                chatterboxMode === "clone" ? referenceFileName : undefined,
+              speed: chatterboxSpeed,
+              signal: abortController.signal,
+            }),
+          );
         } else if (voiceProvider === GOOGLE_TTS_PROVIDER) {
           const googleVoiceId =
             resolvedVoice.voiceId || generationOptions.voiceId || "";
           const googleConfig = namedVoice?.googleConfig;
-          audio = await generateGoogleTtsSpeech({
-            text: speech.spokenText,
-            voiceId: googleVoiceId,
-            languageCode:
-              googleConfig?.languageCode ||
-              namedVoice?.googleLanguageCode ||
-              languageCodeFromVoiceName(googleVoiceId),
-            // Max/Sara section rates beat flat catalog speakingRate so intro
-            // can be livelier than Word Tour / closing without one flat style.
-            speed:
-              podcastSectionSpeed != null
-                ? podcastSectionSpeed
-                : googleConfig?.speakingRate != null
-                  ? googleConfig.speakingRate
-                  : resolvedVoice.speed != null
-                    ? resolvedVoice.speed
-                    : generationOptions.speed,
-            audioEncoding: googleConfig?.audioEncoding,
-            signal: abortController.signal,
-          });
+          const googleSpeed =
+            podcastSectionSpeed != null
+              ? podcastSectionSpeed
+              : googleConfig?.speakingRate != null
+                ? googleConfig.speakingRate
+                : resolvedVoice.speed != null
+                  ? resolvedVoice.speed
+                  : generationOptions.speed;
+          audio = await runSynthesize(speech.spokenText, (fullText) =>
+            generateGoogleTtsSpeech({
+              text: fullText,
+              voiceId: googleVoiceId,
+              languageCode:
+                googleConfig?.languageCode ||
+                namedVoice?.googleLanguageCode ||
+                languageCodeFromVoiceName(googleVoiceId),
+              speed: googleSpeed,
+              audioEncoding: googleConfig?.audioEncoding,
+              signal: abortController.signal,
+            }),
+          );
+        } else if (voiceProvider === FISH_AUDIO_PROVIDER) {
+          const fishConfig = namedVoice?.fishConfig;
+          const referenceId =
+            resolvedVoice.voiceId || generationOptions.voiceId || "";
+          const storedFishSpeech =
+            video?.channelKey === THE_GODS_WORD_CHANNEL_KEY
+              ? resolveValidFishSpeechText(
+                  speech.spokenText,
+                  fishSpeechTextFromVoiceoverSettings(
+                    scene.voiceoverSettingsJson,
+                  ),
+                )
+              : null;
+          const fishText = storedFishSpeech ?? speech.spokenText;
+          const fishSpeed =
+            podcastSectionSpeed != null
+              ? podcastSectionSpeed
+              : fishConfig?.speed != null
+                ? fishConfig.speed
+                : resolvedVoice.speed != null
+                  ? resolvedVoice.speed
+                  : generationOptions.speed;
+          // Fish: no ElevenLabs acting tags. Prefer Visual Planner fishSpeechText
+          // for The God's Word when present and valid.
+          audio = await runSynthesize(fishText, (fullText) =>
+            generateFishSpeech({
+              text: fullText,
+              referenceId,
+              model: fishConfig?.model,
+              speed: fishSpeed,
+              signal: abortController.signal,
+            }),
+          );
+        } else if (voiceProvider === SPEECHIFY_PROVIDER) {
+          const speechifyVoiceId =
+            resolvedVoice.voiceId || generationOptions.voiceId || "";
+          // Speechify: plain spoken text (no ElevenLabs acting tags).
+          audio = await runSynthesize(speech.spokenText, (fullText) =>
+            generateSpeechifySpeech({
+              text: fullText,
+              voiceId: speechifyVoiceId,
+              model: namedVoice?.speechifyConfig?.model,
+              signal: abortController.signal,
+            }),
+          );
         } else {
-          audio = await generateElevenLabsSpeech({
-            text: spokenText,
-            ...sceneGenerationOptions,
-            signal: abortController.signal,
-          });
+          audio = await runSynthesize(spokenText, (fullText) =>
+            generateElevenLabsSpeech({
+              text: fullText,
+              ...sceneGenerationOptions,
+              signal: abortController.signal,
+            }),
+          );
         }
       } finally {
         clearInterval(cancelPoll);
@@ -4945,7 +5425,43 @@ async function generateVoiceoverForScenes(
               voiceProvider === GOOGLE_TTS_PROVIDER
                 ? namedVoice?.googleConfig
                 : undefined,
-            modelId: voiceProvider === "elevenlabs" ? modelId : undefined,
+            fishConfig:
+              voiceProvider === FISH_AUDIO_PROVIDER
+                ? namedVoice?.fishConfig
+                : undefined,
+            fishSpeechText:
+              voiceProvider === FISH_AUDIO_PROVIDER
+                ? resolveValidFishSpeechText(
+                    speech.spokenText,
+                    fishSpeechTextFromVoiceoverSettings(
+                      scene.voiceoverSettingsJson,
+                    ),
+                  )
+                : undefined,
+            fishTagsApplied:
+              voiceProvider === FISH_AUDIO_PROVIDER &&
+              video?.channelKey === THE_GODS_WORD_CHANNEL_KEY
+                ? Boolean(
+                    resolveValidFishSpeechText(
+                      speech.spokenText,
+                      fishSpeechTextFromVoiceoverSettings(
+                        scene.voiceoverSettingsJson,
+                      ),
+                    ),
+                  )
+                : undefined,
+            speechifyConfig:
+              voiceProvider === SPEECHIFY_PROVIDER
+                ? namedVoice?.speechifyConfig
+                : undefined,
+            modelId:
+              voiceProvider === "elevenlabs"
+                ? modelId
+                : voiceProvider === FISH_AUDIO_PROVIDER
+                  ? namedVoice?.fishConfig?.model
+                  : voiceProvider === SPEECHIFY_PROVIDER
+                    ? namedVoice?.speechifyConfig?.model
+                    : undefined,
             outputFormat: generationOptions.outputFormat,
             stability: generationOptions.stability,
             similarityBoost: generationOptions.similarityBoost,
@@ -5042,6 +5558,23 @@ async function generateVoiceoverForScenes(
   return { generated, skipped, failed };
 }
 
+/**
+ * Script/pipeline entry for in-place VO continuity repair (no redirects).
+ */
+export async function generateVoiceoverForScenesForRepair(
+  videoId: string,
+  formData: FormData,
+  options: {
+    selectedOrders?: number[];
+    missingOnly?: boolean;
+    retryFailedOnly?: boolean;
+    overwrite?: boolean;
+    processId?: string;
+  } = {},
+) {
+  return generateVoiceoverForScenes(videoId, formData, options);
+}
+
 async function handleSceneVoiceoverCancel(
   processId: string,
   videoId: string,
@@ -5055,6 +5588,7 @@ async function handleSceneVoiceoverCancel(
   if (run?.status !== "cancelled") {
     await cancelProcess(processId);
   }
+  clearSceneVoiceoverCancel(videoId);
   await updateProcess(processId, {
     logMessage: error.message,
     logLevel: "warning",
@@ -5063,7 +5597,25 @@ async function handleSceneVoiceoverCancel(
   redirectToVoiceover(videoId, "error", error.message);
 }
 
+async function guardVoiceoverAudioStart(videoId: string) {
+  if (isSceneVoiceoverCancelRequested(videoId)) {
+    redirectToVoiceover(
+      videoId,
+      "error",
+      "Voiceover cancel in progress — wait for the current job to stop.",
+    );
+  }
+  if (await hasActiveVoiceoverAudioProcess(videoId)) {
+    redirectToVoiceover(
+      videoId,
+      "error",
+      "Voiceover audio work is already running. Use Cancel generation or wait for it to finish.",
+    );
+  }
+}
+
 export async function generateSceneVoiceovers(videoId: string, formData: FormData) {
+  await guardVoiceoverAudioStart(videoId);
   const sceneCount = await prisma.scene.count({ where: { videoId } });
   const processId = await startProcess({
     type: "scene_voiceover_generation",
@@ -5127,6 +5679,7 @@ export async function generateSelectedSceneVoiceovers(
   videoId: string,
   formData: FormData,
 ) {
+  await guardVoiceoverAudioStart(videoId);
   const selectedOrders = selectedSceneVoiceoverOrders(formData);
 
   if (selectedOrders.length === 0) {
@@ -5267,6 +5820,41 @@ export async function updateSelectedScenePauses(
         : ""
     }`,
   );
+}
+
+export async function applySmartPunctuationScenePausesAction(videoId: string) {
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { channelKey: true },
+  });
+  if (!video) {
+    redirectToVoiceover(videoId, "error", "Video not found.");
+  }
+
+  const { applySmartPunctuationScenePauses } = await import(
+    "@/lib/pipeline-settings"
+  );
+  const result = await applySmartPunctuationScenePauses(videoId);
+  await refreshVoiceoverSegmentDurationsFromScenes(videoId);
+  const subtitleRefresh = await maybeRecombineSubtitlesAfterVoiceoverSync(
+    videoId,
+  );
+
+  revalidatePath(`/videos/${videoId}`);
+  redirectToVoiceover(
+    videoId,
+    "success",
+    `Applied punctuation pauses to ${result.updated} scene(s) (, ≈100ms · ;/: ≈177ms · . ≈245ms · ¶ ≈423ms · fallback 80ms). Re-stitch the master voiceover to hear the new pacing.${
+      subtitleRefresh.recombined
+        ? " Subtitles were recombined with the new offsets."
+        : ""
+    }`,
+  );
+}
+
+/** @deprecated Prefer applySmartPunctuationScenePausesAction (all channels). */
+export async function applyWealthSmartScenePausesAction(videoId: string) {
+  return applySmartPunctuationScenePausesAction(videoId);
 }
 
 function musicBedPresetSelectionsFromForm(formData: FormData) {
@@ -5749,6 +6337,7 @@ export async function generateMissingSceneVoiceovers(
   videoId: string,
   formData: FormData,
 ) {
+  await guardVoiceoverAudioStart(videoId);
   const candidateScenes = await prisma.scene.findMany({
     where: {
       videoId,
@@ -5846,6 +6435,7 @@ export async function retryFailedSceneVoiceovers(
   videoId: string,
   formData: FormData,
 ) {
+  await guardVoiceoverAudioStart(videoId);
   const failedCount = await prisma.scene.count({
     where: { videoId, voiceoverStatus: { in: ["failed", "needs_retry"] } },
   });
@@ -5898,6 +6488,87 @@ export async function retryFailedSceneVoiceovers(
     videoId,
     result.failed > 0 ? "error" : "success",
     `Retried scene voiceovers: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${autoStitchStatusSuffix(
+      autoStitch,
+      stitchOptions,
+      result.failed,
+    )}`,
+  );
+}
+
+export async function regenerateNarrationBlock(
+  videoId: string,
+  blockId: string,
+  formData: FormData,
+) {
+  await guardVoiceoverAudioStart(videoId);
+  const manifest = await readNarrationManifest(videoId);
+  const block = manifest?.blocks.find((item) => item.blockId === blockId);
+  if (!block || block.sceneIds.length === 0) {
+    redirectToVoiceover(videoId, "error", "Narration block not found in manifest.");
+  }
+
+  const scenes = await prisma.scene.findMany({
+    where: { id: { in: block!.sceneIds } },
+    select: { sortOrder: true },
+    orderBy: { sortOrder: "asc" },
+  });
+  if (scenes.length === 0) {
+    redirectToVoiceover(videoId, "error", "No scenes found for this narration block.");
+  }
+
+  const selectedOrders = scenes.map((scene) => scene.sortOrder);
+  const processId = await startProcess({
+    type: "scene_voiceover_generation",
+    videoId,
+    title: `Regenerating narration block ${block!.index + 1}`,
+    description: `${selectedOrders.length} scenes in block ${blockId}.`,
+    totalSteps: selectedOrders.length,
+    currentStep: "Preparing narration block",
+  });
+
+  let result: Awaited<ReturnType<typeof generateVoiceoverForScenes>>;
+  let autoStitch: Awaited<ReturnType<typeof maybeAutoStitchAfterSceneVoiceovers>> =
+    null;
+  const stitchOptions = autoStitchOptionsFromForm(formData);
+  try {
+    result = await generateVoiceoverForScenes(videoId, formData, {
+      selectedOrders,
+      overwrite: true,
+      processId,
+    });
+    await finishProcess(processId, {
+      result,
+      logMessage: `Narration block ${block!.index + 1} regenerated (${result.generated} scenes).`,
+    });
+    autoStitch = await safeMaybeAutoStitchAfterSceneVoiceovers(
+      videoId,
+      result,
+      processId,
+      stitchOptions,
+    );
+  } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
+    if (error instanceof SceneVoiceoverCanceledError) {
+      await handleSceneVoiceoverCancel(processId, videoId, error);
+    }
+
+    await failProcess(processId, {
+      errorMessage: errorMessage(error, "Narration block regeneration failed."),
+    });
+    redirectToVoiceover(
+      videoId,
+      "error",
+      errorMessage(error, "Narration block regeneration failed."),
+    );
+  }
+
+  revalidatePath(`/videos/${videoId}`);
+  redirectToVoiceover(
+    videoId,
+    result.failed > 0 ? "error" : "success",
+    `Narration block ${block!.index + 1}: ${result.generated} generated, ${result.skipped} skipped, ${result.failed} failed.${autoStitchStatusSuffix(
       autoStitch,
       stitchOptions,
       result.failed,
@@ -5979,6 +6650,10 @@ async function runStitchSceneVoiceovers(
     processTitle?: string;
   } = {},
 ) {
+  if (isSceneVoiceoverCancelRequested(videoId)) {
+    throw new SceneVoiceoverCanceledError("Voiceover stitching canceled.");
+  }
+
   const processId = await startProcess({
     type: "voiceover_stitching",
     videoId,
@@ -5987,7 +6662,21 @@ async function runStitchSceneVoiceovers(
     currentStep: "Checking FFmpeg",
   });
 
+  async function throwIfStitchCanceled() {
+    if (isSceneVoiceoverCancelRequested(videoId)) {
+      throw new SceneVoiceoverCanceledError("Voiceover stitching canceled.");
+    }
+    const run = await prisma.processRun.findUnique({
+      where: { id: processId },
+      select: { status: true },
+    });
+    if (run?.status === "cancelled") {
+      throw new SceneVoiceoverCanceledError("Voiceover stitching canceled.");
+    }
+  }
+
   try {
+    await throwIfStitchCanceled();
     await ensureFfmpegAvailable();
     await updateProcess(processId, {
       currentStep: "Loading generated scene clips",
@@ -5995,7 +6684,16 @@ async function runStitchSceneVoiceovers(
       totalSteps: 5,
     });
 
+    await throwIfStitchCanceled();
     await ensureExclusiveClipVoiceoverPathsForVideo(videoId);
+
+    const videoMeta = await prisma.video.findUnique({
+      where: { id: videoId },
+      select: { channelKey: true },
+    });
+    const defaultPauseAfterMs = defaultScenePauseAfterMsForChannel(
+      videoMeta?.channelKey,
+    );
 
     const scenes = await prisma.scene.findMany({
       where: {
@@ -6078,6 +6776,7 @@ async function runStitchSceneVoiceovers(
       totalSteps: 5,
       logMessage: `Stitching ${scenes.length} scene clips.`,
     });
+    await throwIfStitchCanceled();
     const outputRelativePath = sceneVoiceoverMasterRelativePath(videoId);
     await ensureSceneVoiceoversDir(videoId);
     const stitchClips = [];
@@ -6133,6 +6832,7 @@ async function runStitchSceneVoiceovers(
       videoId,
       stitchClips,
       outputRelativePath,
+      { defaultPauseAfterMs },
     );
 
     const introByBedOrder = new Map(
@@ -6142,6 +6842,9 @@ async function runStitchSceneVoiceovers(
       ]),
     );
     const shouldUpdateAllDurations = options.updateSceneDurationsFromAudio === true;
+    const narrationManifest = await readNarrationManifest(videoId);
+    const manifestVoiceoverDurationBySceneId =
+      narrationManifestVoiceoverDurationBySceneId(narrationManifest);
     const durationUpdates = scenes.flatMap((scene) => {
       const useExclusiveClip = sceneUsesExclusiveClipAudio(scene);
       const isMusicBed =
@@ -6156,10 +6859,15 @@ async function runStitchSceneVoiceovers(
       const pauseAfterMs = effectiveScenePauseAfterMs({
         isMusicBed,
         pauseAfterMs: scene.pauseAfterMs,
+        defaultPauseAfterMs,
       });
+      const voiceoverDuration =
+        manifestVoiceoverDurationBySceneId.get(scene.id) ??
+        scene.voiceoverDuration;
       const visualDuration = sceneVisualDurationSec({
-        voiceoverDuration: scene.voiceoverDuration,
-        pauseAfterMs,
+        voiceoverDuration,
+        pauseAfterMs: scene.pauseAfterMs,
+        defaultPauseAfterMs,
         isMusicBed,
         introSec,
       });
@@ -6169,6 +6877,13 @@ async function runStitchSceneVoiceovers(
           where: { id: scene.id },
           data: {
             pauseAfterMs,
+            ...(manifestVoiceoverDurationBySceneId.has(scene.id)
+              ? {
+                  voiceoverDuration: manifestVoiceoverDurationBySceneId.get(
+                    scene.id,
+                  ),
+                }
+              : {}),
             duration:
               visualDuration == null
                 ? scene.duration
@@ -6225,12 +6940,29 @@ async function runStitchSceneVoiceovers(
       }.`,
     });
 
+    clearSceneVoiceoverCancel(videoId);
+
     return {
       durationSec: stitched.durationSec,
       sceneCount: scenes.length,
       recombinedSubtitles: subtitleRefresh.recombined,
     };
   } catch (error) {
+    if (error instanceof SceneVoiceoverCanceledError) {
+      const run = await prisma.processRun.findUnique({
+        where: { id: processId },
+        select: { status: true },
+      });
+      if (run?.status !== "cancelled") {
+        await cancelProcess(processId);
+      }
+      clearSceneVoiceoverCancel(videoId);
+      await updateProcess(processId, {
+        logMessage: error.message,
+        logLevel: "warning",
+      });
+      throw error;
+    }
     await failProcess(processId, {
       errorMessage: errorMessage(error, "Voiceover stitching failed."),
     });
@@ -6247,6 +6979,9 @@ async function maybeAutoStitchAfterSceneVoiceovers(
   } = {},
 ) {
   if (options.enabled === false) {
+    return null;
+  }
+  if (isSceneVoiceoverCancelRequested(videoId)) {
     return null;
   }
   if (generation.failed > 0) {
@@ -6321,6 +7056,7 @@ function autoStitchStatusSuffix(
 }
 
 export async function stitchSceneVoiceovers(videoId: string, formData: FormData) {
+  await guardVoiceoverAudioStart(videoId);
   try {
     const result = await runStitchSceneVoiceovers(videoId, {
       updateSceneDurationsFromAudio:
@@ -6335,6 +7071,10 @@ export async function stitchSceneVoiceovers(videoId: string, formData: FormData)
   } catch (error) {
     if (isRedirectError(error)) {
       throw error;
+    }
+    if (error instanceof SceneVoiceoverCanceledError) {
+      revalidatePath(`/videos/${videoId}`);
+      redirectToVoiceover(videoId, "error", error.message);
     }
     revalidatePath(`/videos/${videoId}`);
     redirectToVoiceover(
@@ -6366,18 +7106,25 @@ async function invalidateSubtitlesForVideo(videoId: string) {
 }
 
 function resolveStoredAudioPath(audioPath: string) {
-  const normalized = audioPath.replace(/\\/g, "/");
+  const normalized = audioPath.replace(/\\/g, "/").trim();
+  const voiceoversRoot = path.resolve(process.cwd(), "storage", "voiceovers");
   const storagePrefix = "storage/voiceovers/";
 
-  if (!normalized.startsWith(storagePrefix)) {
+  let resolvedPath: string;
+  if (path.isAbsolute(normalized)) {
+    resolvedPath = path.resolve(normalized);
+  } else if (normalized.startsWith(storagePrefix)) {
+    resolvedPath = path.resolve(process.cwd(), normalized);
+  } else {
     throw new Error("Segment audio path is outside voiceover storage.");
   }
 
-  const resolvedPath = path.resolve(process.cwd(), normalized);
-  const voiceoversRoot = path.resolve(process.cwd(), "storage", "voiceovers");
-
-  if (!resolvedPath.startsWith(`${voiceoversRoot}${path.sep}`)) {
-    throw new Error("Segment audio path is invalid.");
+  const rootWithSep = `${voiceoversRoot}${path.sep}`;
+  if (
+    resolvedPath !== voiceoversRoot &&
+    !resolvedPath.startsWith(rootWithSep)
+  ) {
+    throw new Error("Segment audio path is outside voiceover storage.");
   }
 
   return resolvedPath;
@@ -6541,6 +7288,7 @@ async function combineSegmentSubtitlesForVideo(
         orderBy: { sortOrder: "asc" },
         select: {
           sortOrder: true,
+          status: true,
           voiceoverDuration: true,
           pauseAfterMs: true,
           duration: true,
@@ -6553,11 +7301,34 @@ async function combineSegmentSubtitlesForVideo(
     redirectToVoiceover(videoId, "error", "Video not found.");
   }
 
-  const voiceoverSegments = await prisma.voiceoverSegment.findMany({
-    where: { videoId },
-    orderBy: [{ index: "asc" }, { sceneStartOrder: "asc" }],
-    include: { subtitleSegment: true },
-  });
+  const rejectedOrders = new Set(
+    video.scenes
+      .filter((scene) => isSceneRejected(scene.status))
+      .map((scene) => scene.sortOrder),
+  );
+  const segmentCoversRejectedScene = (segment: {
+    sceneStartOrder: number;
+    sceneEndOrder: number;
+  }) => {
+    for (
+      let order = segment.sceneStartOrder;
+      order <= segment.sceneEndOrder;
+      order += 1
+    ) {
+      if (rejectedOrders.has(order)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const voiceoverSegments = (
+    await prisma.voiceoverSegment.findMany({
+      where: { videoId },
+      orderBy: [{ index: "asc" }, { sceneStartOrder: "asc" }],
+      include: { subtitleSegment: true },
+    })
+  ).filter((segment) => !segmentCoversRejectedScene(segment));
 
   if (voiceoverSegments.length === 0) {
     redirectToVoiceover(videoId, "error", "No voiceover segments found.");
@@ -7017,6 +7788,14 @@ export async function updateSceneDurationFromVoiceover(
 }
 
 export async function updateAllSceneDurationsFromVoiceover(videoId: string) {
+  const videoMeta = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { channelKey: true },
+  });
+  const defaultPauseAfterMs = defaultScenePauseAfterMsForChannel(
+    videoMeta?.channelKey,
+  );
+
   const scenes = await prisma.scene.findMany({
     where: {
       videoId,
@@ -7042,6 +7821,7 @@ export async function updateAllSceneDurationsFromVoiceover(videoId: string) {
       pauseAfterMs: scene.pauseAfterMs,
       durationSec: scene.voiceoverDuration ?? 0,
     })),
+    { defaultPauseAfterMs },
   );
   for (const overlap of musicBedOverlapsFromSteps(stitchPlan)) {
     const bed = scenes[overlap.bedIndex];
@@ -7057,6 +7837,7 @@ export async function updateAllSceneDurationsFromVoiceover(videoId: string) {
       const pauseAfterMs = effectiveScenePauseAfterMs({
         isMusicBed,
         pauseAfterMs: scene.pauseAfterMs,
+        defaultPauseAfterMs,
       });
 
       return prisma.scene.update({
@@ -9705,19 +10486,43 @@ export async function updateScene(
   });
   await persistComputedVideoStatus(videoId);
 
+  const nextStatus = String(data.status ?? "");
   const becameRejected =
     previous &&
     !isSceneRejected(previous.status) &&
-    isSceneRejected(String(data.status ?? ""));
+    isSceneRejected(nextStatus);
+  const becameUnrejected =
+    previous &&
+    isSceneRejected(previous.status) &&
+    !isSceneRejected(nextStatus);
+
+  // Rejected scenes drop out of VO/subtitle segments; keep the combined
+  // caption track and master VO marked stale until the user re-stitches.
+  if (becameRejected || becameUnrejected) {
+    await syncSceneVoiceoversToSubtitleSegments(videoId, {
+      preserveSubtitles: true,
+    });
+    await invalidateSubtitlesForVideo(videoId);
+    const video = await prisma.video.findUnique({
+      where: { id: videoId },
+      select: { voiceoverAudioPath: true },
+    });
+    if (video?.voiceoverAudioPath) {
+      await prisma.video.update({
+        where: { id: videoId },
+        data: { voiceoverStatus: "needs_update" },
+      });
+    }
+  }
 
   revalidatePath("/");
   revalidatePath(`/videos/${videoId}`);
 
-  if (becameRejected) {
+  if (becameRejected && previous) {
     redirectToAssets(
       videoId,
       "success",
-      `Scene ${previous.sortOrder} marked Rejected — skipped in voiceover, stitch, and render. Re-stitch the master if it was already built.`,
+      `Scene ${previous.sortOrder} marked Rejected — skipped in voiceover, stitch, subtitles, and render. Re-stitch the master (subtitles recombine after stitch).`,
     );
   }
 }

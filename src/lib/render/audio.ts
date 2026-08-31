@@ -240,6 +240,7 @@ export async function stitchSceneVoiceoverAudio(
   videoId: string,
   clips: SceneVoiceoverClip[],
   outputRelativePath: string,
+  options?: { defaultPauseAfterMs?: number },
 ) {
   const orderedClips = [...clips].sort((a, b) => a.sortOrder - b.sortOrder);
 
@@ -269,6 +270,7 @@ export async function stitchSceneVoiceoverAudio(
       pauseAfterMs: clip.pauseAfterMs,
       durationSec: clipDurations[index] ?? 0,
     })),
+    { defaultPauseAfterMs: options?.defaultPauseAfterMs },
   );
   const overlaps = musicBedOverlapsFromSteps(steps);
 

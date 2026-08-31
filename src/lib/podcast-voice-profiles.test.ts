@@ -13,10 +13,18 @@ import {
 } from "@/lib/podcast-voice-profiles";
 
 test("voice IDs preserve Chirp3 case-sensitive catalog format", () => {
-  assert.equal(PODCAST_MAX_VOICE_ID, "en-US-Chirp3-HD-Iapetus");
+  assert.equal(PODCAST_MAX_VOICE_ID, "en-US-Chirp3-HD-Fenrir");
   assert.equal(PODCAST_SARA_VOICE_ID, "en-US-Chirp3-HD-Erinome");
   assert.equal(resolvePodcastHostFromVoiceId(PODCAST_MAX_VOICE_ID), "max");
   assert.equal(resolvePodcastHostFromVoiceId(PODCAST_SARA_VOICE_ID), "sara");
+  assert.equal(
+    resolvePodcastHostFromVoiceId("en-US-Chirp3-HD-Puck"),
+    "max",
+  );
+  assert.equal(
+    resolvePodcastHostFromVoiceId("en-US-Chirp3-HD-Iapetus"),
+    "max",
+  );
 });
 
 test("resolvePodcastHostKey prefers voiceId then speaker slot", () => {

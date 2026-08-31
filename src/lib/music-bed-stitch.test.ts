@@ -56,9 +56,16 @@ test("planMusicBedStitch fades orphan music beds at the end", () => {
   }
 });
 
-test("effectiveScenePauseAfterMs defaults spoken null to 180ms", () => {
-  assert.equal(effectiveScenePauseAfterMs({ pauseAfterMs: null }), 180);
+test("effectiveScenePauseAfterMs defaults spoken null to punctuation fallback", () => {
+  assert.equal(effectiveScenePauseAfterMs({ pauseAfterMs: null }), 80);
   assert.equal(effectiveScenePauseAfterMs({ pauseAfterMs: 0 }), 0);
+  assert.equal(
+    effectiveScenePauseAfterMs({
+      pauseAfterMs: null,
+      defaultPauseAfterMs: 0,
+    }),
+    0,
+  );
   assert.equal(
     effectiveScenePauseAfterMs({ isMusicBed: true, pauseAfterMs: null }),
     0,
@@ -91,7 +98,7 @@ test("sceneVisualDurationSec keeps bed intro on screen", () => {
       pauseAfterMs: null,
       isMusicBed: false,
     }),
-    4.22,
+    4.08,
   );
 });
 

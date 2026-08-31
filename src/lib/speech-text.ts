@@ -266,6 +266,17 @@ export function prepareVoiceoverSpeechText(displayText: string): PreparedSpeechT
     return spokenWords.join(" ");
   });
 
+  // Biblical tetragrammaton: TTS spells Y-H-W-H unless expanded.
+  // Keep the on-screen token as written; speak the common English form.
+  spokenText = spokenText.replace(/\b(YHWH|YHVH)\b/gi, (raw) => {
+    const spokenWords = ["Yahweh"];
+    replacements.push({
+      spokenWords,
+      displayToken: raw,
+    });
+    return spokenWords.join(" ");
+  });
+
   return {
     spokenText: spokenText.replace(/[ \t]{2,}/g, " ").trim(),
     displayText: display,

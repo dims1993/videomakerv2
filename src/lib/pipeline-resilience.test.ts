@@ -22,6 +22,12 @@ describe("pipeline-resilience", () => {
     );
     assert.equal(
       isTransientPipelineError(
+        'Could not select ChatGPT GPT-5.5 / Alta: page.evaluate: Execution context was destroyed, most likely because of a navigation',
+      ),
+      true,
+    );
+    assert.equal(
+      isTransientPipelineError(
         'Could not select ChatGPT GPT-5.5 / Alta: Could not open ChatGPT model picker.',
       ),
       true,

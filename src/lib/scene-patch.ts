@@ -358,7 +358,7 @@ function collectImagePromptWarnings(
       warnings.push(
         mode === "narrative_economics_stories"
           ? "For Narrative Economics Stories, visualIdea should usually start with CHARACTER_A:/CHARACTER_B:/CHARACTER_C:/CHARACTER_D:/MECHANISM:/EDITORIAL BOARD:/OBJECT DETAIL:/LOCATION BEAT: (or MAIN HOST: only if the recurring host is actually used)."
-          : 'For Wealth Insights, visualIdea should preferably start with "MAIN HOST:".',
+          : 'For Wealth Insights, visualIdea should preferably start with "MAIN HOST:", "STORY_CHARACTER:", "MAIN HOST + STORY:", or "STORY_PAIR:".',
       );
     }
   }
@@ -368,28 +368,45 @@ function collectImagePromptWarnings(
       topicCategory: options?.topicCategory,
       ideaJson: options?.ideaJson,
     });
-    const requiredSections =
-      mode === "narrative_economics_stories"
-        ? [
-            "VISUAL STYLE LOCK:",
-            "Voiceover context:",
-            "Narrative meaning:",
-            "Must show:",
-            "Composition:",
-            "Style rules:",
-            "Avoid:",
-          ]
-        : [
-            "Voiceover context:",
-            "Narrative meaning:",
-            "Must show:",
-            "Style rules:",
-            "Avoid:",
-          ];
-
-    for (const section of requiredSections) {
-      if (!normalizedItem.imagePrompt.includes(section)) {
-        warnings.push(`imagePrompt is missing "${section}"`);
+    if (mode === "narrative_economics_stories") {
+      const requiredSections = [
+        "VISUAL STYLE LOCK:",
+        "Voiceover context:",
+        "Narrative meaning:",
+        "Must show:",
+        "Composition:",
+        "Style rules:",
+        "Avoid:",
+      ];
+      for (const section of requiredSections) {
+        if (!normalizedItem.imagePrompt.includes(section)) {
+          warnings.push(`imagePrompt is missing "${section}"`);
+        }
+      }
+    } else {
+      const requiredSections = [
+        "Narrative meaning:",
+        "Must show:",
+        "Avoid:",
+      ];
+      for (const section of requiredSections) {
+        if (!normalizedItem.imagePrompt.includes(section)) {
+          warnings.push(`imagePrompt is missing "${section}"`);
+        }
+      }
+      if (
+        !normalizedItem.imagePrompt.includes("Educational beat:") &&
+        !normalizedItem.imagePrompt.includes("Voiceover context:")
+      ) {
+        warnings.push(
+          'imagePrompt is missing "Educational beat:" (or legacy "Voiceover context:")',
+        );
+      }
+      if (
+        !normalizedItem.imagePrompt.includes("Style:") &&
+        !normalizedItem.imagePrompt.includes("Style rules:")
+      ) {
+        warnings.push('imagePrompt is missing "Style:" (or legacy "Style rules:")');
       }
     }
   }

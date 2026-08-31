@@ -7,8 +7,10 @@ import {
   GODS_WORD_BODY_DURATION_SOFT_MAX_SEC,
   GODS_WORD_BODY_DURATION_SOFT_MIN_SEC,
   GODS_WORD_BODY_WORD_SOFT_MIN,
+  GODS_WORD_HOOK_DURATION_SOFT_MAX_SEC,
   countNarratedWords,
 } from "@/lib/gods-word-visual-pacing";
+import { forceSplitOversizedBeat } from "@/lib/visual-plan-dense-beats";
 import { packSentencesIntoBeats } from "@/lib/visual-plan-generic-skeleton";
 import {
   isChapterSectionLabel,
@@ -25,6 +27,12 @@ import {
 } from "@/lib/visual-plan-script";
 import type { PodcastVisualPlanSkeletonScene } from "@/lib/visual-plan-skeleton";
 import { isWealthHookSectionLabel } from "@/lib/wealth-insights-visual-sections";
+
+/** Hook beat targets — dense single sentences must still force-split. */
+export const GODS_WORD_HOOK_TARGET_WORDS = 8;
+export const GODS_WORD_HOOK_MAX_WORDS = 14;
+/** Estimated narration ceiling before force-splitting a hook beat. */
+export const GODS_WORD_HOOK_MAX_ESTIMATED_SEC = 5.5;
 
 /** Body beat targets aligned with Gods Word pacing P0/P1. */
 export const GODS_WORD_BODY_TARGET_WORDS = 18;
@@ -108,12 +116,13 @@ function estimateBodyDurationSec(scriptText: string): number {
 }
 
 /**
- * Merge trailing / consecutive short body beats so soft min words is respected
- * when neighboring clauses exist.
+ * Merge trailing / consecutive short beats so soft min words is respected
+ * when neighboring clauses exist — without re-inflating past maxWords.
  */
 export function mergeShortBodyBeats(
   beats: string[],
   softMinWords = GODS_WORD_BODY_WORD_SOFT_MIN,
+  maxWords = GODS_WORD_BODY_MAX_WORDS,
 ): string[] {
   if (beats.length <= 1) {
     return beats.filter(Boolean);
@@ -130,7 +139,7 @@ export function mergeShortBodyBeats(
       (wordCount(trimmed) < softMinWords || wordCount(prev) < softMinWords)
     ) {
       const combined = `${prev} ${trimmed}`.replace(/\s+/g, " ").trim();
-      if (wordCount(combined) <= GODS_WORD_BODY_MAX_WORDS + 8) {
+      if (wordCount(combined) <= maxWords + 2) {
         merged[merged.length - 1] = combined;
         continue;
       }
@@ -146,7 +155,17 @@ function packBodyBeats(spoken: string): string[] {
     targetWords: GODS_WORD_BODY_TARGET_WORDS,
     maxWords: GODS_WORD_BODY_MAX_WORDS,
   });
-  return mergeShortBodyBeats(packed);
+  const expanded = packed.flatMap((beat) =>
+    forceSplitOversizedBeat(beat, {
+      maxWords: GODS_WORD_BODY_MAX_WORDS,
+      maxEstimatedSec: GODS_WORD_BODY_DURATION_SOFT_MAX_SEC,
+    }),
+  );
+  return mergeShortBodyBeats(
+    expanded,
+    GODS_WORD_BODY_WORD_SOFT_MIN,
+    GODS_WORD_BODY_MAX_WORDS,
+  );
 }
 
 function pendingImagePrompt() {
@@ -182,10 +201,27 @@ function spokenSectionText(section: StructuralScriptSection) {
 
 function packHookBeats(spoken: string): string[] {
   const packed = packSentencesIntoBeats(splitIntoSentences(spoken), {
-    targetWords: 8,
-    maxWords: 14,
+    targetWords: GODS_WORD_HOOK_TARGET_WORDS,
+    maxWords: GODS_WORD_HOOK_MAX_WORDS,
   });
-  return mergeShortBodyBeats(packed, 4);
+  // packSentencesIntoBeats keeps a single dense sentence whole when it exceeds
+  // maxWords — force-split those by clause / comma / connective.
+  const expanded = packed.flatMap((beat) =>
+    forceSplitOversizedBeat(beat, {
+      maxWords: GODS_WORD_HOOK_MAX_WORDS,
+      maxEstimatedSec: GODS_WORD_HOOK_MAX_ESTIMATED_SEC,
+    }),
+  );
+  return mergeShortBodyBeats(
+    expanded,
+    4,
+    GODS_WORD_HOOK_MAX_WORDS,
+  );
+}
+
+function clampHookDurationSec(scriptText: string): number {
+  const suggested = suggestHookDurationSeconds(scriptText);
+  return Math.min(GODS_WORD_HOOK_DURATION_SOFT_MAX_SEC, suggested);
 }
 
 function appendBeatsForSection(
@@ -211,7 +247,7 @@ function appendBeatsForSection(
     const beat = beats[index]!;
     const isCover = section.expectsCover && index === 0;
     const duration = isHook
-      ? suggestHookDurationSeconds(beat)
+      ? clampHookDurationSec(beat)
       : isCover
         ? estimateBodyDurationSec(beat)
         : estimateBodyDurationSec(beat);

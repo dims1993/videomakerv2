@@ -16,7 +16,13 @@ import {
   normalizeStoredImageOutputFolder,
   resolveImageOutputFolderAbsolute,
 } from "@/lib/image-output-folder";
+import {
+  defaultPodcastPipelineSectionVoices,
+  isPodcastPipelineChannel,
+  mergePipelineSectionVoicesForVideo,
+} from "@/lib/pipeline-podcast-voices";
 import { PODCAST_ENGLISH_LESSONS_CHANNEL_KEY } from "@/lib/podcast-image-library-shared";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   parseAlignmentProvider,
@@ -31,6 +37,10 @@ import {
   normalizeTtsVoiceProvider,
   type TtsVoiceProvider,
 } from "@/lib/tts-voices";
+import {
+  normalizeVoiceoverSectionVoices,
+  type VoiceoverSectionVoices,
+} from "@/lib/voiceover-section-voices";
 
 export type { ChannelVoiceProfile };
 export type { AlignmentProvider } from "@/lib/alignment-provider";
@@ -44,7 +54,9 @@ export function parseTtsProvider(
   if (
     value === "chatterbox" ||
     value === "elevenlabs" ||
-    value === "google"
+    value === "google" ||
+    value === "fish" ||
+    value === "speechify"
   ) {
     return value;
   }
@@ -53,7 +65,9 @@ export function parseTtsProvider(
     if (
       trimmed === "chatterbox" ||
       trimmed === "elevenlabs" ||
-      trimmed === "google"
+      trimmed === "google" ||
+      trimmed === "fish" ||
+      trimmed === "speechify"
     ) {
       return trimmed;
     }
@@ -87,6 +101,8 @@ export type PipelineSettings = {
     voiceName?: string | null;
     /** TTS engine: ElevenLabs, local Chatterbox, or Google Cloud TTS. */
     ttsProvider: TtsVoiceProvider;
+    /** Podcast: Emma/Leo (teacher/student) speaker voices for pipeline VO. */
+    sectionVoices?: VoiceoverSectionVoices;
     pauseAfterMs: number | null;
     generateSubtitles: boolean;
     /** Forced alignment: ElevenLabs API or local WhisperX HTTP. */
@@ -128,7 +144,12 @@ function bool(value: unknown, fallback: boolean) {
 }
 
 function nonNegInt(value: unknown, fallback: number | null): number | null {
-  if (value == null) {
+  // Explicit null must win (e.g. channel defaults opt into punctuation pauses).
+  // Missing / undefined keeps the fallback.
+  if (value === null) {
+    return null;
+  }
+  if (value === undefined) {
     return fallback;
   }
   const n = typeof value === "number" ? value : Number(value);
@@ -155,15 +176,40 @@ export function hardcodedPipelineDefaults(
 ): PipelineSettings {
   const voiceId = channel?.voiceoverDefaultVoiceId?.trim() || null;
   const voiceName = channel?.voiceoverDefaultVoiceName?.trim() || null;
-  const profilePause =
-    voiceId && channel?.voiceProfiles?.length
-      ? channel.voiceProfiles.find((item) => item.voiceId === voiceId)
-          ?.defaultPauseAfterMs
-      : null;
   const channelPreset = channel?.pipelineDefaults?.voiceover?.captionStylePreset;
   const captionStylePreset = getCaptionStylePreset(
     typeof channelPreset === "string" ? channelPreset : null,
   ).id as CaptionStylePresetId;
+
+  const ttsProvider = parseTtsProvider(
+    channel?.pipelineDefaults?.voiceover?.ttsProvider,
+    "elevenlabs",
+  );
+
+  const voiceover: PipelineSettings["voiceover"] = {
+    voiceId,
+    voiceName,
+    ttsProvider,
+    pauseAfterMs: null,
+    generateSubtitles: true,
+    alignmentProvider: parseAlignmentProvider(
+      channel?.pipelineDefaults?.voiceover?.alignmentProvider,
+      "elevenlabs",
+    ),
+    captionStylePreset,
+  };
+
+  if (channel?.key && isPodcastPipelineChannel(channel.key)) {
+    voiceover.sectionVoices = defaultPodcastPipelineSectionVoices(ttsProvider);
+    voiceover.ttsProvider = parseTtsProvider(
+      channel.pipelineDefaults?.voiceover?.ttsProvider,
+      "google",
+    );
+    voiceover.alignmentProvider = parseAlignmentProvider(
+      channel.pipelineDefaults?.voiceover?.alignmentProvider,
+      "whisperx",
+    );
+  }
 
   return {
     script: {
@@ -180,24 +226,7 @@ export function hardcodedPipelineDefaults(
     assets: {
       imageOutputFolder: null,
     },
-    voiceover: {
-      voiceId,
-      voiceName,
-      ttsProvider: parseTtsProvider(
-        channel?.pipelineDefaults?.voiceover?.ttsProvider,
-        "elevenlabs",
-      ),
-      pauseAfterMs:
-        typeof profilePause === "number" && Number.isFinite(profilePause)
-          ? profilePause
-          : null,
-      generateSubtitles: true,
-      alignmentProvider: parseAlignmentProvider(
-        channel?.pipelineDefaults?.voiceover?.alignmentProvider,
-        "elevenlabs",
-      ),
-      captionStylePreset,
-    },
+    voiceover,
     render: {
       burnCaptions: true,
       // Podcast opts in via channel.pipelineDefaults.render.voiceSoundBars.
@@ -285,6 +314,15 @@ export function parsePipelineSettings(
         voiceRaw.ttsProvider,
         fallback.voiceover.ttsProvider,
       ),
+      sectionVoices: (() => {
+        const normalized = normalizeVoiceoverSectionVoices(
+          voiceRaw.sectionVoices,
+        );
+        if (Object.keys(normalized).length > 0) {
+          return normalized;
+        }
+        return fallback.voiceover.sectionVoices;
+      })(),
       pauseAfterMs: nonNegInt(
         voiceRaw.pauseAfterMs,
         fallback.voiceover.pauseAfterMs,
@@ -368,6 +406,27 @@ export function savePipelineDefaultsOverlay(
   writeFileSync(`${absolute}`, `${JSON.stringify(overlay, null, 2)}\n`, "utf8");
 }
 
+function ensurePodcastDefaultVoicesInProfiles(
+  channelKey: string,
+  profiles: ChannelVoiceProfile[],
+): ChannelVoiceProfile[] {
+  if (!isPodcastPipelineChannel(channelKey)) {
+    return profiles;
+  }
+  const byId = new Map(profiles.map((profile) => [profile.voiceId, profile]));
+  for (const entry of Object.values(defaultPodcastPipelineSectionVoices())) {
+    if (!entry?.voiceId || byId.has(entry.voiceId)) {
+      continue;
+    }
+    byId.set(entry.voiceId, {
+      voiceId: entry.voiceId,
+      voiceName: entry.voiceName ?? null,
+      defaultPauseAfterMs: 0,
+    });
+  }
+  return [...byId.values()];
+}
+
 export function getChannelVoiceProfiles(channelKey: string): ChannelVoiceProfile[] {
   const channel = getChannelProfileSync(channelKey);
   const overlay = loadPipelineDefaultsOverlay()[channelKey];
@@ -394,7 +453,7 @@ export function getChannelVoiceProfiles(channelKey: string): ChannelVoiceProfile
     }
   }
 
-  return [...byId.values()];
+  return ensurePodcastDefaultVoicesInProfiles(channelKey, [...byId.values()]);
 }
 
 export function getChannelPipelineDefaults(
@@ -406,15 +465,14 @@ export function getChannelPipelineDefaults(
   const overlay = loadPipelineDefaultsOverlay()[channelKey];
   const merged = mergePartialSettings(fromProfile, overlay?.pipelineDefaults);
 
-  // Sync pause from selected voice profile when pause is unset.
+  // Voice profile `defaultPauseAfterMs` is a UI / voice-linked hint only.
+  // Do not promote it into a flat pipeline pauseAfterMs — that would bypass
+  // per-scene punctuation pauses when channel defaults leave pauseAfterMs null.
   if (merged.voiceover.voiceId) {
     const profiles = getChannelVoiceProfiles(channelKey);
     const match = profiles.find(
       (profile) => profile.voiceId === merged.voiceover.voiceId,
     );
-    if (match && merged.voiceover.pauseAfterMs == null) {
-      merged.voiceover.pauseAfterMs = match.defaultPauseAfterMs;
-    }
     if (match?.voiceName && !merged.voiceover.voiceName) {
       merged.voiceover.voiceName = match.voiceName;
     }
@@ -449,7 +507,11 @@ export async function resolvePipelineSettings(
 ): Promise<PipelineSettings> {
   const video = await prisma.video.findUnique({
     where: { id: videoId },
-    select: { channelKey: true, pipelineSettingsJson: true },
+    select: {
+      channelKey: true,
+      pipelineSettingsJson: true,
+      voiceoverSectionVoicesJson: true,
+    },
   });
   if (!video) {
     throw new Error("Video not found.");
@@ -467,6 +529,14 @@ export async function resolvePipelineSettings(
     !channelSupportsImageLibrary(video.channelKey)
   ) {
     settings.visualPlan.mode = "hybrid";
+  }
+
+  if (isPodcastPipelineChannel(video.channelKey)) {
+    settings.voiceover.sectionVoices = mergePipelineSectionVoicesForVideo({
+      pipelineSectionVoices: settings.voiceover.sectionVoices,
+      videoSectionVoices: video.voiceoverSectionVoicesJson,
+      ttsProvider: settings.voiceover.ttsProvider,
+    });
   }
 
   return settings;
@@ -523,6 +593,14 @@ export async function saveVideoPipelineSettings(
     data: {
       pipelineSettingsJson: JSON.stringify(normalized, null, 2),
       captionStylePreset: normalized.voiceover.captionStylePreset,
+      ...(isPodcastPipelineChannel(video.channelKey) &&
+      normalized.voiceover.sectionVoices &&
+      Object.keys(normalized.voiceover.sectionVoices).length > 0
+        ? {
+            voiceoverSectionVoicesJson:
+              normalized.voiceover.sectionVoices as Prisma.InputJsonValue,
+          }
+        : {}),
     },
   });
   return normalized;
@@ -589,6 +667,80 @@ export async function applyPipelinePauseAfterMsToScenes(
     data: { pauseAfterMs: rounded },
   });
   return { updated: result.count };
+}
+
+/**
+ * Apply shared punctuation smart pauses (overwrites existing pauseAfterMs).
+ * Wealth Insights also widens host↔story cast handoffs.
+ */
+export async function applySmartPunctuationScenePauses(videoId: string) {
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: { channelKey: true },
+  });
+  if (!video) {
+    return { updated: 0 };
+  }
+
+  if (video.channelKey === "wealth-insights") {
+    return applyWealthSmartScenePauses(videoId);
+  }
+
+  const { suggestPunctuationPausesForScenes } = await import(
+    "@/lib/voiceover-punctuation-pause"
+  );
+  const scenes = await prisma.scene.findMany({
+    where: { videoId },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      id: true,
+      scriptText: true,
+    },
+  });
+  if (scenes.length === 0) {
+    return { updated: 0 };
+  }
+  const suggested = suggestPunctuationPausesForScenes(scenes);
+  await prisma.$transaction(
+    suggested.map((scene) =>
+      prisma.scene.update({
+        where: { id: scene.id },
+        data: { pauseAfterMs: scene.suggestedPauseAfterMs },
+      }),
+    ),
+  );
+  return { updated: suggested.length };
+}
+
+/**
+ * Apply Wealth Insights smart per-scene pauses (overwrites existing pauseAfterMs).
+ */
+export async function applyWealthSmartScenePauses(videoId: string) {
+  const { suggestWealthInsightsPausesForScenes } = await import(
+    "@/lib/wealth-insights-pause"
+  );
+  const scenes = await prisma.scene.findMany({
+    where: { videoId },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      id: true,
+      scriptText: true,
+      visualIdea: true,
+    },
+  });
+  if (scenes.length === 0) {
+    return { updated: 0 };
+  }
+  const suggested = suggestWealthInsightsPausesForScenes(scenes);
+  await prisma.$transaction(
+    suggested.map((scene) =>
+      prisma.scene.update({
+        where: { id: scene.id },
+        data: { pauseAfterMs: scene.suggestedPauseAfterMs },
+      }),
+    ),
+  );
+  return { updated: suggested.length };
 }
 
 export async function saveVideoImageOutputFolder(

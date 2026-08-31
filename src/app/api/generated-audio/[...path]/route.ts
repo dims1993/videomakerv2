@@ -9,6 +9,20 @@ type GeneratedAudioRouteProps = {
 
 const voiceoversRoot = path.resolve(process.cwd(), "storage", "voiceovers");
 
+function contentTypeForAudioPath(filePath: string) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".wav") {
+    return "audio/wav";
+  }
+  if (ext === ".ogg") {
+    return "audio/ogg";
+  }
+  if (ext === ".m4a" || ext === ".mp4") {
+    return "audio/mp4";
+  }
+  return "audio/mpeg";
+}
+
 export async function GET(
   _request: Request,
   { params }: GeneratedAudioRouteProps,
@@ -28,7 +42,7 @@ export async function GET(
 
     return new NextResponse(audio, {
       headers: {
-        "Content-Type": "audio/mpeg",
+        "Content-Type": contentTypeForAudioPath(filePath),
         "Cache-Control": "no-store",
       },
     });

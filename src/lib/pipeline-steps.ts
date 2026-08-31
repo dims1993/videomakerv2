@@ -4,12 +4,19 @@ import {
 } from "@/lib/chatgpt-scene-handoff";
 import { getChannelProfile } from "@/lib/channels-server";
 import {
+  findNamedVoice,
   readElevenLabsPreferences,
   resolveElevenLabsPreferenceSettings,
 } from "@/lib/elevenlabs-preferences";
 import { runGoogleFlowBatch } from "@/lib/google-flow";
 import { prepareImageBatchPayload } from "@/lib/image-batches";
 import { PODCAST_ENGLISH_LESSONS_CHANNEL_KEY } from "@/lib/podcast-english-lessons-script-shared";
+import {
+  defaultPodcastPipelineSectionVoices,
+  isPodcastPipelineChannel,
+  mergePipelineSectionVoicesForVideo,
+  primaryPipelineTtsProvider,
+} from "@/lib/pipeline-podcast-voices";
 import { assignPodcastImageLibraryToVideo } from "@/lib/podcast-image-library";
 import { attachPodcastSectionClipsFromVisualIdeas } from "@/lib/podcast-video-library";
 import { ensureAndAttachGodsWordFinalSectionClip } from "@/lib/gods-word-video-library";
@@ -20,6 +27,7 @@ import {
 } from "@/lib/local-server-lifecycle";
 import {
   applyPipelinePauseAfterMsToScenes,
+  applySmartPunctuationScenePauses,
   channelSupportsImageLibrary,
   resolvePipelineSettings,
   resolveVideoImageOutputFolderAbsolute,
@@ -604,15 +612,33 @@ async function releaseChromeAfterAssetsStep(videoId: string) {
   }
 }
 
-async function buildVoiceoverFormData(videoId: string) {
+export async function buildVoiceoverFormData(videoId: string) {
   const settings = await resolvePipelineSettings(videoId);
   const video = await prisma.video.findUnique({
     where: { id: videoId },
     select: { channelKey: true, voiceoverSectionVoicesJson: true },
   });
+  const isPodcast = video ? isPodcastPipelineChannel(video.channelKey) : false;
+  const sectionVoices = isPodcast
+    ? mergePipelineSectionVoicesForVideo({
+        pipelineSectionVoices: settings.voiceover.sectionVoices,
+        videoSectionVoices: video?.voiceoverSectionVoicesJson,
+        ttsProvider: settings.voiceover.ttsProvider,
+      })
+    : null;
+  const primarySectionVoiceId =
+    sectionVoices?.teacher?.voiceId?.trim() ||
+    sectionVoices?.student?.voiceId?.trim() ||
+    "";
+  const ttsProvider =
+    isPodcast && sectionVoices
+      ? primaryPipelineTtsProvider(
+          sectionVoices,
+          settings.voiceover.ttsProvider,
+        )
+      : settings.voiceover.ttsProvider;
   const channel = video ? getChannelProfile(video.channelKey) : null;
   const saved = await readElevenLabsPreferences();
-  const ttsProvider = settings.voiceover.ttsProvider;
   const { settings: eleven } = resolveElevenLabsPreferenceSettings({
     saved,
     channelSpeedDefault: channel?.voiceoverSpeedDefault ?? null,
@@ -626,6 +652,33 @@ async function buildVoiceoverFormData(videoId: string) {
 
   const formData = new FormData();
   formData.set("ttsProvider", ttsProvider);
+
+  if (
+    isPodcast &&
+    sectionVoices &&
+    (sectionVoices.teacher?.voiceId || sectionVoices.student?.voiceId)
+  ) {
+    const fallbackSpeaker =
+      sectionVoices.teacher?.voiceId
+        ? sectionVoices.teacher
+        : sectionVoices.student!;
+    formData.set("voiceId", fallbackSpeaker.voiceId);
+    if (fallbackSpeaker.voiceName?.trim()) {
+      formData.set("voiceName", fallbackSpeaker.voiceName.trim());
+    }
+    formData.set("modelId", eleven.modelId || "eleven_multilingual_v2");
+    formData.set("outputFormat", eleven.outputFormat || "mp3_44100_128");
+    formData.set("stability", String(eleven.stability ?? 0.5));
+    formData.set("similarityBoost", String(eleven.similarityBoost ?? 0.75));
+    formData.set("speed", String(fallbackSpeaker.speed ?? eleven.speed ?? 1));
+    formData.set(
+      "voiceoverSectionVoicesJson",
+      JSON.stringify(sectionVoices),
+    );
+    formData.set("autoStitchMasterVoiceover", "on");
+    formData.set("updateSceneDurationsFromAudio", "on");
+    return formData;
+  }
 
   if (ttsProvider === "chatterbox") {
     const voiceId = settings.voiceover.voiceId?.trim() ?? "";
@@ -646,10 +699,15 @@ async function buildVoiceoverFormData(videoId: string) {
     formData.set("speed", String(eleven.speed ?? 0.85));
   } else if (ttsProvider === "google") {
     const voiceId =
-      settings.voiceover.voiceId?.trim() || eleven.voiceId || "";
+      settings.voiceover.voiceId?.trim() ||
+      primarySectionVoiceId ||
+      eleven.voiceId ||
+      "";
     if (!voiceId) {
       throw new Error(
-        "Pipeline voiceover is set to Google Cloud TTS but no voice is selected. Add a Google voice (e.g. en-US-Neural2-A) to the catalog and pick it in Configure.",
+        isPodcast
+          ? "Pipeline voiceover is set to Google Cloud TTS but no Emma/Leo voices are selected. Open Configure and pick teacher and student voices."
+          : "Pipeline voiceover is set to Google Cloud TTS but no voice is selected. Add a Google voice (e.g. en-US-Neural2-A) to the catalog and pick it in Configure.",
       );
     }
     formData.set("voiceId", voiceId);
@@ -658,6 +716,58 @@ async function buildVoiceoverFormData(videoId: string) {
     } else if (eleven.voiceName) {
       formData.set("voiceName", eleven.voiceName);
     }
+    formData.set("modelId", eleven.modelId || "eleven_multilingual_v2");
+    formData.set("outputFormat", eleven.outputFormat || "mp3_44100_128");
+    formData.set("stability", String(eleven.stability ?? 0.5));
+    formData.set("similarityBoost", String(eleven.similarityBoost ?? 0.75));
+    formData.set("speed", String(eleven.speed ?? 1));
+  } else if (ttsProvider === "fish") {
+    const voiceId =
+      settings.voiceover.voiceId?.trim() || primarySectionVoiceId || "";
+    if (!voiceId) {
+      throw new Error(
+        isPodcast
+          ? "Pipeline voiceover is set to Fish Audio but no Emma/Leo voices are selected. Open Configure and pick teacher and student voices."
+          : "Pipeline voiceover is set to Fish Audio but no voice is selected. Add a Fish voice (reference_id) to the catalog and pick it in Configure.",
+      );
+    }
+    const namedVoice = findNamedVoice(saved?.namedVoices ?? [], voiceId);
+    const fishSpeed =
+      namedVoice?.fishConfig?.speed ?? eleven.speed ?? 1;
+    formData.set("voiceId", voiceId);
+    if (settings.voiceover.voiceName?.trim()) {
+      formData.set("voiceName", settings.voiceover.voiceName.trim());
+    } else if (namedVoice?.name) {
+      formData.set("voiceName", namedVoice.name);
+    } else if (eleven.voiceName) {
+      formData.set("voiceName", eleven.voiceName);
+    }
+    // Unused by Fish; keep parseVoiceoverGenerationOptions happy.
+    formData.set("modelId", eleven.modelId || "eleven_multilingual_v2");
+    formData.set("outputFormat", eleven.outputFormat || "mp3_44100_128");
+    formData.set("stability", String(eleven.stability ?? 0.5));
+    formData.set("similarityBoost", String(eleven.similarityBoost ?? 0.75));
+    formData.set("speed", String(fishSpeed));
+  } else if (ttsProvider === "speechify") {
+    const voiceId =
+      settings.voiceover.voiceId?.trim() || primarySectionVoiceId || "";
+    if (!voiceId) {
+      throw new Error(
+        isPodcast
+          ? "Pipeline voiceover is set to Speechify but no Emma/Leo voices are selected. Open Configure and pick teacher and student voices."
+          : "Pipeline voiceover is set to Speechify but no voice is selected. Add a Speechify voice (voice_id) to the catalog and pick it in Configure.",
+      );
+    }
+    const namedVoice = findNamedVoice(saved?.namedVoices ?? [], voiceId);
+    formData.set("voiceId", voiceId);
+    if (settings.voiceover.voiceName?.trim()) {
+      formData.set("voiceName", settings.voiceover.voiceName.trim());
+    } else if (namedVoice?.name) {
+      formData.set("voiceName", namedVoice.name);
+    } else if (eleven.voiceName) {
+      formData.set("voiceName", eleven.voiceName);
+    }
+    // Unused by Speechify; keep parseVoiceoverGenerationOptions happy.
     formData.set("modelId", eleven.modelId || "eleven_multilingual_v2");
     formData.set("outputFormat", eleven.outputFormat || "mp3_44100_128");
     formData.set("stability", String(eleven.stability ?? 0.5));
@@ -675,7 +785,12 @@ async function buildVoiceoverFormData(videoId: string) {
     }
   }
 
-  if (video?.voiceoverSectionVoicesJson) {
+  if (sectionVoices && Object.keys(sectionVoices).length > 0) {
+    formData.set(
+      "voiceoverSectionVoicesJson",
+      JSON.stringify(sectionVoices),
+    );
+  } else if (video?.voiceoverSectionVoicesJson) {
     formData.set(
       "voiceoverSectionVoicesJson",
       JSON.stringify(video.voiceoverSectionVoicesJson),
@@ -689,11 +804,14 @@ async function buildVoiceoverFormData(videoId: string) {
 
 async function runVoiceoverStep(videoId: string) {
   const settings = await resolvePipelineSettings(videoId);
+
   if (settings.voiceover.pauseAfterMs != null) {
     await applyPipelinePauseAfterMsToScenes(
       videoId,
       settings.voiceover.pauseAfterMs,
     );
+  } else {
+    await applySmartPunctuationScenePauses(videoId);
   }
 
   const useChatterbox = settings.voiceover.ttsProvider === "chatterbox";

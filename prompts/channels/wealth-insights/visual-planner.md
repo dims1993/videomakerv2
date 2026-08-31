@@ -526,8 +526,8 @@ scriptText → visible mechanism or consequence → dominant explanatory element
 Use these as planning logic only. Do not add them as JSON fields.
 
 - **Host presents:** points at or introduces a large explanatory element.
-- **Host reacts:** emotionally responds to pressure, surprise, frustration, fear, uncertainty, or relief.
-- **Host participates:** is squeezed, blocked, pulled, surrounded, balancing, holding, lifting, resisting, or walking inside the metaphor.
+- **Host reacts:** emotionally responds to surprise, frustration, uncertainty, or relief.
+- **Host participates:** is balancing, holding, lifting, comparing, or walking inside the metaphor.
 - **Host observes:** stands beside another character experiencing the situation.
 - **Host explains:** stands beside a simple diagram, comparison, chart, or symbolic mechanism.
 
@@ -570,7 +570,6 @@ Supporting characters may appear when the narration benefits from another person
 - homeowner
 - shopper
 - family member
-- stressed saver
 - person opening a bill
 - person facing a financial decision
 - coworker
@@ -653,12 +652,12 @@ Instead use concrete visual objects:
 - large red pointing finger crossed out with a red X
 - empty green shield outline labeled BUFFER
 - two large branching paths
-- heavy red weight pressing down on bills
+- large stack of monthly papers on top of bill icons
 - cheap cracked appliance beside a stronger intact option
 - oversized bill paper
 - rent notice
-- urgent clock
-- blocked door
+- calendar with a marked due date
+- closed door
 - savings jar
 - mortgage dial
 - price tag
@@ -762,22 +761,39 @@ Use them to write `visualPurpose`, `visualIdea`, `duration`, and `imagePrompt`.
 
 ---
 
+## Flow-safe vocabulary (Default Mode — mandatory for imagePrompt text)
+
+Flow reads the **entire** imagePrompt, not only Must show. Use calm educational wording in Narrative meaning and Must show beats.
+
+Prefer | Avoid in imagePrompt text
+---|---
+tight budget / budget squeeze | pressure / financial pressure / stress
+concerned / thoughtful / focused | stressed / desperate / panicking
+risky path / hidden cost | danger / trap / fear
+closed door / calendar mark / due date label | blocked / urgent / late
+large stack of monthly papers | heavy weight crushing bills
+stacked on top of | pressing down on / crushing
+
+Do **not** paste raw scriptText into imagePrompt. The app converts narration into a calm Educational beat for Flow.
+
+---
+
 ## Image Prompt Style
 
 The imagePrompt must be in English.
 
-Use this **variable-beat template** for Default Mode (MAIN HOST). The app injects the fixed MAIN HOST identity lock and Style rules after generation — do **not** rewrite or paste those locks yourself.
+Use this **variable-beat template** for Default Mode (MAIN HOST). The app injects the fixed MAIN HOST identity lock and Style after generation — do **not** rewrite or paste those locks yourself.
 
-Voiceover context:
-"[exact scriptText for this scene]"
+Educational beat:
+"[one calm sentence explaining the mechanism — YOU invent this; do NOT paste raw voiceover]"
 
 Narrative meaning:
 "[one sentence explaining what this scene means — YOU invent this]"
 
 JSON escaping (critical):
-When `imagePrompt` quotes the voiceover or any other text, escape those inner quotes as `\"` so the final JSON remains valid.
-Bad: `"imagePrompt":"Voiceover context:\n"The truck is gone."\n..."`
-Good: `"imagePrompt":"Voiceover context:\n\"The truck is gone.\"\n..."`
+When `imagePrompt` quotes the educational beat or any other text, escape those inner quotes as `\"` so the final JSON remains valid.
+Bad: `"imagePrompt":"Educational beat:\n"The truck is gone."\n..."`
+Good: `"imagePrompt":"Educational beat:\n\"The truck is gone.\"\n..."`
 
 Create:
 Clean 2D Wealth Insights finance explainer image.
@@ -788,7 +804,7 @@ Must show:
 - [YOU invent: host action / pose / emotion connected to that element]
 - [1 to 3 supporting elements only if needed]
 
-Style rules:
+Style:
 [APP_FILLS_STYLE_LOCK]
 
 Avoid:
@@ -840,10 +856,10 @@ Good:
 "Must show: the host calmly holds a responsible checklist while a small house on wheels quietly rolls farther away in the background."
 
 Bad:
-"the host reacts to rent pressure"
+"the host reacts to rent budget squeeze"
 
 Good:
-"Must show: the host reacts as a giant rent notice labeled RENT presses down on a glass savings jar labeled SAVINGS."
+"Must show: the host reacts as a giant rent notice labeled RENT stacked on a glass savings jar labeled SAVINGS."
 
 Every imagePrompt should answer:
 

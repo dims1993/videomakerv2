@@ -95,6 +95,7 @@ Return **only valid JSON**. Return a **JSON array only**. No wrapper object, no 
   {
     "order": 1,
     "scriptText": "",
+    "fishSpeechText": "",
     "sceneType": "insert",
     "visualPurpose": "",
     "visualIdea": "",
@@ -112,7 +113,19 @@ Return strict valid JSON. Do not use unescaped double quotes inside string value
 
 ### scriptText
 
-Exact narration fragment only — words that will be spoken in voiceover. Preserve wording. Keep script order. Never include structural labels (`[HOOK]`, `[CHAPTER…]`, `[INTRODUCTION]`, etc.).
+Exact narration fragment only — words that will be spoken in voiceover. Preserve wording. Keep script order. Never include structural labels (`[HOOK]`, `[CHAPTER…]`, `[INTRODUCTION]`, etc.). Never put Fish Audio direction tags in `scriptText`.
+
+### fishSpeechText
+
+Optional Fish Audio S2 delivery direction for this scene. Same spoken words as `scriptText` (exact wording and order), with inline square-bracket tags only, e.g. `[sad]`, `[emphasis]`, `[short pause]`, `[warm]`, `[solemn]`.
+
+Example: `[sad] A Christian [emphasis]sins again, [short pause]after promising God that this time would be different.`
+
+Rules:
+- Do not invent, omit, paraphrase, or reorder spoken words.
+- Prefer light tagging: one mood near the start plus occasional `[emphasis]` / `[short pause]` on key turns.
+- Omit or use `""` when `scriptText` is empty.
+- The app keeps `scriptText` for subtitles; only Fish TTS uses `fishSpeechText`.
 
 ### sceneType
 

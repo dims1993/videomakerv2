@@ -80,6 +80,8 @@ import {
   stripUnknownGodsWordBracketLines,
 } from "@/lib/gods-word-visual-skeleton";
 import { normalizeWealthInsightsScenes } from "@/lib/wealth-insights-image-prompt";
+import { extractWealthEpisodeCastLock } from "@/lib/wealth-insights-episode-cast";
+import type { WealthEpisodeCastLock } from "@/lib/wealth-insights-episode-cast";
 import {
   resolveWealthInsightsVisualMode,
   WEALTH_INSIGHTS_NARRATIVE_STYLE_LOCK,
@@ -417,6 +419,8 @@ async function fillSkeletonChunks({
         orders: expectedOrders,
         depth,
         filledSoFar: countFilledVisualPlanScenes(working),
+        promptChars: fillPrompt.length,
+        inlineComposer: fillPrompt.length < 8000,
       });
 
       try {
@@ -737,6 +741,7 @@ async function buildSectionHybridContextPrompt(options: {
   enforceWealthDurations: boolean;
   enforceGodsWordDurations: boolean;
   normalizeWealthImagePrompts: boolean;
+  wealthEpisodeCast?: WealthEpisodeCastLock | null;
 }> {
   const {
     videoId,
@@ -760,6 +765,13 @@ async function buildSectionHybridContextPrompt(options: {
       topicCategory,
       ideaJson: parsedIdea,
     });
+    const cast =
+      mode === "default"
+        ? extractWealthEpisodeCastLock({
+            script: script ?? "",
+            ideaJson: parsedIdea,
+          })
+        : null;
     const library = buildWealthInsightsVisualElementLibraryCompact({
       title,
       topicCategory,
@@ -770,6 +782,7 @@ async function buildSectionHybridContextPrompt(options: {
       contextPrompt: buildWealthInsightsSectionHybridContext({
         mode,
         visualElementLibraryCompact: library,
+        cast,
       }),
       styleLockReminder:
         mode === "narrative_economics_stories"
@@ -785,6 +798,7 @@ async function buildSectionHybridContextPrompt(options: {
       enforceWealthDurations: true,
       enforceGodsWordDurations: false,
       normalizeWealthImagePrompts: mode !== "narrative_economics_stories",
+      wealthEpisodeCast: cast,
     };
   }
 
@@ -959,6 +973,7 @@ async function runSectionGenerateHybridVisualPlan({
     enforceWealthDurations,
     enforceGodsWordDurations,
     normalizeWealthImagePrompts,
+    wealthEpisodeCast = null,
   } = await buildSectionHybridContextPrompt({
     videoId,
     channelKey,
@@ -1166,7 +1181,9 @@ async function runSectionGenerateHybridVisualPlan({
 
       rawTexts.push(generated.rawText);
       if (normalizeWealthImagePrompts) {
-        sectionScenes = normalizeWealthInsightsScenes(sectionScenes);
+        sectionScenes = normalizeWealthInsightsScenes(sectionScenes, {
+          cast: wealthEpisodeCast,
+        });
       }
       if (channelKey === "the-gods-word") {
         sectionScenes = normalizeGodsWordScenes(sectionScenes);
@@ -1439,6 +1456,194 @@ export async function runVisualPlanViaBrowser({
       error instanceof Error ? error.message : "Visual Plan Batch failed.";
     throw new VisualPlanRunError(message, null, {
       callType: VISUAL_PLAN_CALL.GENERATE,
+    });
+  }
+}
+
+/**
+ * Refill visualPurpose / visualIdea / imagePrompt / sceneType on EXISTING scenes.
+ * Keeps scriptText, duration, VO, and pauseAfterMs. Does not delete/replace scenes.
+ * Used when Cast Lock / prefix rules change but pacing is already correct.
+ */
+export async function runVisualPlanRefillInPlaceViaBrowser({
+  videoId,
+  resetCheckpoint = true,
+  providerKey,
+}: {
+  videoId: string;
+  resetCheckpoint?: boolean;
+  providerKey?: string;
+}) {
+  clearVisualPlanCancel(videoId);
+
+  const video = await prisma.video.findUnique({
+    where: { id: videoId },
+    select: {
+      channelKey: true,
+      script: true,
+      topicCategory: true,
+      title: true,
+      ideaJson: true,
+    },
+  });
+  if (!video) {
+    throw new Error("Video not found.");
+  }
+  if (video.channelKey !== "wealth-insights") {
+    throw new Error(
+      "In-place visual refill is currently supported for Wealth Insights only.",
+    );
+  }
+
+  const script = video.script?.trim() ?? "";
+  if (!script) {
+    throw new Error("Video has no script.");
+  }
+
+  const dbScenes = await prisma.scene.findMany({
+    where: { videoId },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      id: true,
+      sortOrder: true,
+      scriptText: true,
+      sceneType: true,
+      visualPurpose: true,
+      visualIdea: true,
+      duration: true,
+      imagePrompt: true,
+      pauseAfterMs: true,
+    },
+  });
+  if (dbScenes.length === 0) {
+    throw new Error("Video has no scenes to refill.");
+  }
+
+  const profile = resolveVisualPlanFillProfile({
+    channelKey: video.channelKey,
+    script,
+    title: video.title,
+    topicCategory: video.topicCategory,
+    ideaJson: video.ideaJson,
+    episodeContext: [
+      video.title,
+      video.topicCategory,
+      script.slice(0, 4000),
+      video.ideaJson?.slice(0, 2000) ?? "",
+    ].join("\n"),
+  });
+
+  const skeleton: PodcastVisualPlanSkeletonScene[] = dbScenes.map((scene) => {
+    const sceneType =
+      scene.sceneType === "insert" || scene.sceneType === "space"
+        ? scene.sceneType
+        : "avatar";
+    return {
+      order: scene.sortOrder,
+      scriptText: scene.scriptText,
+      sceneType,
+      visualPurpose: scene.visualPurpose?.trim() || "(pending visual)",
+      visualIdea: scene.visualIdea?.trim() || "MAIN HOST: (pending visual)",
+      duration: Math.max(1, scene.duration ?? 5),
+      imagePrompt: scene.imagePrompt?.trim() || "",
+      status: "planned" as const,
+      pauseAfterMs: scene.pauseAfterMs,
+      speaker: "other" as const,
+      // Force ChatGPT to refill every chunk (ignore prior visualsFilled).
+      visualsFilled: false,
+    };
+  });
+
+  const scriptHash = hashVisualPlanScript(script);
+  if (resetCheckpoint) {
+    await clearVisualPlanHybridCheckpoint(videoId);
+  }
+
+  try {
+    const batch = await withChatGptBrowserTurns({
+      jobId: `visual-plan-refill-${videoId}-${Date.now()}`,
+      providerKey,
+      timeoutMs: 1_800_000,
+      shouldAbort: () => isVisualPlanCancelRequested(videoId),
+      run: async ({ send, providerKey: usedProviderKey }) => {
+        console.info("[visual-plan-refill] start", {
+          videoId,
+          scenes: skeleton.length,
+          contextKind: profile.contextKind,
+          castHint: profile.contextPrompt.includes("Episode Cast Lock"),
+          castNames: [...profile.contextPrompt.matchAll(/^\d+\.\s+([A-Za-z]+)\s+\(/gm)].map(
+            (match) => match[1],
+          ),
+          avoidLockHint: profile.contextPrompt.includes(
+            "inventing people not in the episode cast lock",
+          ),
+        });
+
+        await saveVisualPlanHybridCheckpoint({
+          videoId,
+          scriptHash,
+          channelKey: video.channelKey,
+          scenes: skeleton,
+        });
+
+        const filled = await fillSkeletonChunks({
+          send: (prompt) => send(prompt, { freshConversation: true }),
+          videoId,
+          contextPrompt: profile.contextPrompt,
+          scenes: skeleton,
+          scriptHash,
+          channelKey: video.channelKey,
+          episodeContext: [
+            video.title,
+            video.topicCategory,
+            script.slice(0, 4000),
+          ].join("\n"),
+          title: video.title,
+          topicCategory: video.topicCategory,
+          chunkSize: profile.chunkSize,
+        });
+
+        const importScenes = profile.normalizeScenes(filled.scenes);
+        await clearVisualPlanHybridCheckpoint(videoId);
+
+        return {
+          providerKey: usedProviderKey,
+          scenes: importScenes,
+          rawTexts: filled.rawTexts,
+          chunkCount: filled.chunkCount,
+          filledFromChatGpt: filled.filledFromChatGpt,
+          skippedChunks: filled.skippedChunks,
+        };
+      },
+    });
+
+    return {
+      ok: true as const,
+      videoId,
+      sceneCount: batch.scenes.length,
+      ...batch,
+    };
+  } catch (error) {
+    if (
+      error instanceof VisualPlanCanceledError ||
+      (error instanceof BrowserAutomationError && error.code === "canceled")
+    ) {
+      throw new VisualPlanCanceledError(
+        error instanceof Error ? error.message : "Visual Plan refill canceled.",
+      );
+    }
+    if (error instanceof VisualPlanRunError) {
+      throw error;
+    }
+    if (error instanceof ChatGptPromptRunError) {
+      throw new VisualPlanRunError(error.message, error.rawText, {
+        callType: "GENERATE_VISUAL_PLAN_FILL_CHUNK",
+      });
+    }
+    const message =
+      error instanceof Error ? error.message : "Visual Plan refill failed.";
+    throw new VisualPlanRunError(message, null, {
+      callType: "GENERATE_VISUAL_PLAN_FILL_CHUNK",
     });
   }
 }

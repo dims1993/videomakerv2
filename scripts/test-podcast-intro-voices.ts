@@ -153,7 +153,7 @@ async function main() {
     const host = resolvePodcastHostKey({
       voiceId:
         sectionKind === "teacher"
-          ? "en-US-Chirp3-HD-Iapetus"
+          ? "en-US-Chirp3-HD-Fenrir"
           : sectionKind === "student"
             ? "en-US-Chirp3-HD-Erinome"
             : null,
@@ -168,7 +168,7 @@ async function main() {
       spokenText: speech.spokenText,
     });
     const voiceId =
-      host === "max" ? "en-US-Chirp3-HD-Iapetus" : "en-US-Chirp3-HD-Erinome";
+      host === "max" ? "en-US-Chirp3-HD-Fenrir" : "en-US-Chirp3-HD-Erinome";
 
     const audio = await generateGoogleTtsSpeech({
       text: speech.spokenText,

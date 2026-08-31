@@ -43,7 +43,7 @@ export type ChannelPipelineDefaults = {
     pauseAfterMs?: number | null;
     generateSubtitles?: boolean;
     /** TTS engine for pipeline / channel defaults. */
-    ttsProvider?: "elevenlabs" | "chatterbox" | "google";
+    ttsProvider?: "elevenlabs" | "chatterbox" | "google" | "fish" | "speechify";
     /** Forced-alignment engine for scene subtitles. */
     alignmentProvider?: "elevenlabs" | "whisperx";
     captionStylePreset?: string | null;
@@ -87,7 +87,7 @@ export type EditorialInstructions = {
   requiredTopicFields: string[];
   /**
    * scripture_first = Biblical Studies topic engine (TheGodsWord).
-   * conversational_podcast = Max & Sara long-form conversation topics (Podcast English Lessons).
+   * conversational_podcast = Emma & Leo long-form conversation topics (Podcast English Lessons).
    * default = shared mechanism/CTR engine (Wealth, etc.).
    */
   topicEngine?: "default" | "scripture_first" | "conversational_podcast";
@@ -159,14 +159,14 @@ export const BUILTIN_CHANNELS: ChannelProfile[] = [
       pacePreset: "slightly_slower",
       pauseStyle: "balanced",
     },
-    voiceoverSpeedDefault: 1,
-    voiceoverDefaultVoiceId: "Hh0rE70WfnSFN80K8uJC",
-    voiceoverDefaultVoiceName: "MEGAN INVESTS DEFINTE",
+    voiceoverSpeedDefault: 0.95,
+    voiceoverDefaultVoiceId: "en-US-Chirp3-HD-Charon",
+    voiceoverDefaultVoiceName: "Charon — Deep Story Narrator",
     voiceProfiles: [
       {
-        voiceId: "Hh0rE70WfnSFN80K8uJC",
-        voiceName: "MEGAN INVESTS DEFINTE",
-        defaultPauseAfterMs: 0,
+        voiceId: "en-US-Chirp3-HD-Charon",
+        voiceName: "Charon — Deep Story Narrator",
+        defaultPauseAfterMs: 120,
       },
     ],
     pipelineDefaults: {
@@ -179,10 +179,13 @@ export const BUILTIN_CHANNELS: ChannelProfile[] = [
         generationMode: "FULL_VIDEO",
       },
       voiceover: {
-        voiceId: "Hh0rE70WfnSFN80K8uJC",
-        voiceName: "MEGAN INVESTS DEFINTE",
-        pauseAfterMs: 0,
+        voiceId: "en-US-Chirp3-HD-Charon",
+        voiceName: "Charon — Deep Story Narrator",
+        ttsProvider: "google",
+        // null = Wealth smart pauses at VO time (not a flat 0 gap).
+        pauseAfterMs: null,
         generateSubtitles: true,
+        alignmentProvider: "whisperx",
         captionStylePreset: "clean_active_word",
       },
       render: {
@@ -621,6 +624,17 @@ export const BUILTIN_CHANNELS: ChannelProfile[] = [
       "HOOK_TEST",
       "SEGMENTED_BY_PERCENT",
     ],
+    voiceoverSpeedDefault: 0.9,
+    voiceoverDefaultVoiceId: "en-US-Chirp3-HD-Enceladus",
+    voiceoverDefaultVoiceName: "Enceladus GodsWord",
+    voiceProfiles: [
+      {
+        voiceId: "en-US-Chirp3-HD-Enceladus",
+        voiceName: "Enceladus GodsWord",
+        // Hint only (UI). Pipeline uses punctuation pauses when pauseAfterMs is null.
+        defaultPauseAfterMs: 245,
+      },
+    ],
     pipelineDefaults: {
       script: {
         includeReferenceTranscripts: false,
@@ -631,10 +645,13 @@ export const BUILTIN_CHANNELS: ChannelProfile[] = [
         generationMode: "FULL_VIDEO",
       },
       voiceover: {
-        voiceId: null,
-        voiceName: null,
+        voiceId: "en-US-Chirp3-HD-Enceladus",
+        voiceName: "Enceladus GodsWord",
+        ttsProvider: "google",
+        // null = per-scene punctuation pauses (,/;/:/./¶) at VO step.
         pauseAfterMs: null,
         generateSubtitles: true,
+        alignmentProvider: "whisperx",
         captionStylePreset: "godsword_style",
       },
       render: {
@@ -841,10 +858,10 @@ export const BUILTIN_CHANNELS: ChannelProfile[] = [
       },
     },
     editorialInstructions: {
-      role: "Editorial partner for long-form conversational English podcast episodes with Max & Sara.",
+      role: "Editorial partner for long-form conversational English podcast episodes with Emma & Leo.",
       audience:
         "Beginner to lower-intermediate English learners, primarily A1–B1.",
-      niche: "Natural Daily English Conversations with Max & Sara",
+      niche: "Natural Daily English Conversations with Emma & Leo",
       topicEngine: "conversational_podcast",
       style: [
         "warm",
@@ -867,7 +884,7 @@ export const BUILTIN_CHANNELS: ChannelProfile[] = [
         "Do not force uniqueMechanism wording into the title; the title sells the big idea.",
         "uniqueMechanism must name an observable everyday pattern or conversational dynamic — not a lesson activity.",
         "Do not use listen-and-repeat, shadowing, quizzes, name swaps, correction loops, role-play ladders, or speaking challenges as mechanisms.",
-        "visualHook / thumbnailIdea must use Max and Sara in the established podcast studio and communicate the big idea with expression, body language, or one clear metaphor.",
+        "visualHook / thumbnailIdea must use Emma and Leo in the established podcast studio and communicate the big idea with expression, body language, or one clear metaphor.",
         "Approximately 15–20% of topics may be directly about English or communication; 80–85% should be broader human topics in accessible English.",
         "Do not default to laptop/notification/coffee/tiny-task micro-titles.",
       ],

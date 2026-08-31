@@ -15,7 +15,7 @@ export type PodcastSpineLabel = (typeof PODCAST_SPINE_LABELS)[number];
 /**
  * Podcast English Lessons supports two series formats on one channel.
  * - emma_leo_lesson: teacher/student speaking-challenge episodes
- * - max_sara_conversation: Natural Daily English Conversations with Max & Sara
+ * - max_sara_conversation: Natural Daily English Conversations with Emma & Leo
  */
 export type PodcastEpisodeFormat =
   | "emma_leo_lesson"
@@ -153,11 +153,11 @@ export const PODCAST_MAX_SARA_GOLD_STANDARD = {
     "goodbye",
   ] as const,
   characterRules: {
-    max: "Max is practical, lightly self-deprecating, concrete, occasionally skeptical, and turns abstract ideas into ordinary situations. He is not the permanent learner.",
-    sara: "Sara is reflective, warm, curious, good at reframing simply, and can gently challenge Max. She is not the permanent teacher.",
+    emma: "Emma is reflective, warm, curious, good at reframing simply, and can gently challenge Leo. She is not the permanent teacher.",
+    leo: "Leo is practical, lightly self-deprecating, concrete, occasionally skeptical, and turns abstract ideas into ordinary situations. He is not the permanent learner.",
   },
   spineOrder:
-    "[INTRO] → animated show opening (~250–450 words) → [LESSON] → conversational [PART N - TITLE]… → Word Tour → [CLOSING] → thanks ([MAX] then [SARA]) → [FINAL]",
+    "[INTRO] → animated show opening (~250–450 words) → [LESSON] → conversational [PART N - TITLE]… → Word Tour → [CLOSING] → thanks ([LEO] then [EMMA]) → [FINAL]",
   noMusicCues: true,
   noLearnerPauses: true,
 } as const;
@@ -176,8 +176,9 @@ export const PODCAST_FORCED_HOPE_LINE_STEM =
 export function buildPodcastForcedEndingBlock(
   format: PodcastEpisodeFormat,
 ): string {
-  const first = format === "max_sara_conversation" ? "MAX" : "LEO";
-  const second = format === "max_sara_conversation" ? "SARA" : "EMMA";
+  void format;
+  const first = "LEO";
+  const second = "EMMA";
   return [
     "HARD ENDING (non-negotiable — the script MUST end exactly like this pattern):",
     "",
@@ -231,7 +232,7 @@ function recordFromUnknown(value: unknown): Record<string, unknown> | null {
 
 /**
  * Resolve which Podcast English Lessons series format to use for a video.
- * Defaults to Max & Sara when the channel topic engine is conversational_podcast.
+ * Defaults to Emma & Leo conversation when the channel topic engine is conversational_podcast.
  */
 export function resolvePodcastEpisodeFormat(input: {
   channelKey?: string | null;
@@ -289,19 +290,17 @@ export function resolvePodcastEpisodeFormat(input: {
     .join(" ");
 
   if (
-    /max\s*(?:and|&)\s*sara|natural daily english conversations/i.test(
+    /english in action|speaking challenge|listen and repeat/i.test(seriesBlob)
+  ) {
+    return "emma_leo_lesson";
+  }
+
+  if (
+    /emma\s*(?:and|&)\s*leo|natural daily english conversations|max\s*(?:and|&)\s*sara/i.test(
       seriesBlob,
     )
   ) {
     return "max_sara_conversation";
-  }
-
-  if (
-    /emma\s*(?:and|&)\s*leo|english in action|speaking challenge|listen and repeat/i.test(
-      seriesBlob,
-    )
-  ) {
-    return "emma_leo_lesson";
   }
 
   if (input.topicEngine === "conversational_podcast") {
@@ -309,7 +308,6 @@ export function resolvePodcastEpisodeFormat(input: {
   }
 
   if (input.channelKey === PODCAST_ENGLISH_LESSONS_CHANNEL_KEY) {
-    // Channel default after Max & Sara series launch.
     return "max_sara_conversation";
   }
 
@@ -346,7 +344,7 @@ export function buildPodcastGoldStandardPromptBlock() {
 export function buildMaxSaraGoldStandardPromptBlock() {
   const g = PODCAST_MAX_SARA_GOLD_STANDARD;
   return [
-    "PODCAST_MAX_SARA_GOLD_STANDARD (Natural Daily English Conversations):",
+    "PODCAST_CONVERSATION_GOLD_STANDARD (Natural Daily English Conversations with Emma & Leo):",
     `- Spoken words: target ${g.spokenWordTargetMin}–${g.spokenWordMax} (soft floor ${g.spokenWordMin})`,
     `- Feel: about ${g.durationMinMinutes}–${g.durationMaxMinutes} minutes of listening`,
     `- PART covers: normally ${g.partCountMin}–${g.partCountMax} conversational beats`,
@@ -355,7 +353,7 @@ export function buildMaxSaraGoldStandardPromptBlock() {
     `- Intro: energetic show opening (~250–450 spoken words before [LESSON]); mini-scene + reactions + vivid detail + topic reveal + warm branded welcome + why it matters + clear promise; not a dry topic announcement`,
     `- Catch-up: flexible (~${g.catchUpTurnMin}–${g.catchUpTurnSoftTarget} turns when useful); may live inside the animated intro; must seed the topic`,
     `- Anchor idea: one memorable simple sentence discovered naturally (not announced)`,
-    `- Stories: at least one meaningful mini-story from Max and one from Sara, with concrete details`,
+    `- Stories: at least one meaningful mini-story from Emma and one from Leo, with concrete details`,
     `- Metaphors: 2–4 clarifying comparisons; not stacked or overly poetic`,
     `- Friction: at least one genuine mild disagreement / reframe / exception`,
     `- Language: A2–B1 core + careful B2 stretch explained in context; phrases appear before Word Tour and recur`,
@@ -363,11 +361,11 @@ export function buildMaxSaraGoldStandardPromptBlock() {
     `- Only one explicit phrase-collection section; a later section may apply phrases in context (not a second phrase list)`,
     `- Recap mentions ~3–5 key phrases briefly — does not re-teach the full phrase section`,
     `- Spine: ${g.spineOrder}`,
-    `- Forced ending: [MAX] thank-you → [SARA] hope line → [FINAL] last (see Hard Ending block)`,
+    `- Forced ending: [LEO] thank-you → [EMMA] hope line → [FINAL] last (see Hard Ending block)`,
     `- No music cues`,
     `- No learner pauses / Listen and Repeat / Your Turn / Quiz / Mission`,
-    `- Max: ${g.characterRules.max}`,
-    `- Sara: ${g.characterRules.sara}`,
+    `- Emma: ${g.characterRules.emma}`,
+    `- Leo: ${g.characterRules.leo}`,
     `- Forbidden practice language: ${g.forbiddenPracticeBeats.join("; ")}`,
     "",
     `Acting tags whitelist only: ${PODCAST_ACTING_TAG_WHITELIST.map((t) => `[${t}]`).join(", ")}`,
@@ -381,7 +379,7 @@ export function buildPodcastEpisodeSkeletonBlock(
     return [
       "Use bracket labels exactly:",
       "[INTRO] → animated show opening (~250–450 spoken words): mini-scene → reactions → vivid detail → topic reveal → warm Podcast English Lessons welcome → why it matters → clear promise → optional soft CTA → transition",
-      "[LESSON] → main Max & Sara conversation continues (structural only; never say the word lesson just because of the label)",
+      "[LESSON] → main Emma & Leo conversation continues (structural only; never say the word lesson just because of the label)",
       "[PART N - TITLE] → sequential conversation beats (NOT practice blocks); continuous discovery, not restarts",
       "[CLOSING] → emotional/practical recap, brief key phrases, comment question, soft CTA",
       "Then the forced thank-you / hope dialogue (see dedicated Hard Ending block)",
@@ -390,8 +388,7 @@ export function buildPodcastEpisodeSkeletonBlock(
       "No music cues.",
       "No learner pauses.",
       "No listen-and-repeat / Your Turn / Quiz / Mission.",
-      "No Emma / Leo.",
-      "No teacher/student dynamic.",
+      "Emma and Leo are equal co-hosts — not teacher/student.",
       "",
       "Gold standard for this series:",
       "- big human idea + real host chemistry + concrete stories + simple metaphors",

@@ -5,7 +5,14 @@ import { Loader2, Square } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
+import { VOICEOVER_AUDIO_PROCESS_TYPES } from "@/lib/process-runs";
+
 const ACTIVE = new Set(["queued", "running", "waiting"]);
+const VOICEOVER_AUDIO_TYPES = new Set<string>(VOICEOVER_AUDIO_PROCESS_TYPES);
+
+function isVoiceoverAudioProcess(process: ProcessRun) {
+  return VOICEOVER_AUDIO_TYPES.has(process.type);
+}
 
 type ProcessRun = {
   type: string;
@@ -33,8 +40,7 @@ export function CancelSceneVoiceoverButton({ videoId }: { videoId: string }) {
         const data = (await response.json()) as { processes?: ProcessRun[] };
         const active = (data.processes ?? []).some(
           (process) =>
-            process.type === "scene_voiceover_generation" &&
-            ACTIVE.has(process.status),
+            isVoiceoverAudioProcess(process) && ACTIVE.has(process.status),
         );
         if (!cancelled) {
           setIsActive(active);
@@ -80,8 +86,8 @@ export function CancelSceneVoiceoverButton({ videoId }: { videoId: string }) {
       data-process-guard="off"
       title={
         isActive
-          ? "Stop scene voiceover generation after the current scene"
-          : "Cancel a running scene voiceover generation"
+          ? "Stop scene voiceover generation or master stitching"
+          : "Cancel running voiceover audio work"
       }
     >
       {isCancelling ? <Loader2 className="animate-spin" /> : <Square />}
