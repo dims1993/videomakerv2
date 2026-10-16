@@ -2,6 +2,7 @@ import { getComputedVideoStatus } from "@/lib/status";
 import { prisma } from "@/lib/prisma";
 import { getVideoPrompt } from "@/lib/video-prompts";
 import { getChannelProfile } from "@/lib/channels-server";
+import { ensurePipelineChromeCdpAvailable } from "@/lib/chrome-cdp-lifecycle";
 import {
   ChatGptPromptRunError,
   withChatGptBrowserTurns,
@@ -209,6 +210,11 @@ export async function runScriptWriterViaBrowser({
   };
 
   try {
+    // Script Writer uses the same logged-in, CDP-enabled Chrome profile as the
+    // other browser pipeline steps. Start it on demand instead of requiring a
+    // separate manual terminal command before every batch.
+    await ensurePipelineChromeCdpAvailable({ timeoutMs: 25_000 });
+
     const batch = await withChatGptBrowserTurns({
       jobId: `script-writer-${videoId}-${Date.now()}`,
       providerKey,

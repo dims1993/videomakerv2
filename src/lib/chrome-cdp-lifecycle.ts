@@ -1,4 +1,5 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import os from "node:os";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -28,6 +29,119 @@ export function pipelineChromeCdpPort() {
   } catch {
     return 9222;
   }
+}
+
+export function pipelineChromeCdpUrl() {
+  return cdpHttpBaseUrl();
+}
+
+function pipelineChromeExecutablePath() {
+  return (
+    process.env.GOOGLE_FLOW_CHROME_PATH?.trim() ||
+    process.env.PIPELINE_CHROME_PATH?.trim() ||
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  );
+}
+
+function pipelineChromeUserDataDir() {
+  return (
+    process.env.GOOGLE_FLOW_CHROME_USER_DATA_DIR?.trim() ||
+    process.env.PIPELINE_CHROME_USER_DATA_DIR?.trim() ||
+    `${os.homedir()}/.videomaker-flow-chrome`
+  );
+}
+
+async function isChromeCdpHealthy(cdpUrl = cdpHttpBaseUrl()) {
+  try {
+    const response = await fetch(new URL("/json/version", cdpUrl), {
+      cache: "no-store",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForChromeCdp(cdpUrl: string, timeoutMs: number) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await isChromeCdpHealthy(cdpUrl)) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return false;
+}
+
+export async function ensurePipelineChromeCdpAvailable(options: {
+  timeoutMs?: number;
+} = {}): Promise<{
+  launched: boolean;
+  cdpUrl: string;
+  port: number;
+  executablePath: string;
+  userDataDir: string;
+  message: string;
+}> {
+  const cdpUrl = cdpHttpBaseUrl();
+  const port = pipelineChromeCdpPort();
+  const executablePath = pipelineChromeExecutablePath();
+  const userDataDir = pipelineChromeUserDataDir();
+
+  if (await isChromeCdpHealthy(cdpUrl)) {
+    return {
+      launched: false,
+      cdpUrl,
+      port,
+      executablePath,
+      userDataDir,
+      message: `Chrome CDP already available at ${cdpUrl}.`,
+    };
+  }
+
+  const child = spawn(
+    executablePath,
+    [
+      `--remote-debugging-port=${port}`,
+      `--user-data-dir=${userDataDir}`,
+      "--no-first-run",
+      "--no-default-browser-check",
+    ],
+    {
+      detached: true,
+      stdio: "ignore",
+    },
+  );
+
+  await new Promise<void>((resolve, reject) => {
+    let timer: NodeJS.Timeout;
+    const onError = (error: Error) => {
+      clearTimeout(timer);
+      reject(error);
+    };
+    timer = setTimeout(() => {
+      child.off("error", onError);
+      resolve();
+    }, 250);
+    child.once("error", onError);
+  });
+  child.unref();
+
+  const ready = await waitForChromeCdp(cdpUrl, options.timeoutMs ?? 20000);
+  if (!ready) {
+    throw new Error(
+      `Launched Chrome but CDP did not become available at ${cdpUrl}.`,
+    );
+  }
+
+  return {
+    launched: true,
+    cdpUrl,
+    port,
+    executablePath,
+    userDataDir,
+    message: `Launched Chrome CDP at ${cdpUrl} with profile ${userDataDir}.`,
+  };
 }
 
 async function listPidsOnPort(port: number): Promise<number[]> {

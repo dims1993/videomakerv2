@@ -114,7 +114,13 @@ import {
   sumTrailingUncaptionedDurationSecs,
 } from "@/lib/timeline-alignment";
 import { TimelineAlignmentBanner } from "@/components/timeline-alignment-banner";
-import { sceneAudioPreview, generatedAudioUrl } from "@/lib/voiceover-segments";
+import {
+  sceneAudioPreview,
+  generatedAudioUrl,
+  sceneClipMediaUrl,
+} from "@/lib/voiceover-segments";
+import { localImageUrl } from "@/lib/generated-images-path";
+import { buildSceneTimelineFromSegments } from "@/lib/render/timing";
 import { fishSpeechTextFromVoiceoverSettings } from "@/lib/fish-speech-tags";
 import { Badge } from "@/components/ui/badge";
 import { AssetsWorkflow } from "@/components/assets-workflow";
@@ -128,6 +134,7 @@ import {
 } from "@/components/ui/card";
 import { CopyPromptButton } from "@/components/copy-prompt-button";
 import { DraftVideoPlayer } from "@/components/draft-video-player";
+import { VideoTimelinePreview } from "@/components/video-timeline-preview";
 import { CopySubtitleButton } from "@/components/copy-subtitle-button";
 import { SubtitleSegmentRowActions } from "@/components/subtitle-segment-row-actions";
 import { ClearQueryParams } from "@/components/clear-query-params";
@@ -897,6 +904,75 @@ export default async function VideoDetailPage({
     video.voiceoverAudioPath,
     video.updatedAt,
   );
+  // This is deliberately built from the source timeline, not a rendered MP4.
+  // It lets the browser expose missing visuals and timing mistakes before FFmpeg work.
+  const previewUsesMasterVoiceover = Boolean(
+    video.voiceoverAudioPath?.includes("voiceover_by_scene_master") ||
+      (video.voiceoverAudioPath?.trim() && voiceoverSegments.length === 0),
+  );
+  const previewActiveScenes = needsDraftPreview
+    ? scenes.filter((scene) => !isSceneRejected(scene.status))
+    : [];
+  const previewTimeline = needsDraftPreview
+    ? buildSceneTimelineFromSegments(
+        previewActiveScenes.map((scene) => ({
+          sortOrder: scene.sortOrder,
+          scriptText: scene.scriptText,
+          duration: scene.duration,
+          imagePath: scene.imageLocalPath,
+          clipPath: scene.clipLocalPath,
+          clipMuted: scene.clipMuted !== false,
+        })),
+        previewUsesMasterVoiceover || voiceoverSegments.length === 0
+          ? previewActiveScenes.map((scene) => ({
+              index: scene.sortOrder,
+              sceneStartOrder: scene.sortOrder,
+              sceneEndOrder: scene.sortOrder,
+              durationSec:
+                (scene.voiceoverDuration ?? scene.duration ?? 4) +
+                Math.max(0, (scene.pauseAfterMs ?? 0) / 1000),
+            }))
+          : voiceoverSegments.map((segment) => ({
+              index: segment.index,
+              sceneStartOrder: segment.sceneStartOrder,
+              sceneEndOrder: segment.sceneEndOrder,
+              durationSec: segment.durationSec,
+            })),
+      )
+    : [];
+  const previewScenes = previewTimeline.map((item) => {
+    const scene = previewActiveScenes.find(
+      (candidate) => candidate.sortOrder === item.sceneOrder,
+    );
+    const imageUrl = scene?.imageUrl?.trim()
+      ? scene.imageUrl.trim()
+      : scene?.imageFileName
+        ? localImageUrl(video.id, scene.imageFileName)
+        : null;
+
+    return {
+      order: item.sceneOrder,
+      start: item.start,
+      end: item.end,
+      imageUrl,
+      clipUrl: sceneClipMediaUrl(scene?.clipLocalPath, scene?.updatedAt),
+      clipMuted: scene?.clipMuted !== false,
+    };
+  });
+  const previewAudio = previewUsesMasterVoiceover && masterVoiceoverAudioUrl
+    ? [{ start: 0, url: masterVoiceoverAudioUrl }]
+    : voiceoverSegments.flatMap((segment) => {
+        const url = generatedAudioUrl(segment.audioPath, segment.updatedAt);
+        const start = previewTimeline.find(
+          (scene) => scene.sceneOrder === segment.sceneStartOrder,
+        )?.start;
+        return url && start !== undefined ? [{ start, url }] : [];
+      });
+  const previewSubtitles = formattedSubtitleCues.map((cue) => ({
+    start: cue.start,
+    end: cue.end,
+    text: cue.text,
+  }));
   const latestRenderDraft = video.renderDrafts[0] ?? null;
   const projectDraftFileName =
     latestRenderDraft?.fileName?.trim() ||
@@ -3097,6 +3173,32 @@ export default async function VideoDetailPage({
             ) : null}
 
             <TimelineAlignmentBanner report={timelineAlignment} />
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Timeline preview</CardTitle>
+                <CardDescription>
+                  Review scenes, available voiceover, and formatted subtitles directly
+                  in the browser before creating a draft MP4. This preview does not
+                  run FFmpeg or create a file.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <VideoTimelinePreview
+                  scenes={previewScenes}
+                  audio={previewAudio}
+                  subtitles={previewSubtitles}
+                  fps={latestRenderDraft?.fps ?? 30}
+                  width={latestRenderDraft?.width ?? 1920}
+                  height={latestRenderDraft?.height ?? 1080}
+                />
+                <p className="text-xs text-muted-foreground">
+                  It uses the current source assets. FFmpeg-only effects, including
+                  burned ASS caption styling and voice sound bars, are verified in
+                  the final render.
+                </p>
+              </CardContent>
+            </Card>
 
             <Card>
               <CardHeader>

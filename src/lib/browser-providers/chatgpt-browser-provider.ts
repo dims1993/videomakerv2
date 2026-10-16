@@ -47,6 +47,7 @@ type PlaywrightPage = {
     url: string,
     options?: { waitUntil?: string; timeout?: number },
   ) => Promise<unknown>;
+  reload: (options?: { waitUntil?: string; timeout?: number }) => Promise<unknown>;
   bringToFront?: () => Promise<void>;
   waitForSelector: (
     selector: string,
@@ -56,22 +57,28 @@ type PlaywrightPage = {
   locator: (selector: string) => {
     count: () => Promise<number>;
     first: () => {
-      click: (options?: { timeout?: number }) => Promise<void>;
+      waitFor: (options?: { timeout?: number; state?: string }) => Promise<void>;
+      click: (options?: {
+        timeout?: number;
+        force?: boolean;
+        trial?: boolean;
+      }) => Promise<void>;
       hover?: (options?: { timeout?: number }) => Promise<void>;
       isDisabled?: () => Promise<boolean>;
       evaluate?: <R>(fn: (el: Element) => R) => Promise<R>;
       setInputFiles?: (files: string | string[]) => Promise<void>;
     };
     last: () => {
-      click?: (options?: { timeout?: number }) => Promise<void>;
+      click?: (options?: { timeout?: number; force?: boolean }) => Promise<void>;
       hover?: (options?: { timeout?: number }) => Promise<void>;
-      innerText: () => Promise<string>;
+      innerText: (options?: { timeout?: number }) => Promise<string>;
     };
     setInputFiles?: (files: string | string[]) => Promise<void>;
   };
   evaluate: {
     <R>(fn: () => R): Promise<R>;
     <T, R>(fn: (arg: T) => R, arg: T): Promise<R>;
+    <T, R>(fn: string, arg: T): Promise<R>;
   };
   keyboard: {
     press: (key: string) => Promise<void>;
@@ -122,7 +129,7 @@ const DEFAULT_CDP_URL =
 
 /** Preferred ChatGPT model family shown in the composer picker. */
 const PREFERRED_CHATGPT_MODEL =
-  process.env.CHATGPT_MODEL?.trim() || "GPT-5.5";
+  process.env.CHATGPT_MODEL?.trim() || "GPT-5.6 Sol";
 
 /**
  * Preferred reasoning / intelligence effort.
@@ -146,6 +153,21 @@ function reasoningEffortAliases(preferred: string): string[] {
     return ["Instantánea", "Instant", "Instantánea 5.5"];
   }
   return [preferred, preferred.replace(/^\w/, (c) => c.toUpperCase())];
+}
+
+/** Current ChatGPT UI exposes effort as a 0–2 accessible slider. */
+function reasoningEffortSliderValue(aliases: string[]) {
+  const labels = aliases.map((label) => label.toLowerCase());
+  if (labels.some((label) => ["alta", "high"].includes(label))) return 2;
+  if (labels.some((label) => ["media", "medium"].includes(label))) return 1;
+  if (
+    labels.some((label) =>
+      ["instantánea", "instantanea", "instant", "low", "baja"].includes(label),
+    )
+  ) {
+    return 0;
+  }
+  return null;
 }
 
 /**
@@ -185,6 +207,8 @@ const SEND_SELECTORS = [
   'button[data-testid="send-button"]',
   'button[aria-label="Send prompt"]',
   'button[aria-label*="Send"]',
+  'button[aria-label="Enviar"]',
+  'button[aria-label*="Enviar"]',
 ];
 
 const STOP_SELECTORS = [
@@ -198,16 +222,17 @@ const STOP_SELECTORS = [
 ];
 
 const ASSISTANT_SELECTOR =
-  '[data-message-author-role="assistant"], [data-testid="assistant-message"]';
+  '[data-message-author-role="assistant"], [data-testid="assistant-message"], [class*="MarkdownRoot-"]';
 
 const COPY_TURN_BUTTON_SELECTORS = [
   '[data-testid="copy-turn-action-button"]',
+  'button[aria-label="Copiar mensaje"]',
   'button[aria-label="Copiar respuesta"]',
   'button[aria-label="Copy response"]',
   'button[aria-label="Copy"]',
 ] as const;
 const USER_SELECTOR =
-  '[data-message-author-role="user"], [data-testid="user-message"]';
+  '[data-message-author-role="user"], [data-testid="user-message"], [class*="group/user-message"]';
 
 function canonicalizeScorePayload(
   scoreJson: string | null,
@@ -1888,7 +1913,9 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
 
   /**
    * Force ChatGPT composer model + reasoning before each send.
-   * Default: GPT-5.5 + Alta (avoids slow GPT-5.6 Sol High).
+   * Default: GPT-5.6 Sol + Alta. ChatGPT's model picker changes frequently,
+   * so the selection path supports both the legacy composer pills and the
+   * current accessible model button.
    *
    * Selecting a model often triggers an SPA navigation that destroys the
    * Playwright execution context mid-evaluate — retry until the chip sticks.
@@ -1925,7 +1952,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
         // Model switches often navigate / remount the composer.
         await this.waitForComposerAfterPossibleNavigation();
 
-        if (!(await this.isPreferredModelChip(model, reasoningAliases))) {
+        if (!(await this.hasPreferredReasoningSelection(reasoningAliases))) {
           if (!(await this.openComposerModelMenu())) {
             throw new Error(
               "Could not reopen ChatGPT model picker for reasoning.",
@@ -1947,9 +1974,9 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
           attempt,
         });
 
-        if (!(await this.isPreferredModelChip(model, reasoningAliases))) {
+        if (!(await this.hasPreferredReasoningSelection(reasoningAliases))) {
           throw new Error(
-            `ChatGPT model chip is "${chipText || "(empty)"}"; expected ${model} + ${reasoning}.`,
+            `ChatGPT model control is "${chipText || "(empty)"}"; expected reasoning ${reasoning} after selecting ${model}.`,
           );
         }
         return;
@@ -2082,8 +2109,18 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     }
     return this.evaluateStable(() =>
       [...document.querySelectorAll("button")]
-        .filter((el) => String(el.className || "").includes("composer-pill"))
-        .map((el) => (el.innerText || "").replace(/\s+/g, " ").trim())
+        .filter(
+          (el) =>
+            String(el.className || "").includes("composer-pill") ||
+            /select|seleccionar/i.test(el.getAttribute("aria-label") || ""),
+        )
+        .map((el) =>
+          [el.innerText, el.getAttribute("aria-label")]
+            .filter(Boolean)
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim(),
+        )
         .join(" | "),
     );
   }
@@ -2127,6 +2164,28 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     }
   }
 
+  /**
+   * The current ChatGPT UI shows only the reasoning label (e.g. "Alta") in
+   * the composer trigger; the chosen model is visible only after its menu is
+   * opened. This validates the part that remains observable after selection.
+   */
+  private async hasPreferredReasoningSelection(reasoningLabels: string[]) {
+    if (!this.page) {
+      return false;
+    }
+    return this.evaluateStable((labels) => {
+      const controls = [...document.querySelectorAll("button")].filter((el) =>
+        String(el.className || "").includes("composer-pill") ||
+        /select|seleccionar/i.test(el.getAttribute("aria-label") || ""),
+      );
+      const text = controls
+        .map((el) => (el.innerText || "").replace(/\s+/g, " ").trim())
+        .join(" | ")
+        .toLowerCase();
+      return labels.some((label) => text.includes(label.toLowerCase()));
+    }, reasoningLabels);
+  }
+
   private async openComposerModelMenu() {
     if (!this.page) {
       return false;
@@ -2138,35 +2197,33 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
           [...document.querySelectorAll('[role="menu"]')].length > 0 ||
           [...document.querySelectorAll("button")].some(
             (el) =>
-              String(el.className || "").includes("composer-pill") &&
+              (String(el.className || "").includes("composer-pill") ||
+                /select|seleccionar/i.test(el.getAttribute("aria-label") || "")) &&
               el.getAttribute("aria-expanded") === "true",
           ),
       );
 
     // Prefer a real Playwright click — DOM click() is flaky on this Radix menu.
     try {
-      const pageAny = this.page as unknown as {
-        locator: (selector: string) => {
-          filter: (options: { hasText: RegExp }) => {
-            last: () => {
-              click: (options?: { timeout?: number }) => Promise<void>;
-            };
-          };
-        };
-      };
-      await pageAny
-        .locator('button[class*="composer-pill"]')
-        .filter({ hasText: /Alta|Media|Instant|High|Medium|5\./i })
-        .last()
-        .click({ timeout: 5000 });
+      const trigger = this.page
+        .locator(
+          'button[class*="composer-pill"], button[aria-label*="Seleccionar modelo"], button[aria-label*="Select ChatGPT model"]',
+        )
+        .last();
+      if (!trigger.click) {
+        throw new Error("ChatGPT model trigger is not clickable.");
+      }
+      await trigger.click({ timeout: 5000 });
     } catch {
       const clicked = await this.evaluateStable(() => {
         const pills = [...document.querySelectorAll("button")].filter((el) => {
-          if (!String(el.className || "").includes("composer-pill")) {
+          if (
+            !String(el.className || "").includes("composer-pill") &&
+            !/select|seleccionar/i.test(el.getAttribute("aria-label") || "")
+          ) {
             return false;
           }
-          const text = (el.innerText || "").trim();
-          return /Alta|Media|Instant|High|Medium|5\./i.test(text);
+          return true;
         }) as HTMLElement[];
         const pill = pills[pills.length - 1];
         if (!pill) {
@@ -2194,20 +2251,15 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
 
     // Second attempt.
     try {
-      const pageAny = this.page as unknown as {
-        locator: (selector: string) => {
-          filter: (options: { hasText: RegExp }) => {
-            last: () => {
-              click: (options?: { timeout?: number }) => Promise<void>;
-            };
-          };
-        };
-      };
-      await pageAny
-        .locator('button[class*="composer-pill"]')
-        .filter({ hasText: /Alta|Media|Instant|High|Medium|5\./i })
-        .last()
-        .click({ timeout: 5000 });
+      const trigger = this.page
+        .locator(
+          'button[class*="composer-pill"], button[aria-label*="Seleccionar modelo"], button[aria-label*="Select ChatGPT model"]',
+        )
+        .last();
+      if (!trigger.click) {
+        return false;
+      }
+      await trigger.click({ timeout: 5000 });
     } catch {
       // fall through
     }
@@ -2326,8 +2378,45 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
       return null;
     }, aliases);
 
-    if (!clicked) {
+    if (clicked) {
+      return;
+    }
+
+    // ChatGPT's current model menu uses a 0–2 ARIA slider (Instant, Medium,
+    // High) rather than radio menu items. Move it with genuine keyboard events
+    // because synthetic DOM key events are ignored by the React control.
+    const targetValue = reasoningEffortSliderValue(aliases);
+    if (targetValue == null) {
       throw new Error(`Reasoning option not found (${aliases.join(" / ")}).`);
+    }
+
+    const currentValue = await this.evaluateStable(() => {
+      const slider = document.querySelector('[role="menu"] [role="slider"]');
+      const value = Number(slider?.getAttribute("aria-valuenow"));
+      return Number.isFinite(value) ? value : null;
+    });
+    if (currentValue == null) {
+      throw new Error(`Reasoning slider not found (${aliases.join(" / ")}).`);
+    }
+
+    const slider = this.page.locator('[role="menu"] [role="slider"]').first();
+    await slider.click({ timeout: 4000, force: true });
+    const key = targetValue > currentValue ? "ArrowRight" : "ArrowLeft";
+    for (let step = 0; step < Math.abs(targetValue - currentValue); step += 1) {
+      await this.page.keyboard.press(key);
+      await this.page.waitForTimeout(120);
+    }
+    await this.page.waitForTimeout(300);
+
+    const selectedValue = await this.evaluateStable(() => {
+      const slider = document.querySelector('[role="menu"] [role="slider"]');
+      const value = Number(slider?.getAttribute("aria-valuenow"));
+      return Number.isFinite(value) ? value : null;
+    });
+    if (selectedValue !== targetValue) {
+      throw new Error(
+        `Reasoning slider stayed at ${selectedValue ?? "unknown"}; expected ${targetValue}.`,
+      );
     }
   }
 
@@ -2720,12 +2809,14 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     const baseline = baselineText.trim();
     const fromDom = await this.pageEvaluate(() => {
       const assistants = Array.from(
-        document.querySelectorAll('[data-message-author-role="assistant"]'),
+        document.querySelectorAll<HTMLElement>(
+          '[data-message-author-role="assistant"]',
+        ),
       );
       let best = "";
       for (let i = 0; i < assistants.length; i += 1) {
         const node = assistants[i];
-        const markdown = node.querySelector(
+        const markdown = node.querySelector<HTMLElement>(
           '.markdown, .prose, [class*="markdown"]',
         );
         const text = (
@@ -2954,16 +3045,18 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
     try {
       return await this.pageEvaluate((selectors) => {
         const assistants = Array.from(
-          document.querySelectorAll('[data-message-author-role="assistant"]'),
+          document.querySelectorAll<HTMLElement>(
+            '[data-message-author-role="assistant"]',
+          ),
         );
         const lastAssistant = assistants[assistants.length - 1];
 
-        let button = null;
+        let button: HTMLElement | null = null;
         if (lastAssistant) {
-          let root = lastAssistant;
+          let root: Element | null = lastAssistant;
           for (let depth = 0; depth < 8 && root && !button; depth += 1) {
             for (let s = 0; s < selectors.length; s += 1) {
-              const found = root.querySelector(selectors[s]);
+              const found = root.querySelector<HTMLElement>(selectors[s]);
               if (found) {
                 button = found;
                 break;
@@ -2975,7 +3068,7 @@ export class ChatGptBrowserProvider implements BrowserModelProvider {
 
         if (!button) {
           for (let s = 0; s < selectors.length; s += 1) {
-            const nodes = document.querySelectorAll(selectors[s]);
+            const nodes = document.querySelectorAll<HTMLElement>(selectors[s]);
             const last = nodes[nodes.length - 1];
             if (last) {
               button = last;
