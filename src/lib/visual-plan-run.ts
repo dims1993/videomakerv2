@@ -3,6 +3,7 @@ import {
   withChatGptBrowserTurns,
 } from "@/lib/browser-providers/run-chatgpt-prompt";
 import { BrowserAutomationError } from "@/lib/browser-automation/errors";
+import { ensurePipelineChromeCdpAvailable } from "@/lib/chrome-cdp-lifecycle";
 import { prisma } from "@/lib/prisma";
 import { buildPodcastHybridFillBrief } from "@/lib/podcast-english-lessons-image-prompt-contract";
 import { PODCAST_ENGLISH_LESSONS_CHANNEL_KEY } from "@/lib/podcast-english-lessons-visual";
@@ -1363,6 +1364,10 @@ export async function runVisualPlanViaBrowser({
   const useFillHybrid = Boolean(script);
 
   try {
+    // Visual Planner sends through the same logged-in, CDP-enabled Chrome
+    // profile as Script Writer. Start it on demand when Run Batch is pressed.
+    await ensurePipelineChromeCdpAvailable({ timeoutMs: 25_000 });
+
     const batch = await withChatGptBrowserTurns({
       jobId: `visual-plan-${videoId}-${Date.now()}`,
       providerKey,
@@ -1560,6 +1565,10 @@ export async function runVisualPlanRefillInPlaceViaBrowser({
   }
 
   try {
+    // Refill is also started independently from the Visual Plan UI, so it
+    // must ensure the browser bridge is available on its own.
+    await ensurePipelineChromeCdpAvailable({ timeoutMs: 25_000 });
+
     const batch = await withChatGptBrowserTurns({
       jobId: `visual-plan-refill-${videoId}-${Date.now()}`,
       providerKey,
